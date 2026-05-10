@@ -60,7 +60,7 @@
   - Change `# Claude SEO` -> `# Claude SEO: SEO Audit Skill for Claude Code`
 - [ ] Add version badge after existing badges (line 12, after License badge):
   ```markdown
-  [![Version](https://img.shields.io/github/v/release/avalonreset/claude-seo-dungeon)](https://github.com/avalonreset/claude-seo-dungeon/releases)
+  [![Version](https://img.shields.io/github/v/release/avalonreset/seo-dungeon)](https://github.com/avalonreset/seo-dungeon/releases)
   ```
 - [ ] Add Table of Contents between the intro paragraph and `## Installation` section.
   Insert after line 12 (the badges block), before line 14 (`## Installation`):
@@ -134,8 +134,8 @@
     - alias: AgriciDaniel
       given-names: Daniel
       family-names: Agricidaniel
-  repository-code: 'https://github.com/avalonreset/claude-seo-dungeon'
-  url: 'https://github.com/avalonreset/claude-seo-dungeon'
+  repository-code: 'https://github.com/avalonreset/seo-dungeon'
+  url: 'https://github.com/avalonreset/seo-dungeon'
   license: MIT
   version: 1.4.0
   date-released: '2026-03-12'
@@ -224,7 +224,7 @@
     - type: markdown
       attributes:
         value: |
-          Have a great idea? We'd love to hear it! For general discussion, consider using [GitHub Discussions](https://github.com/avalonreset/claude-seo-dungeon/discussions) instead.
+          Have a great idea? We'd love to hear it! For general discussion, consider using [GitHub Discussions](https://github.com/avalonreset/seo-dungeon/discussions) instead.
     - type: textarea
       id: problem
       attributes:
@@ -251,7 +251,7 @@
   blank_issues_enabled: false
   contact_links:
     - name: Question or Discussion
-      url: https://github.com/avalonreset/claude-seo-dungeon/discussions
+      url: https://github.com/avalonreset/seo-dungeon/discussions
       about: Ask questions and discuss ideas in GitHub Discussions
   ```
 
@@ -420,29 +420,29 @@
 
 - [ ] Enable Discussions:
   ```bash
-  gh repo edit avalonreset/claude-seo-dungeon --enable-discussions
+  gh repo edit avalonreset/seo-dungeon --enable-discussions
   ```
-  Verify: `gh repo view avalonreset/claude-seo-dungeon --json hasDiscussionsEnabled --jq .hasDiscussionsEnabled`
+  Verify: `gh repo view avalonreset/seo-dungeon --json hasDiscussionsEnabled --jq .hasDiscussionsEnabled`
   Expected: `true`
 
 - [ ] Disable Wiki:
   ```bash
-  gh repo edit avalonreset/claude-seo-dungeon --enable-wiki=false
+  gh repo edit avalonreset/seo-dungeon --enable-wiki=false
   ```
-  Verify: `gh repo view avalonreset/claude-seo-dungeon --json hasWikiEnabled --jq .hasWikiEnabled`
+  Verify: `gh repo view avalonreset/seo-dungeon --json hasWikiEnabled --jq .hasWikiEnabled`
   Expected: `false`
 
 - [ ] Fix description (replace "6 subagents" with "7 subagents"):
   ```bash
-  gh repo edit avalonreset/claude-seo-dungeon --description "Universal SEO skill for Claude Code. 13 sub-skills, 7 subagents, extensions system with DataForSEO MCP integration. Technical SEO, E-E-A-T, schema, GEO/AEO, and strategic planning."
+  gh repo edit avalonreset/seo-dungeon --description "Universal SEO skill for Claude Code. 13 sub-skills, 7 subagents, extensions system with DataForSEO MCP integration. Technical SEO, E-E-A-T, schema, GEO/AEO, and strategic planning."
   ```
-  Verify: `gh repo view avalonreset/claude-seo-dungeon --json description --jq .description`
+  Verify: `gh repo view avalonreset/seo-dungeon --json description --jq .description`
 
 - [ ] Add topics `python` and `skill`:
   ```bash
-  gh repo edit avalonreset/claude-seo-dungeon --add-topic python --add-topic skill
+  gh repo edit avalonreset/seo-dungeon --add-topic python --add-topic skill
   ```
-  Verify: `gh repo view avalonreset/claude-seo-dungeon --json repositoryTopics --jq '.repositoryTopics | map(.name)'`
+  Verify: `gh repo view avalonreset/seo-dungeon --json repositoryTopics --jq '.repositoryTopics | map(.name)'`
   Expected: 15 topics including `python` and `skill`
 
 - [ ] Push all committed changes:
@@ -480,12 +480,12 @@
 
 - [ ] Confirm GitHub settings applied:
   ```bash
-  gh repo view avalonreset/claude-seo-dungeon --json description,hasDiscussionsEnabled,hasWikiEnabled,repositoryTopics
+  gh repo view avalonreset/seo-dungeon --json description,hasDiscussionsEnabled,hasWikiEnabled,repositoryTopics
   ```
 
 - [ ] Confirm CI workflow is visible on GitHub:
   ```bash
-  gh workflow list --repo avalonreset/claude-seo-dungeon
+  gh workflow list --repo avalonreset/seo-dungeon
   ```
 
 ---

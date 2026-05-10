@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Claude SEO Dungeon - One-click launcher.
+ * SEO Dungeon - One-click launcher.
  *
  * Builds the optimized production bundle (if needed), starts the bridge
  * server, and serves the game. The user just runs: npm start
@@ -36,7 +36,7 @@ if (fs.existsSync(bridgeLogPath)) {
 }
 
 console.log('');
-console.log('  ⚔  Claude SEO Dungeon  ⚔');
+console.log('  ⚔  SEO Dungeon  ⚔');
 console.log('  ─────────────────────────');
 console.log('');
 

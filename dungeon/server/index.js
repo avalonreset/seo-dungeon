@@ -8,7 +8,7 @@ const server = http.createServer();
 
 const PORT = 3001;
 
-// Project root: server/ -> dungeon/ -> claude-seo-dungeon/
+// Project root: server/ -> dungeon/ -> seo-dungeon/
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
 // Evidence directory for failed audits. When _tryParseAudit gives up
@@ -42,7 +42,17 @@ const MAX_CONCURRENT_PROCESSES = 5;
 const MAX_MESSAGES_PER_MINUTE = 30;
 
 // ── Security: Origin validation ──
-const ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173'];
+const EXTRA_ALLOWED_ORIGINS = (process.env.SEO_DUNGEON_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  ...EXTRA_ALLOWED_ORIGINS
+];
 
 const wss = new WebSocketServer({
   server,
@@ -162,7 +172,7 @@ process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection (server stays alive):', err.message || err);
 });
 
-console.log('Claude SEO Dungeon - Bridge Server');
+console.log('SEO Dungeon - Bridge Server');
 console.log('─'.repeat(40));
 
 wss.on('connection', (ws) => {

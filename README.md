@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/assets/banner.webp"><img src="assets/banner.webp" alt="Claude SEO Dungeon - Gamified SEO Audit Tool for Claude Code" width="100%"></a>
+  <a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/assets/banner.webp"><img src="assets/banner.webp" alt="SEO Dungeon - Gamified SEO Audit Tool for Claude Code" width="100%"></a>
 </p>
 
-# Claude SEO Dungeon - Gamified SEO Audit Tool for Claude Code
+# SEO Dungeon - Gamified SEO Audit Tool for Claude Code
 
-Most SEO audit tools hand you a spreadsheet and wish you luck. Claude SEO Dungeon turns every issue into a demon you can fight, and every fix into a real commit to your codebase. Built on **Claude SEO v1.9.0** with 23 AI-powered skills, 17 parallel subagents, and a 16-bit dungeon crawler interface that makes SEO audits something you actually want to do.
+Most SEO audit tools hand you a spreadsheet and wish you luck. SEO Dungeon turns every issue into a demon you can fight, and every fix into a real commit to your codebase. Built on **Claude SEO v1.9.0** with 23 AI-powered skills, 17 parallel subagents, and a 16-bit dungeon crawler interface that makes SEO audits something you actually want to do.
 
-[![CI](https://github.com/avalonreset/claude-seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/claude-seo-dungeon/actions/workflows/ci.yml)
+[![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.9.0-blue)](CHANGELOG.md)
 [![Claude SEO](https://img.shields.io/badge/Claude%20SEO-v1.9.0-green)](skills/seo/SKILL.md)
@@ -17,12 +17,12 @@ Most SEO audit tools hand you a spreadsheet and wish you luck. Claude SEO Dungeo
 
 <table>
 <tr>
-<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/screenshots/title-screen.webp"><img src="screenshots/title-screen.webp" alt="Claude SEO Dungeon title screen with character selection"></a><br><em>Pick your warrior, enter a domain, seal your fate</em></td>
-<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/screenshots/gate-scene-full.webp"><img src="screenshots/gate-scene-full.webp" alt="Gate scene showing quest continuation options"></a><br><em>Continue a previous quest or begin a new one</em></td>
+<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/screenshots/title-screen.webp"><img src="screenshots/title-screen.webp" alt="SEO Dungeon title screen with character selection"></a><br><em>Pick your warrior, enter a domain, seal your fate</em></td>
+<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/screenshots/gate-scene-full.webp"><img src="screenshots/gate-scene-full.webp" alt="Gate scene showing quest continuation options"></a><br><em>Continue a previous quest or begin a new one</em></td>
 </tr>
 <tr>
-<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/screenshots/dungeon-hall.webp"><img src="screenshots/dungeon-hall.webp" alt="Dungeon hall showing SEO issue demons sorted by severity"></a><br><em>Browse SEO demons sorted by severity</em></td>
-<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/screenshots/battle-scene.webp"><img src="screenshots/battle-scene.webp" alt="Turn-based battle scene with real-time Guild Ledger"></a><br><em>Battle demons with AI-powered code fixes</em></td>
+<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/screenshots/dungeon-hall.webp"><img src="screenshots/dungeon-hall.webp" alt="Dungeon hall showing SEO issue demons sorted by severity"></a><br><em>Browse SEO demons sorted by severity</em></td>
+<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/screenshots/battle-scene.webp"><img src="screenshots/battle-scene.webp" alt="Turn-based battle scene with real-time Guild Ledger"></a><br><em>Battle demons with AI-powered code fixes</em></td>
 </tr>
 </table>
 
@@ -164,8 +164,8 @@ The full [Claude SEO v1.9.0](https://github.com/AgriciDaniel/claude-seo) engine 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/avalonreset/claude-seo-dungeon.git
-cd claude-seo-dungeon
+git clone https://github.com/avalonreset/seo-dungeon.git
+cd seo-dungeon
 ```
 
 Install the Claude SEO skill suite (copies 23 skills + 17 agents to your Claude Code config):
@@ -305,7 +305,7 @@ Browser (Phaser.js)  <-->  WebSocket (3001)  <-->  Bridge Server  <-->  Claude C
 5. The **Guild Ledger** displays every tool call, file read, and decision Claude makes
 
 ```
-claude-seo-dungeon/
+seo-dungeon/
   dungeon/                         # Game application (Phaser.js)
     server/index.js                # WebSocket bridge to Claude Code
     src/scenes/                    # 8 game scenes (Boot, Gate, Summoning, Hall, Battle, Victory...)
@@ -378,7 +378,7 @@ Users on Claude Pro may hit the 5-hour usage cap mid-audit if they run multiple 
 
 ## Disclaimer
 
-**Claude SEO Dungeon is an independent, open-source project. It is not affiliated with, endorsed by, or sponsored by Anthropic.**
+**SEO Dungeon is an independent, open-source project. It is not affiliated with, endorsed by, or sponsored by Anthropic.**
 
 "Claude," "Claude Code," "Opus," "Sonnet," and "Haiku" are trademarks of Anthropic and are referenced here descriptively to identify the underlying models the tool spawns. No endorsement or partnership is implied. Users provide their own Claude Code authentication (subscription or API credits) and are responsible for their own token usage under their agreement with Anthropic.
 

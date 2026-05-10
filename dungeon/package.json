@@ -1,5 +1,5 @@
 {
-  "name": "claude-seo-dungeon",
+  "name": "seo-dungeon",
   "version": "1.9.0",
   "description": "A 16-bit dungeon crawler interface for Claude SEO audits",
   "scripts": {

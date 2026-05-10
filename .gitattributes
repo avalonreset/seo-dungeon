@@ -1,10 +1,17 @@
 # Line-ending rules (prevents shell scripts breaking on Windows checkouts)
+.gitattributes text eol=lf
 * text=auto
 *.sh text eol=lf
 *.py text eol=lf
 *.js text eol=lf
+*.mjs text eol=lf
+*.html text eol=lf
 *.json text eol=lf
 *.md text eol=lf
+*.toml text eol=lf
+*.cff text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
 *.ps1 text eol=crlf
 
 # Binary files: never text-normalize, never CRLF-convert, never diff as text.

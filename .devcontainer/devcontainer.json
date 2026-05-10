@@ -1,5 +1,5 @@
 {
-  "name": "Claude SEO Dungeon",
+  "name": "SEO Dungeon",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
   "postCreateCommand": "cd dungeon && npm install",
   "customizations": {

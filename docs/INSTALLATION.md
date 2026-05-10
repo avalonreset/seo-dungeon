@@ -14,13 +14,13 @@ Optional:
 ### Unix/macOS/Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/install.sh | bash
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/install.ps1 | iex
 ```
 
 ## Manual Installation
@@ -28,8 +28,8 @@ irm https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/instal
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/avalonreset/claude-seo-dungeon.git
-cd claude-seo-dungeon
+git clone https://github.com/avalonreset/seo-dungeon.git
+cd seo-dungeon
 ```
 
 2. **Run the installer**
@@ -88,7 +88,7 @@ You should see a help message or prompt for a URL.
 ## Uninstallation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/uninstall.sh | bash
 ```
 
 Or manually:
@@ -116,10 +116,10 @@ To upgrade to the latest version:
 
 ```bash
 # Uninstall current version
-curl -fsSL https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/uninstall.sh | bash
 
 # Install new version
-curl -fsSL https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/install.sh | bash
 ```
 
 ## Troubleshooting

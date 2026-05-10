@@ -71,9 +71,16 @@ function _removeDisconnectBanner() {
 
 async function connectBridge() {
   const status = document.getElementById('bridge-status');
+  let hasObservedInitialStatus = false;
 
   // Listen for connection state changes globally
   bridge.onStatusChange((connected) => {
+    if (!connected && !hasObservedInitialStatus) {
+      hasObservedInitialStatus = true;
+      return;
+    }
+    hasObservedInitialStatus = true;
+
     if (connected) {
       _removeDisconnectBanner();
       // Update title screen status if visible

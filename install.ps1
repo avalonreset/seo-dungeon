@@ -84,7 +84,7 @@ try {
 # Set paths
 $SkillDir = "$env:USERPROFILE\.claude\skills\seo"
 $AgentDir = "$env:USERPROFILE\.claude\agents"
-$RepoUrl = "https://github.com/avalonreset/claude-seo-dungeon"
+$RepoUrl = "https://github.com/avalonreset/seo-dungeon"
 # Pin to a specific release tag to prevent silent updates from main.
 # Override: $env:CLAUDE_SEO_TAG = 'main'; .\install.ps1
 $RepoTag = if ($env:CLAUDE_SEO_TAG) { $env:CLAUDE_SEO_TAG } else { 'v1.9.0' }

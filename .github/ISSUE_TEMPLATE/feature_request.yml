@@ -1,12 +1,12 @@
 name: Feature Request
-description: Suggest a new feature or improvement for Claude SEO Dungeon
+description: Suggest a new feature or improvement for SEO Dungeon
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Have a great idea? We'd love to hear it! For general discussion, consider using [GitHub Discussions](https://github.com/avalonreset/claude-seo-dungeon/discussions) instead.
+        Have a great idea? We'd love to hear it! For general discussion, consider using [GitHub Discussions](https://github.com/avalonreset/seo-dungeon/discussions) instead.
   - type: textarea
     id: problem
     attributes:

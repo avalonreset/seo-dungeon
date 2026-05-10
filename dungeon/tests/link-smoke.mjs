@@ -29,7 +29,7 @@ try {
     // Simpler: import via window.__addLog hack if we can patch.
     // Fallback: check if window exposes addLog anywhere.
     if (typeof window.addLog === 'function') {
-      window.addLog('Check this: `https://example.com/api`, local file `E:\\\\src\\\\app.ts`, or `src/lib/handler.js`. Also bare https://github.com/avalonreset/claude-seo-dungeon.');
+      window.addLog('Check this: `https://example.com/api`, local file `E:\\\\src\\\\app.ts`, or `src/lib/handler.js`. Also bare https://github.com/avalonreset/seo-dungeon.');
       return 'used window.addLog';
     }
     return 'no addLog exposed';
@@ -45,7 +45,7 @@ try {
     try {
       const m = await import('/src/activity-log.js').catch(() => null);
       if (m && m.addLog) {
-        m.addLog('Check this: `https://example.com/api`, local file `E:\\\\src\\\\app.ts`, or `src/lib/handler.js`. Also bare https://github.com/avalonreset/claude-seo-dungeon.');
+        m.addLog('Check this: `https://example.com/api`, local file `E:\\\\src\\\\app.ts`, or `src/lib/handler.js`. Also bare https://github.com/avalonreset/seo-dungeon.');
         return 'used dynamic import';
       }
     } catch {}

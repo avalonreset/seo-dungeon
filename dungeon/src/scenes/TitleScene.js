@@ -18,7 +18,7 @@ export class TitleScene extends Phaser.Scene {
     this.cameras.main.fadeIn(800, 0, 0, 0);
 
     // ── Title ──
-    this.add.text(cx, 70, 'CLAUDE SEO', {
+    this.add.text(cx, 70, 'SEO', {
       fontFamily: '"Press Start 2P", monospace',
       fontSize: '36px',
       color: '#d4af37'

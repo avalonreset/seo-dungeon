@@ -1,10 +1,10 @@
-# Contributing to Claude SEO Dungeon
+# Contributing to SEO Dungeon
 
 Thanks for your interest in contributing! Here's how to get involved.
 
 ## Reporting Bugs
 
-Open a [GitHub Issue](https://github.com/avalonreset/claude-seo-dungeon/issues) with:
+Open a [GitHub Issue](https://github.com/avalonreset/seo-dungeon/issues) with:
 
 - Your OS and Node.js version
 - The full error output (copy from terminal)
@@ -13,7 +13,7 @@ Open a [GitHub Issue](https://github.com/avalonreset/claude-seo-dungeon/issues) 
 
 ## Suggesting Features
 
-Use [GitHub Discussions](https://github.com/avalonreset/claude-seo-dungeon/discussions) for feature ideas and questions.
+Use [GitHub Discussions](https://github.com/avalonreset/seo-dungeon/discussions) for feature ideas and questions.
 
 ## Pull Requests
 
@@ -26,8 +26,8 @@ Use [GitHub Discussions](https://github.com/avalonreset/claude-seo-dungeon/discu
 ### Development Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/claude-seo-dungeon.git
-cd claude-seo-dungeon/dungeon
+git clone https://github.com/YOUR_USERNAME/seo-dungeon.git
+cd seo-dungeon/dungeon
 npm install
 npm run dev
 ```

@@ -26,7 +26,7 @@ claude
 
 4. Re-run installer:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/install.sh | bash
 ```
 
 ---
@@ -66,7 +66,7 @@ ls ~/.claude/skills/seo/requirements.txt
 
 If missing, download it directly:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/avalonreset/claude-seo-dungeon/main/requirements.txt \
+curl -fsSL https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/requirements.txt \
   -o ~/.claude/skills/seo/requirements.txt
 ```
 

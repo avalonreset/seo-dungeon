@@ -1,4 +1,4 @@
-# Claude SEO Dungeon
+# SEO Dungeon
 
 ## How to Run the Game
 
@@ -33,7 +33,7 @@ SEO backend: 23 skills (20 core + 3 extensions), 17 subagents, 42 Python scripts
 ## Architecture
 
 ```
-claude-seo-dungeon/
+seo-dungeon/
   dungeon/                           # Game application
     index.html                     # Game shell + title screen UI
     launch.js                      # Startup script
@@ -173,7 +173,7 @@ Based on [Claude SEO v1.9.0](https://github.com/AgriciDaniel/claude-seo) by Dani
 ## Ecosystem
 
 Part of the avalonreset tool suite:
-- [Claude SEO Dungeon](https://github.com/avalonreset/claude-seo-dungeon) - this project
+- [SEO Dungeon](https://github.com/avalonreset/seo-dungeon) - this project
 - [Claude GitHub](https://github.com/avalonreset/claude-github) - GitHub repo optimization
 - [Gemini SEO](https://github.com/avalonreset/gemini-seo) - SEO tools for Gemini CLI
 
