@@ -128,6 +128,16 @@ def main():
     if not filepath.endswith(valid_extensions):
         sys.exit(0)
 
+    # File-size guard: skip files >10MB to bound memory + hook latency.
+    # Real source files almost never exceed this; bigger inputs are typically
+    # generated, minified bundles or accidental binary writes.
+    MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MiB
+    try:
+        if os.path.getsize(filepath) > MAX_FILE_BYTES:
+            sys.exit(0)
+    except OSError:
+        sys.exit(0)
+
     try:
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()

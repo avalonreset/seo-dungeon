@@ -177,6 +177,40 @@ def _save_oauth_token(token_data: dict):
         json.dump(token_data, f, indent=2)
 
 
+def _persist_oauth_client_path(creds_path: str):
+    """
+    Persist the absolute path to the OAuth client_secret JSON file in the
+    user config so future refresh_token flows can locate the client_secret
+    without re-prompting. Stores the PATH only; never the secret itself.
+
+    Closes the bug where every OAuth user 401'd within 1 hour because the
+    refresh path could not find oauth_client_path in config.
+    """
+    abs_path = os.path.abspath(os.path.expanduser(creds_path))
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+    config = {}
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, "r") as f:
+                config = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            config = {}
+    config["oauth_client_path"] = abs_path
+    # Atomic write: tempfile + replace
+    import tempfile
+    fd, tmp_path = tempfile.mkstemp(
+        dir=os.path.dirname(CONFIG_PATH), prefix=".google-api.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(config, f, indent=2)
+        os.replace(tmp_path, CONFIG_PATH)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+
 def _refresh_oauth_token(client: dict, token_data: dict) -> Optional[dict]:
     """Refresh an expired OAuth token using the refresh_token."""
     import urllib.parse
@@ -325,11 +359,16 @@ def run_oauth_flow(creds_path: str):
         sys.exit(1)
 
     # Exchange code for tokens
-    _exchange_code(client, auth_code[0])
+    _exchange_code(client, auth_code[0], creds_path)
 
 
-def _exchange_code(client: dict, code: str):
-    """Exchange an authorization code for tokens."""
+def _exchange_code(client: dict, code: str, creds_path: Optional[str] = None):
+    """Exchange an authorization code for tokens.
+
+    If creds_path is provided, persist its absolute path to the user config
+    as 'oauth_client_path' so subsequent refresh flows can locate the
+    client_secret file without re-prompting.
+    """
     import urllib.parse
     import urllib.request
 
@@ -354,9 +393,20 @@ def _exchange_code(client: dict, code: str):
         _save_oauth_token(token_data)
         print("OAuth token saved successfully!")
 
-        # Also save the OAuth client path to config
-        config = load_config()
-        # Don't overwrite existing config, just suggest
+        # Persist oauth_client_path so refresh works after process restart.
+        # This is the PATH, never the client_secret value itself.
+        if creds_path:
+            try:
+                _persist_oauth_client_path(creds_path)
+                print(f"OAuth client path persisted to {CONFIG_PATH}")
+            except Exception as e:
+                print(
+                    f"Warning: Could not persist oauth_client_path: {e}. "
+                    f"Add 'oauth_client_path' to {CONFIG_PATH} manually for "
+                    f"automatic token refresh.",
+                    file=sys.stderr,
+                )
+
         print(f"\nToken saved to: {TOKEN_PATH}")
     except Exception as e:
         print(f"Error exchanging authorization code: {e}", file=sys.stderr)
@@ -728,7 +778,7 @@ def main():
             sys.exit(1)
         client = _load_oauth_client(args.creds)
         if client:
-            _exchange_code(client, args.code)
+            _exchange_code(client, args.code, args.creds)
         return
 
     if args.setup:

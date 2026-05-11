@@ -1,17 +1,17 @@
 <p align="center">
-  <a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/assets/banner.webp"><img src="assets/banner.webp" alt="SEO Dungeon - Gamified SEO Audit Tool for Claude Code" width="100%"></a>
+  <a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/assets/banner.webp"><img src="assets/banner.webp" alt="SEO Dungeon - Gamified SEO Audit Tool" width="100%"></a>
 </p>
 
-# SEO Dungeon - Gamified SEO Audit Tool for Claude Code
+# SEO Dungeon - Gamified SEO Audit Tool
 
-Most SEO audit tools hand you a spreadsheet and wish you luck. SEO Dungeon turns every issue into a demon you can fight, and every fix into a real commit to your codebase. Built on **Claude SEO v1.9.0** with 23 AI-powered skills, 17 parallel subagents, and a 16-bit dungeon crawler interface that makes SEO audits something you actually want to do.
+Most SEO audit tools hand you a spreadsheet and wish you luck. SEO Dungeon turns every issue into a demon you can fight, and every fix into a real commit to your codebase. Built on the **Claude SEO v1.9.8** engine with 25 sub-skills, 18 sub-agents, Claude Code support, Codex support, and a 16-bit dungeon crawler interface that makes SEO audits something you actually want to do.
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.9.0-blue)](CHANGELOG.md)
-[![Claude SEO](https://img.shields.io/badge/Claude%20SEO-v1.9.0-green)](skills/seo/SKILL.md)
+[![Version](https://img.shields.io/badge/version-1.9.8-blue)](CHANGELOG.md)
+[![SEO Engine](https://img.shields.io/badge/SEO%20Engine-v1.9.8-green)](skills/seo/SKILL.md)
 [![Built with Phaser](https://img.shields.io/badge/built%20with-Phaser%203-orange)](https://phaser.io/)
-[![Powered by Claude](https://img.shields.io/badge/powered%20by-Claude%20Code-blueviolet)](https://docs.anthropic.com/en/docs/claude-code)
+[![Claude + Codex](https://img.shields.io/badge/runtime-Claude%20%2B%20Codex-blueviolet)](install.sh)
 
 ## Screenshots
 
@@ -29,9 +29,9 @@ Most SEO audit tools hand you a spreadsheet and wish you luck. SEO Dungeon turns
 ## Table of Contents
 
 - [How It Works](#how-it-works)
-- [What's New in v1.9.0](#whats-new-in-v190)
+- [What's New in v1.9.8](#whats-new-in-v198)
 - [Game Features](#game-features)
-- [SEO Engine (23 Skills)](#seo-engine-23-skills)
+- [SEO Engine (25 Skills)](#seo-engine-25-skills)
 - [Quick Start](#quick-start)
 - [Character Classes](#character-classes)
 - [SEO Commands](#seo-commands)
@@ -45,27 +45,29 @@ Most SEO audit tools hand you a spreadsheet and wish you luck. SEO Dungeon turns
 
 ## How It Works
 
-1. **Choose your warrior.** Warrior (Opus), Samurai (Sonnet), or Knight (Haiku). Each maps to a Claude model with different analysis depth and speed.
+1. **Choose your warrior.** In Claude mode, Warrior, Samurai, and Knight map to Opus, Sonnet, and Haiku. In Codex mode, the selected warrior is visual and Codex uses your configured Codex model.
 2. **Enter a domain and project path.** Point the dungeon at any website and its source code directory.
-3. **Descend into the dungeon.** Claude SEO runs a full audit with up to 17 parallel subagents, discovering issues as dungeon demons.
+3. **Descend into the dungeon.** The bundled SEO engine runs a full audit through Claude Code or Codex, discovering issues as dungeon demons.
 4. **Explore the Dungeon Hall.** Browse discovered SEO issues sorted by severity. Critical issues are deadly bosses. Info-level issues are goblins.
 5. **Battle demons.** Turn-based combat with four actions:
-   - **Attack** - Prompt Claude directly with what you want it to do about this issue. Claude streams its work into the Guild Ledger on the right and can edit your project files.
+   - **Attack** - Prompt the active agent directly with what you want it to do about this issue. The agent streams its work into the Guild Ledger on the right and can edit your project files.
    - **Vanquish** - Declare the demon slain. You decide when the issue has been handled enough to mark it defeated in your catalog.
    - **Defend** - Strike a defensive stance. Mostly for flavor.
    - **Flee** - Skip this demon and return to the dungeon. You can come back and fight it later.
 6. **Collect loot.** Earn XP and rewards for every demon slain.
 
-The real work happens when you choose **Attack**. You type a prompt describing what you want done about this issue, Claude reads your actual project files, and streams its work into the Guild Ledger on the right - tools it's calling, files it's reading, changes it's making. You can Attack as many times as you want. Real SEO fixes often take multiple prompts, back-and-forth clarification, and a little patience. **Vanquish** is the button you press when you've looked at what Claude did and you're satisfied the issue is handled. It's your call, not the machine's.
+The real work happens when you choose **Attack**. You type a prompt describing what you want done about this issue, the active agent reads your actual project files, and streams its work into the Guild Ledger on the right - tools it's calling, files it's reading, changes it's making. You can Attack as many times as you want. Real SEO fixes often take multiple prompts, back-and-forth clarification, and a little patience. **Vanquish** is the button you press when you've looked at what the agent did and you're satisfied the issue is handled. It's your call, not the machine's.
 
-## What's New in v1.9.0
+## What's New in v1.9.8
 
-This release brings the SEO engine from v1.6.1 to v1.9.0, adding 6 major new skill categories and 30+ commits of game improvements.
+This refresh updates SEO Dungeon from the v1.9.0 SEO engine to **Claude SEO v1.9.8** and adds Codex compatibility.
 
 ### New SEO Skills
 
 | Skill | What It Does |
 |-------|-------------|
+| **Content Briefs** | Generates search-intent aligned SEO briefs with page-type templates and keyword density guidance. |
+| **FLOW Framework** | Adds evidence-led Find, Leverage, Optimize, Win, and local SEO prompt workflows. |
 | **Backlink Analysis** | Profile your backlink health across Moz, Bing Webmaster, Common Crawl, and DataForSEO. Detects toxic links, analyzes anchor text, and identifies competitor gaps. |
 | **Semantic Clustering** | Groups keywords by SERP overlap to build hub-and-spoke content architecture. Generates interactive HTML cluster maps. |
 | **Search Experience (SXO)** | Detects page-type mismatches by reading SERPs backwards. If Google shows 8 product pages and you have a blog post, SXO catches that. |
@@ -75,11 +77,13 @@ This release brings the SEO engine from v1.6.1 to v1.9.0, adding 6 major new ski
 
 ### Game Improvements
 
-- **Guild Ledger Terminal** - Type prompts directly to Claude during gameplay
-- **Persistent Interactive Sessions** - Claude maintains context across battle actions with token tracking
+- **Dual runtime support** - Run the bridge through Claude Code or `codex exec`
+- **Dual installer support** - Install skills into `~/.claude` and `~/.codex`
+- **Guild Ledger Terminal** - Type prompts directly to the active agent during gameplay
+- **Persistent Interactive Sessions** - Claude maintains context across battle actions with token tracking; Codex uses per-turn exec calls
 - **RPG Narrator** - Haiku narrates attack results in the battle log with cinematic flair
 - **Smart Scroll** - Guild Ledger respects your scroll position during updates
-- **Double-Escape Cancel** - Press Escape twice to cancel any active Claude operation
+- **Double-Escape Cancel** - Press Escape twice to cancel any active agent operation
 - **18 bug fixes** across battle log, animations, scroll behavior, and loading states
 
 ## Game Features
@@ -88,7 +92,7 @@ This release brings the SEO engine from v1.6.1 to v1.9.0, adding 6 major new ski
 - **Turn-based combat atmosphere** with HP bars, attack animations, and an RPG narrator
 - **Attack** sends your message to Claude with the selected demon as a structured focus header - severity, category, URL, file, selector all travel with every turn. Claude reads your intent naturally, so polite directives work as fixes and questions get answered without triggering edits.
 - **Vanquish** is your judgment call. You decide when the issue has been handled enough to mark it defeated.
-- **Neutral chat outside battle** - the Guild Ledger input becomes a plain pass-through to `claude -p` when no demon is selected, so you can ask anything with no SEO scope applied.
+- **Neutral chat outside battle** - the Guild Ledger input becomes a plain pass-through to the active agent when no demon is selected, so you can ask anything with no SEO scope applied.
 - **Quest caching** via localStorage so you can resume audits without re-running them
 - **Dynamic difficulty** where demon HP scales with issue severity (critical = boss fight, info = goblin)
 
@@ -110,15 +114,15 @@ This release brings the SEO engine from v1.6.1 to v1.9.0, adding 6 major new ski
 - **Typewriter animation** with configurable speed and idle state detection
 - **Interactive terminal mode** for typing prompts directly to Claude mid-gameplay
 
-## SEO Engine (23 Skills)
+## SEO Engine (25 Skills)
 
-The full [Claude SEO v1.9.0](https://github.com/AgriciDaniel/claude-seo) engine is bundled, giving you 23 specialized skills that work both through the game and directly from the Claude Code CLI.
+The full [Claude SEO v1.9.8](https://github.com/AgriciDaniel/claude-seo) engine is bundled, giving you 25 specialized skills that work through the game and directly from Claude Code or Codex.
 
 ### Core Analysis (14 skills)
 
 | Skill | Coverage |
 |-------|----------|
-| **Full Audit** | Up to 17 parallel subagents, industry detection, 0-100 health score |
+| **Full Audit** | Parallel subagents, industry detection, 0-100 health score |
 | **Technical SEO** | 9 categories: crawlability, indexability, security, URL structure, mobile, CWV, structured data, JS rendering, IndexNow |
 | **Content Quality** | E-E-A-T framework (Dec 2025 update), readability, thin content detection |
 | **Schema Markup** | JSON-LD detection, validation, and generation for 30+ schema types |
@@ -133,7 +137,7 @@ The full [Claude SEO v1.9.0](https://github.com/AgriciDaniel/claude-seo) engine 
 | **International SEO** | Hreflang audit and generation with DACH, FR, ES, JA cultural adaptation profiles |
 | **Single Page Analysis** | Deep single-page audit across all dimensions |
 
-### New in v1.9.0 (6 skills)
+### Major Engine Additions
 
 | Skill | Coverage |
 |-------|----------|
@@ -158,7 +162,7 @@ The full [Claude SEO v1.9.0](https://github.com/AgriciDaniel/claude-seo) engine 
 
 - **Node.js 18+**
 - **Python 3.10+** (for SEO analysis scripts)
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** installed and authenticated
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** or **Codex CLI** installed and authenticated
 - **Git**
 
 ### 1. Clone and install
@@ -168,7 +172,7 @@ git clone https://github.com/avalonreset/seo-dungeon.git
 cd seo-dungeon
 ```
 
-Install the Claude SEO skill suite (copies 23 skills + 17 agents to your Claude Code config):
+Install the SEO Dungeon skill suite. By default this installs both Claude and Codex skill trees:
 
 ```powershell
 # Windows
@@ -176,6 +180,13 @@ Install the Claude SEO skill suite (copies 23 skills + 17 agents to your Claude 
 
 # macOS/Linux
 bash install.sh
+```
+
+Install only one runtime when needed:
+
+```powershell
+$env:SEO_DUNGEON_TARGET='codex'; .\install.ps1
+$env:SEO_DUNGEON_TARGET='claude'; .\install.ps1
 ```
 
 ### 2. Start the dungeon
@@ -187,6 +198,19 @@ npm run dev
 ```
 
 Open `http://localhost:3000`. The bridge server starts on port 3001 automatically.
+
+Runtime selection:
+
+```powershell
+# Default: Claude Code
+npm run dev
+
+# Codex runtime
+$env:SEO_DUNGEON_AGENT='codex'; npm run dev
+
+# Auto-pick Codex when available, otherwise Claude
+$env:SEO_DUNGEON_AGENT='auto'; npm run dev
+```
 
 > **Windows users:** The first time the dungeon runs an audit, Windows Defender Firewall may prompt to allow `claude.exe` network access. Click **Allow**. Without this, audits will hang silently because Claude cannot reach Anthropic's API. This prompt only appears once per install.
 >
@@ -208,7 +232,7 @@ npx serve dist -l 3000 -s  # Terminal 2: Static build
 
 ## Character Classes
 
-Each character maps to a Claude model. Your choice affects analysis depth, fix quality, and combat speed.
+In Claude mode, each character maps to a Claude model. In Codex mode, the character selection is visual and Codex uses your configured Codex model, or `SEO_DUNGEON_CODEX_MODEL` when set.
 
 | Character | Model | Strengths | Best For |
 |-----------|-------|-----------|----------|
@@ -218,11 +242,11 @@ Each character maps to a Claude model. Your choice affects analysis depth, fix q
 
 ## SEO Commands
 
-The skills work directly from the Claude Code CLI without the game interface:
+The skills work directly from Claude Code or Codex without the game interface:
 
 | Command | What It Does |
 |---------|-------------|
-| `/seo audit <url>` | Full site audit with up to 17 parallel subagents |
+| `/seo audit <url>` | Full site audit with parallel subagents |
 | `/seo page <url>` | Deep single-page analysis |
 | `/seo technical <url>` | Technical SEO (crawlability, indexability, CWV, security) |
 | `/seo content <url>` | E-E-A-T and content quality analysis |
@@ -300,7 +324,7 @@ Browser (Phaser.js)  <-->  WebSocket (3001)  <-->  Bridge Server  <-->  Claude C
 
 1. The **Phaser game** sends commands (`audit`, `fix`, `commit`, `narrate`) over WebSocket
 2. The **bridge server** spawns Claude Code CLI processes with the selected model
-3. Claude Code loads **SEO skills** from `~/.claude/skills/` and runs the analysis
+3. Claude Code or Codex loads **SEO skills** from its skill directory and runs the analysis
 4. Results stream back through WebSocket to the game in real time
 5. The **Guild Ledger** displays every tool call, file read, and decision Claude makes
 
@@ -311,7 +335,7 @@ seo-dungeon/
     src/scenes/                    # 8 game scenes (Boot, Gate, Summoning, Hall, Battle, Victory...)
     src/utils/                     # Sound manager, WebSocket client, colors, particles
     assets/luizmelo/               # Character sprite sheets (Warrior, Samurai, Knight)
-  skills/                          # Claude SEO v1.9.0 (23 skills)
+  skills/                          # SEO engine v1.9.8 (25 skills)
   agents/                          # 17 subagents for parallel analysis
   scripts/                         # 42 Python scripts (29 SEO + 13 visual audit)
   extensions/                      # DataForSEO + Firecrawl + Banana
@@ -325,7 +349,7 @@ seo-dungeon/
 | Build tool | [Vite](https://vitejs.dev/) | Dev server + production bundling |
 | Audio | [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) | 25+ procedural synthesized sounds |
 | Bridge | Express + ws | WebSocket bridge to Claude Code CLI |
-| SEO engine | [Claude SEO v1.9.0](https://github.com/AgriciDaniel/claude-seo) | 23 skills, 17 agents, 42 Python scripts |
+| SEO engine | [Claude SEO v1.9.8](https://github.com/AgriciDaniel/claude-seo) | 25 skills, 18 Claude agents, Codex TOML agent profiles |
 | Characters | [LuizMelo](https://luizmelo.itch.io/) | Warrior, Samurai, Knight sprite sheets |
 | Demons | [0x72](https://0x72.itch.io/dungeontileset-ii) | DungeonTileset II monster sprites |
 
@@ -334,7 +358,7 @@ seo-dungeon/
 | Problem | Fix |
 |---------|-----|
 | "The dungeon is unreachable" | Bridge server isn't running. Run `npm run server` in `dungeon/` |
-| Audit hangs or takes very long | Normal for first run (up to 17 parallel agents). Subsequent runs use cached results via the Gate scene. |
+| Audit hangs or takes very long | Normal for first run. Subsequent runs use cached results via the Gate scene. |
 | JSON parse error after audit | Auto-retry is built in. If it persists, try Samurai (Sonnet), the most reliable for structured JSON output. |
 | Blurry text on 4K display | Should auto-detect. Game renders at 3x DPR minimum for high-DPI clarity. |
 | Skills not found by Claude | Run the installer (`install.ps1` or `install.sh`) to copy skills to `~/.claude/` |

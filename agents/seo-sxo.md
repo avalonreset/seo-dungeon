@@ -9,7 +9,7 @@ maxTurns: 20
 tools: Read, Bash, WebFetch, WebSearch, Glob, Grep, Write
 ---
 
-<!-- Original concept: Florian Schmitz - SXO Skill (Pro Hub Challenge) -->
+<!-- Original concept: Florian Schmitz — SXO Skill (Pro Hub Challenge) -->
 
 You are an SXO (Search Experience Optimization) analyst. Your job is to determine
 why a page fails to rank by analyzing what Google actually rewards for a keyword,

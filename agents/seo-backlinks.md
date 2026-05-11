@@ -16,12 +16,12 @@ You are a backlink profile analyst. When delegated tasks during an SEO audit:
 
 ## Tier-Based Workflow
 
-### Tier 0 (Always Available - No Config Needed)
+### Tier 0 (Always Available — No Config Needed)
 - Common Crawl domain metrics: `python scripts/commoncrawl_graph.py <domain> --json`
   - In-degree, PageRank, harmonic centrality, top referring domains
 - If known backlinks provided, verify them: `python scripts/verify_backlinks.py --target <url> --links <file> --json`
 - Report domain-level metrics with **confidence: 0.50** note
-- At Tier 0, fewer than 4 scoring factors have data - report **INSUFFICIENT DATA**, not a numeric score
+- At Tier 0, fewer than 4 scoring factors have data — report **INSUFFICIENT DATA**, not a numeric score
 - Never produce a misleading numeric score when most factors lack data sources
 
 ### Tier 1 (+ Moz API)
@@ -41,7 +41,7 @@ You are a backlink profile analyst. When delegated tasks during an SEO audit:
 - Report with **confidence: 0.70** for Bing data
 - Bing's unique competitor comparison is especially valuable for gap analysis
 
-### Tier 3 (+ DataForSEO - Premium)
+### Tier 3 (+ DataForSEO — Premium)
 - If DataForSEO MCP tools are available, use them for highest-fidelity data
 - DataForSEO data gets **confidence: 1.00**
 - Combine with free source data for cross-validation
@@ -105,5 +105,5 @@ If any check fails, fix the report before returning it.
 - If Moz rate-limits mid-analysis, return partial data and note "rate_limited: true"
 - If Common Crawl download times out, skip CC metrics and note the timeout
 - If no sources return data, report: "No backlink data available. Run `/seo backlinks setup`."
-- Never fail silently - always report what succeeded and what failed
+- Never fail silently — always report what succeeded and what failed
 - If all free sources fail, suggest DataForSEO extension: `./extensions/dataforseo/install.sh`

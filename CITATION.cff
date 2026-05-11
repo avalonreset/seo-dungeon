@@ -1,24 +1,11 @@
 cff-version: 1.2.0
 title: SEO Dungeon
-message: >-
-  If you use this software, please cite it using the metadata from this file.
-type: software
+version: 1.9.8
+date-released: '2026-05-10'
+message: 'If you use this project, please cite it as below.'
 authors:
-  - given-names: Benjamin
-    family-names: Samar
-    alias: avalonreset
+  - family-names: Reset
+    given-names: Avalon
 repository-code: 'https://github.com/avalonreset/seo-dungeon'
 url: 'https://github.com/avalonreset/seo-dungeon'
-license: LicenseRef-Proprietary
-version: 1.9.0
-date-released: '2026-04-16'
-keywords:
-  - seo
-  - dungeon-crawler
-  - gamification
-  - phaser-js
-  - claude-code
-  - ai-tools
-  - backlinks
-  - seo-drift
-  - ecommerce-seo
+license: MIT

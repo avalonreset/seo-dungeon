@@ -1,262 +1,122 @@
-# Claude SEO Installer for Windows
-# PowerShell installation script
+# SEO Dungeon installer for Windows
+# Installs the bundled SEO skill suite for Claude Code, Codex, or both.
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "|   Claude SEO - Installer             |" -ForegroundColor Cyan
-Write-Host "|   Claude Code SEO Skill              |" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
 function Resolve-Python {
-    $pythonCmd = Get-Command -Name python -ErrorAction SilentlyContinue
-    if ($null -ne $pythonCmd) {
-        return @{ Exe = 'python'; Args = @() }
-    }
-
-    $pyCmd = Get-Command -Name py -ErrorAction SilentlyContinue
-    if ($null -ne $pyCmd) {
-        return @{ Exe = 'py'; Args = @('-3') }
-    }
-
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python) { return @{ Exe = "python"; Args = @() } }
+    $py = Get-Command py -ErrorAction SilentlyContinue
+    if ($py) { return @{ Exe = "py"; Args = @("-3") } }
     return $null
 }
 
-function Invoke-External {
-    param(
-        [Parameter(Mandatory = $true)][string]$Exe,
-        [Parameter(Mandatory = $true)][string[]]$Args,
-        [switch]$Quiet
-    )
+function Copy-DirContents {
+    param([string]$Source, [string]$Target)
+    if (-not (Test-Path $Source)) { return }
+    New-Item -ItemType Directory -Force -Path $Target | Out-Null
+    Copy-Item -Path (Join-Path $Source "*") -Destination $Target -Recurse -Force
+}
 
-    $previousErrorActionPreference = $ErrorActionPreference
-    $hasNativePreference = $null -ne (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue)
-    if ($hasNativePreference) {
-        $previousNativePreference = $PSNativeCommandUseErrorActionPreference
+function Get-SourceDir {
+    $scriptDir = Split-Path -Parent $PSCommandPath
+    if (Test-Path (Join-Path $scriptDir "skills\seo\SKILL.md")) {
+        return $scriptDir
     }
 
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        throw "Git is required for remote install."
+    }
+
+    $repo = if ($env:SEO_DUNGEON_REPO) { $env:SEO_DUNGEON_REPO } else { "https://github.com/avalonreset/seo-dungeon" }
+    $ref = if ($env:SEO_DUNGEON_REF) { $env:SEO_DUNGEON_REF } else { "main" }
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
+    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+    $checkout = Join-Path $tempDir "seo-dungeon"
+    Write-Host "[INFO] Downloading SEO Dungeon ($ref)..." -ForegroundColor Yellow
+    git clone --depth 1 --branch $ref $repo $checkout
+    return $checkout
+}
+
+function Install-PythonDeps {
+    param([string]$SkillDir, [hashtable]$Python)
+    if ($env:SEO_DUNGEON_SKIP_DEPS -eq "1") {
+        Write-Host "[INFO] Skipping Python dependency install." -ForegroundColor Yellow
+        return
+    }
+    $requirements = Join-Path $SkillDir "requirements.txt"
+    if (-not (Test-Path $requirements)) { return }
+    $venv = Join-Path $SkillDir ".venv"
+    Write-Host "[INFO] Bootstrapping Python runtime at $venv" -ForegroundColor Yellow
     try {
-        $ErrorActionPreference = 'Continue'
-        if ($hasNativePreference) {
-            $PSNativeCommandUseErrorActionPreference = $false
-        }
-
-        $output = & $Exe @Args 2>&1 | ForEach-Object { $_.ToString() }
-        $exitCode = $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-        if ($hasNativePreference) {
-            $PSNativeCommandUseErrorActionPreference = $previousNativePreference
-        }
-    }
-
-    if (-not $Quiet -and $null -ne $output -and $output.Count -gt 0) {
-        $output | ForEach-Object { Write-Host $_ }
-    }
-
-    return @{ ExitCode = $exitCode; Output = $output }
-}
-
-# Check prerequisites
-$python = Resolve-Python
-if ($null -eq $python) {
-    Write-Host "[x] Python is required but was not found (tried 'python' and 'py')." -ForegroundColor Red
-    exit 1
-}
-
-try {
-    $pythonVersion = & $python.Exe @($python.Args + @('--version')) 2>&1
-    Write-Host "[+] $pythonVersion detected" -ForegroundColor Green
-} catch {
-    Write-Host "[x] Python is installed but could not be executed." -ForegroundColor Red
-    exit 1
-}
-
-try {
-    git --version | Out-Null
-    Write-Host "[+] Git detected" -ForegroundColor Green
-} catch {
-    Write-Host "[x] Git is required but not installed." -ForegroundColor Red
-    exit 1
-}
-
-# Set paths
-$SkillDir = "$env:USERPROFILE\.claude\skills\seo"
-$AgentDir = "$env:USERPROFILE\.claude\agents"
-$RepoUrl = "https://github.com/avalonreset/seo-dungeon"
-# Pin to a specific release tag to prevent silent updates from main.
-# Override: $env:CLAUDE_SEO_TAG = 'main'; .\install.ps1
-$RepoTag = if ($env:CLAUDE_SEO_TAG) { $env:CLAUDE_SEO_TAG } else { 'v1.9.0' }
-
-# Create directories
-New-Item -ItemType Directory -Force -Path $SkillDir | Out-Null
-New-Item -ItemType Directory -Force -Path $AgentDir | Out-Null
-
-# Clone to temp directory
-$TempDir = Join-Path $env:TEMP "claude-seo-install"
-if (Test-Path $TempDir) {
-    Remove-Item -Recurse -Force $TempDir
-}
-
-$keepTemp = ($env:CLAUDE_SEO_KEEP_TEMP -eq '1')
-
-try {
-    Write-Host ">> Downloading Claude SEO ($RepoTag)..." -ForegroundColor Yellow
-    $clone = Invoke-External -Exe 'git' -Args @('clone','--depth','1','--branch',$RepoTag,$RepoUrl,$TempDir) -Quiet
-    if ($clone.ExitCode -ne 0) {
-        throw "git clone failed. Output:`n$($clone.Output -join "`n")"
-    }
-
-    # Copy skill files
-    Write-Host "=> Installing skill files..." -ForegroundColor Yellow
-    $skillSource = Join-Path $TempDir 'seo'
-    if (-not (Test-Path $skillSource)) {
-        $skillSource = Join-Path $TempDir 'skills\seo'
-    }
-    if (-not (Test-Path $skillSource)) {
-        throw "Could not find skill source folder in repo clone."
-    }
-    Copy-Item -Recurse -Force (Join-Path $skillSource '*') $SkillDir
-
-    # Copy sub-skills
-    $SkillsPath = "$TempDir\skills"
-    if (Test-Path $SkillsPath) {
-        Get-ChildItem -Directory $SkillsPath | ForEach-Object {
-            $target = "$env:USERPROFILE\.claude\skills\$($_.Name)"
-            New-Item -ItemType Directory -Force -Path $target | Out-Null
-            Copy-Item -Recurse -Force "$($_.FullName)\*" $target
-        }
-    }
-
-    # Copy schema templates
-    $SchemaPath = "$TempDir\schema"
-    if (Test-Path $SchemaPath) {
-        $SkillSchema = "$SkillDir\schema"
-        New-Item -ItemType Directory -Force -Path $SkillSchema | Out-Null
-        Copy-Item -Recurse -Force "$SchemaPath\*" $SkillSchema
-    }
-
-    # Copy reference docs
-    $PdfPath = "$TempDir\pdf"
-    if (Test-Path $PdfPath) {
-        $SkillPdf = "$SkillDir\pdf"
-        New-Item -ItemType Directory -Force -Path $SkillPdf | Out-Null
-        Copy-Item -Recurse -Force "$PdfPath\*" $SkillPdf
-    }
-
-    # Copy agents
-    Write-Host "=> Installing subagents..." -ForegroundColor Yellow
-    $AgentsPath = Join-Path $TempDir 'agents'
-    if (Test-Path $AgentsPath) {
-        Copy-Item -Force (Join-Path $AgentsPath '*.md') $AgentDir -ErrorAction SilentlyContinue
-    }
-
-    # Copy shared scripts
-    $ScriptsPath = "$TempDir\scripts"
-    if (Test-Path $ScriptsPath) {
-        $SkillScripts = "$SkillDir\scripts"
-        New-Item -ItemType Directory -Force -Path $SkillScripts | Out-Null
-        Copy-Item -Recurse -Force "$ScriptsPath\*" $SkillScripts
-    }
-
-    # Copy hooks
-    $HooksPath = "$TempDir\hooks"
-    if (Test-Path $HooksPath) {
-        $SkillHooks = "$SkillDir\hooks"
-        New-Item -ItemType Directory -Force -Path $SkillHooks | Out-Null
-        Copy-Item -Recurse -Force "$HooksPath\*" $SkillHooks
-    }
-
-    # Copy extensions (optional add-ons: dataforseo, banana)
-    $ExtensionsPath = Join-Path $TempDir 'extensions'
-    if (Test-Path $ExtensionsPath) {
-        Write-Host "=> Installing extensions..." -ForegroundColor Yellow
-        Get-ChildItem -Directory $ExtensionsPath | ForEach-Object {
-            $extName = $_.Name
-            $extDir = $_.FullName
-            # Extension skills
-            $extSkills = Join-Path $extDir 'skills'
-            if (Test-Path $extSkills) {
-                Get-ChildItem -Directory $extSkills | ForEach-Object {
-                    $target = "$env:USERPROFILE\.claude\skills\$($_.Name)"
-                    New-Item -ItemType Directory -Force -Path $target | Out-Null
-                    Copy-Item -Recurse -Force "$($_.FullName)\*" $target
-                }
-            }
-            # Extension agents
-            $extAgents = Join-Path $extDir 'agents'
-            if (Test-Path $extAgents) {
-                Copy-Item -Force (Join-Path $extAgents '*.md') $AgentDir -ErrorAction SilentlyContinue
-            }
-            # Extension references
-            $extRefs = Join-Path $extDir 'references'
-            if (Test-Path $extRefs) {
-                $refTarget = "$SkillDir\extensions\$extName\references"
-                New-Item -ItemType Directory -Force -Path $refTarget | Out-Null
-                Copy-Item -Recurse -Force "$extRefs\*" $refTarget
-            }
-            # Extension scripts
-            $extScripts = Join-Path $extDir 'scripts'
-            if (Test-Path $extScripts) {
-                $scriptTarget = "$SkillDir\extensions\$extName\scripts"
-                New-Item -ItemType Directory -Force -Path $scriptTarget | Out-Null
-                Copy-Item -Recurse -Force "$extScripts\*" $scriptTarget
-            }
-        }
-    }
-
-    # Copy requirements.txt to skill dir for retry
-    $reqFile = Join-Path $TempDir 'requirements.txt'
-    $installedReqFile = Join-Path $SkillDir 'requirements.txt'
-    if (Test-Path $reqFile) {
-        Copy-Item -Force $reqFile $installedReqFile
-    }
-
-    # Install Python dependencies
-    Write-Host "=> Installing Python dependencies..." -ForegroundColor Yellow
-    if (Test-Path $reqFile) {
-        try {
-            $pip = Invoke-External -Exe $python.Exe -Args @($python.Args + @('-m','pip','install','-q','-r',$reqFile)) -Quiet
-            if ($pip.ExitCode -ne 0) {
-                throw ($pip.Output -join "`n")
-            }
-        } catch {
-            Write-Host "  [!]  Could not auto-install Python packages." -ForegroundColor Yellow
-            Write-Host "  Try: $($python.Exe) $($python.Args -join ' ') -m pip install -r `"$installedReqFile`"" -ForegroundColor Yellow
-        }
-    } else {
-        Write-Host "  [!]  No requirements.txt found; skipping Python dependency install." -ForegroundColor Yellow
-    }
-
-    # Optional: Install Playwright browsers
-    Write-Host "=> Installing Playwright browsers (optional, for visual analysis)..." -ForegroundColor Yellow
-    try {
-        $pw = Invoke-External -Exe $python.Exe -Args @($python.Args + @('-m','playwright','install','chromium')) -Quiet
-        if ($pw.ExitCode -ne 0) {
-            throw ($pw.Output -join "`n")
-        }
+        & $Python.Exe @($Python.Args + @("-m", "venv", $venv))
+        $pip = Join-Path $venv "Scripts\pip.exe"
+        & $pip install --quiet -r $requirements
     } catch {
-        Write-Host "  [!]  Playwright install failed. Visual analysis will use WebFetch fallback." -ForegroundColor Yellow
-    }
-} catch {
-    Write-Host ""
-    Write-Host "[x] Installation failed: $($_.Exception.Message)" -ForegroundColor Red
-    if ($keepTemp -and (Test-Path $TempDir)) {
-        Write-Host "Temp dir kept at: $TempDir" -ForegroundColor Yellow
-    }
-    throw
-} finally {
-    if (-not $keepTemp -and (Test-Path $TempDir)) {
-        Remove-Item -Recurse -Force $TempDir
+        Write-Host "[WARN] Dependency install failed. Run: $($Python.Exe) $($Python.Args -join ' ') -m pip install -r `"$requirements`"" -ForegroundColor Yellow
     }
 }
 
-Write-Host ""
-Write-Host "[+] Claude SEO installed successfully!" -ForegroundColor Green
-Write-Host ""
-Write-Host "Usage:" -ForegroundColor Cyan
-Write-Host "  1. Start Claude Code:  claude"
-Write-Host "  2. Run commands:       /seo audit https://example.com"
-Write-Host ""
-Write-Host "Python deps location: $installedReqFile" -ForegroundColor Gray
+function Install-Claude {
+    param([string]$SourceDir, [hashtable]$Python)
+    $claudeRoot = if ($env:CLAUDE_HOME) { $env:CLAUDE_HOME } else { Join-Path $HOME ".claude" }
+    $skillsRoot = Join-Path $claudeRoot "skills"
+    $agentsRoot = Join-Path $claudeRoot "agents"
+    $skillDir = Join-Path $skillsRoot "seo"
+
+    Write-Host "[INFO] Installing Claude skill tree to $skillsRoot" -ForegroundColor Yellow
+    New-Item -ItemType Directory -Force -Path $skillsRoot, $agentsRoot | Out-Null
+    Get-ChildItem -Path (Join-Path $SourceDir "skills") -Directory | ForEach-Object {
+        Copy-DirContents $_.FullName (Join-Path $skillsRoot $_.Name)
+    }
+    Copy-Item -Path (Join-Path $SourceDir "agents\*.md") -Destination $agentsRoot -Force -ErrorAction SilentlyContinue
+    foreach ($name in @("scripts", "schema", "pdf", "hooks", "extensions")) {
+        Copy-DirContents (Join-Path $SourceDir $name) (Join-Path $skillDir $name)
+    }
+    Copy-Item -Path (Join-Path $SourceDir "requirements.txt") -Destination (Join-Path $skillDir "requirements.txt") -Force -ErrorAction SilentlyContinue
+    Install-PythonDeps $skillDir $Python
+}
+
+function Install-Codex {
+    param([string]$SourceDir, [hashtable]$Python)
+    $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
+    $skillsRoot = Join-Path $codexRoot "skills"
+    $agentsRoot = Join-Path $codexRoot "agents"
+    $skillDir = Join-Path $skillsRoot "seo"
+
+    Write-Host "[INFO] Installing Codex skill tree to $skillsRoot" -ForegroundColor Yellow
+    New-Item -ItemType Directory -Force -Path $skillsRoot, $agentsRoot | Out-Null
+    Get-ChildItem -Path (Join-Path $SourceDir "skills") -Directory | ForEach-Object {
+        Copy-DirContents $_.FullName (Join-Path $skillsRoot $_.Name)
+    }
+    Copy-Item -Path (Join-Path $SourceDir "agents-codex\*.toml") -Destination $agentsRoot -Force -ErrorAction SilentlyContinue
+    foreach ($name in @("scripts", "schema", "pdf", "hooks", "extensions")) {
+        Copy-DirContents (Join-Path $SourceDir $name) (Join-Path $skillDir $name)
+    }
+    Copy-Item -Path (Join-Path $SourceDir "requirements.txt") -Destination (Join-Path $skillDir "requirements.txt") -Force -ErrorAction SilentlyContinue
+    Install-PythonDeps $skillDir $Python
+}
+
+$python = Resolve-Python
+if ($null -eq $python) { throw "Python 3 is required." }
+$versionOk = & $python.Exe @($python.Args + @("-c", "import sys; print(1 if sys.version_info >= (3, 10) else 0)"))
+if ($versionOk -ne "1") { throw "Python 3.10+ is required." }
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw "Git is required." }
+
+$target = if ($env:SEO_DUNGEON_TARGET) { $env:SEO_DUNGEON_TARGET.ToLowerInvariant() } else { "all" }
+$sourceDir = Get-SourceDir
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  SEO Dungeon - Installer" -ForegroundColor Cyan
+Write-Host "  Claude + Codex Skill Suite" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+
+switch ($target) {
+    "all" { Install-Claude $sourceDir $python; Install-Codex $sourceDir $python }
+    "claude" { Install-Claude $sourceDir $python }
+    "codex" { Install-Codex $sourceDir $python }
+    default { throw "SEO_DUNGEON_TARGET must be all, claude, or codex." }
+}
+
+Write-Host "[OK] SEO Dungeon skills installed for $target." -ForegroundColor Green
+Write-Host "Set SEO_DUNGEON_AGENT=codex before starting the game bridge to use Codex runtime." -ForegroundColor Cyan

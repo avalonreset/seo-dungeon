@@ -1,24 +1,42 @@
 {
-  "name": "claude-seo-marketplace",
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "seo-dungeon-marketplace",
   "owner": {
-    "name": "Avalon Reset",
-    "email": "avalonreset@users.noreply.github.com"
+    "name": "AgriciDaniel"
   },
   "metadata": {
-    "description": "SEO analysis tools for Claude Code",
-    "version": "1.0.0"
+    "description": "Comprehensive SEO analysis plugin for Claude Code. 25 sub-skills covering technical SEO, E-E-A-T, content briefs, schema markup, GEO, local SEO, semantic clustering, e-commerce SEO, international SEO, and PDF reporting."
   },
   "plugins": [
     {
-      "name": "claude-seo",
+      "name": "seo-dungeon",
       "source": "./",
-      "description": "Comprehensive SEO analysis skill for Claude Code. Covers technical SEO, content quality (E-E-A-T), schema markup, image optimization, sitemap architecture, AI search optimization (GEO), local SEO, maps intelligence, and strategic planning across all industries.",
+      "description": "SEO Dungeon skill suite for Claude Code. 25 sub-skills (21 core + 1 orchestrator + 1 framework integration + 2 extension mirrors) and 18 sub-agents (15 core + 1 framework integration + 2 extension mirrors) backed by Claude SEO v1.9.8, with a gamified dungeon crawler UI.",
+      "category": "marketing",
       "homepage": "https://github.com/avalonreset/seo-dungeon",
+      "keywords": [
+        "seo",
+        "technical-seo",
+        "e-e-a-t",
+        "schema-markup",
+        "geo",
+        "ai-search",
+        "local-seo",
+        "backlinks",
+        "semantic-clustering",
+        "ecommerce-seo",
+        "hreflang",
+        "google-search-console",
+        "pagespeed",
+        "ga4"
+      ],
+      "version": "1.9.8",
       "repository": "https://github.com/avalonreset/seo-dungeon",
-      "license": "MIT",
-      "keywords": ["seo", "technical-seo", "e-e-a-t", "schema-markup", "local-seo", "geo", "ai-search"],
-      "category": "seo",
-      "tags": ["seo", "audit", "technical", "content", "schema", "local", "geo"]
+      "author": {
+        "name": "Avalon Reset",
+        "url": "https://github.com/avalonreset"
+      }
     }
-  ]
+  ],
+  "description": "SEO Dungeon plugin marketplace."
 }

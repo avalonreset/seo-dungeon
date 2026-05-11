@@ -18,16 +18,10 @@ export class TitleScene extends Phaser.Scene {
     this.cameras.main.fadeIn(800, 0, 0, 0);
 
     // ── Title ──
-    this.add.text(cx, 70, 'SEO', {
+    this.add.text(cx, 82, 'SEO DUNGEON', {
       fontFamily: '"Press Start 2P", monospace',
-      fontSize: '36px',
+      fontSize: '30px',
       color: '#d4af37'
-    }).setOrigin(0.5);
-
-    this.add.text(cx, 120, 'D U N G E O N', {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: '16px',
-      color: '#c04040'
     }).setOrigin(0.5);
 
     // ── Knight ──

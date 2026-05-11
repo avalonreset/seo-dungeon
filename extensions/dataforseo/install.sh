@@ -16,6 +16,19 @@ main() {
     echo "════════════════════════════════════════"
     echo ""
 
+    # Support both traditional (curl|bash → ~/.claude/skills/seo) and marketplace
+    # (plugin install → ~/.claude/plugins/cache/.../skills/seo) installations.
+    # Resolve early using BASH_SOURCE so it works even when run from the plugin cache.
+    _EARLY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    _PLUGIN_SEO_DIR="$(cd "${_EARLY_SCRIPT_DIR}/../.." 2>/dev/null && pwd)/skills/seo"
+    if [ ! -d "${SEO_SKILL_DIR}" ] && [ -d "${_PLUGIN_SEO_DIR}" ]; then
+        SEO_SKILL_DIR="${_PLUGIN_SEO_DIR}"
+    fi
+    if [ ! -d "${SEO_SKILL_DIR}" ]; then
+        _GLOB_MATCH=$(ls -d "${HOME}/.claude/plugins/cache/agricidaniel-seo/claude-seo/"*/skills/seo 2>/dev/null | tail -n1 || true)
+        [ -n "${_GLOB_MATCH}" ] && [ -d "${_GLOB_MATCH}" ] && SEO_SKILL_DIR="${_GLOB_MATCH}"
+    fi
+
     # Check prerequisites
     if [ ! -d "${SEO_SKILL_DIR}" ]; then
         echo "✗ Claude SEO is not installed."
@@ -118,7 +131,7 @@ if 'mcpServers' not in settings:
 # Add DataForSEO server config
 settings['mcpServers']['dataforseo'] = {
     'command': 'npx',
-    'args': ['-y', 'dataforseo-mcp-server'],
+    'args': ['-y', 'dataforseo-mcp-server@2.8.10'],
     'env': {
         'DATAFORSEO_USERNAME': username,
         'DATAFORSEO_PASSWORD': password,
@@ -141,7 +154,7 @@ print('  ✓ MCP server configured in settings.json')
 
     # Pre-warm npm package without starting the MCP server binary.
     echo "→ Pre-downloading dataforseo-mcp-server..."
-    npx --yes --package=dataforseo-mcp-server -- node -e "" >/dev/null 2>&1 || true
+    npx --yes --package=dataforseo-mcp-server@2.8.10 -- node -e "" >/dev/null 2>&1 || true
 
     echo ""
     echo "✓ DataForSEO extension installed successfully!"

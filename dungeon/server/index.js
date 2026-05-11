@@ -115,6 +115,23 @@ function validateModel(model) {
   return ALLOWED_MODELS.includes(model) ? model : 'sonnet';
 }
 
+function commandExists(command) {
+  try {
+    const probe = process.platform === 'win32' ? `where ${command}` : `command -v ${command}`;
+    execSync(probe, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveAgentProvider() {
+  const configured = (process.env.SEO_DUNGEON_AGENT || process.env.SEO_DUNGEON_PROVIDER || 'claude').toLowerCase();
+  if (configured === 'codex') return 'codex';
+  if (configured === 'auto') return commandExists('codex') ? 'codex' : 'claude';
+  return 'claude';
+}
+
 /**
  * Locate the Claude Code CLI entry point across platforms.
  * Returns { execPath, args } where args should be prepended to CLI args.
@@ -149,6 +166,10 @@ function resolveClaudeCli() {
   return { execPath: 'claude', args: [] };
 }
 
+function resolveCodexCli() {
+  return { execPath: 'codex', args: [] };
+}
+
 /**
  * Build a minimal environment for child processes.
  */
@@ -158,6 +179,8 @@ function safeEnv() {
   if (process.env.USERPROFILE) env.USERPROFILE = process.env.USERPROFILE;
   if (process.env.LOCALAPPDATA) env.LOCALAPPDATA = process.env.LOCALAPPDATA;
   if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (process.env.CODEX_HOME) env.CODEX_HOME = process.env.CODEX_HOME;
+  if (process.env.OPENAI_API_KEY) env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
   if (process.env.TEMP) env.TEMP = process.env.TEMP;
   if (process.env.TMP) env.TMP = process.env.TMP;
@@ -247,6 +270,11 @@ wss.on('connection', (ws) => {
 
     // Interactive session - persistent CLI
     if (type === 'interactive_start') {
+      if (resolveAgentProvider() === 'codex') {
+        safeSend(JSON.stringify({ type: 'interactive_closed' }));
+        safeSend(JSON.stringify({ id, type: 'error', message: 'Persistent interactive sessions are Claude-only for now. Codex mode uses per-turn codex exec calls.' }));
+        return;
+      }
       if (interactiveProc) {
         interactiveProc.kill('SIGTERM');
         interactiveProc = null;
@@ -338,7 +366,7 @@ wss.on('connection', (ws) => {
         // between fights). Zero framing, zero demon context. Claude
         // sees exactly what the user typed, runs in their project
         // directory, under their selected character model. Functionally
-        // identical to `claude -p "<user text>"` from a terminal.
+        // identical to a one-shot CLI prompt from a terminal.
         const result = await runClaude(command, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, fixCwd, id, validModel);
@@ -723,7 +751,7 @@ can score the turn:
     if (jsonMatch) return JSON.parse(jsonMatch[0]);
   } catch (e) { /* fall through */ }
 
-  return { fixed: true, summary: 'Claude handled this turn.', filesChanged: [] };
+  return { fixed: true, summary: 'The agent handled this turn.', filesChanged: [] };
 }
 
 /**
@@ -744,12 +772,16 @@ async function runCommit(message, projectCwd, onStream, requestId, model) {
 }
 
 /**
- * Run claude -p. Uses the user's existing login, not API.
+ * Run the configured agent CLI. Claude uses `claude -p`; Codex uses
+ * `codex exec --json`. Both use the user's existing local login.
  * @param {string} prompt - The prompt to send
  * @param {function} onStream - Callback for streaming output
  * @param {string} [cwd] - Working directory (defaults to PROJECT_ROOT)
  */
 function runClaude(prompt, onStream, cwd, requestId, model) {
+  if (resolveAgentProvider() === 'codex') {
+    return runCodex(prompt, onStream, cwd, requestId);
+  }
   const workDir = cwd || PROJECT_ROOT;
   return new Promise((resolve, reject) => {
     const { execPath: cliExec, args: cliArgs } = resolveClaudeCli();
@@ -895,8 +927,113 @@ function runClaude(prompt, onStream, cwd, requestId, model) {
   });
 }
 
+function runCodex(prompt, onStream, cwd, requestId) {
+  const workDir = cwd || PROJECT_ROOT;
+  return new Promise((resolve, reject) => {
+    const { execPath: cliExec, args: cliArgs } = resolveCodexCli();
+    const codexModel = process.env.SEO_DUNGEON_CODEX_MODEL;
+    const args = [
+      ...cliArgs,
+      'exec',
+      '--json',
+      '--skip-git-repo-check',
+      '-s',
+      'workspace-write',
+      '-c',
+      'approval_policy="never"',
+      '-C',
+      workDir
+    ];
+    if (codexModel) args.push('-m', codexModel);
+    args.push(prompt);
+
+    console.log(`  Running with codex exec${codexModel ? ` (model: ${codexModel})` : ''}`);
+    console.log(`  CWD: ${workDir}`);
+    const proc = spawn(cliExec, args, {
+      cwd: workDir,
+      env: safeEnv(),
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+
+    if (requestId) activeProcesses.set(requestId, proc);
+
+    let fullText = '';
+    let buffer = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+          if (event.type === 'item.completed' && event.item) {
+            const item = event.item;
+            if (item.type === 'agent_message' && item.text) {
+              fullText += item.text;
+              for (const textLine of item.text.split('\n').filter(l => l.trim())) {
+                onStream(textLine.trim());
+              }
+            } else if (item.type && item.type.includes('tool')) {
+              onStream(`[${item.name || item.type}]`);
+            }
+          } else if (event.type === 'turn.completed') {
+            onStream('[Complete]');
+          }
+        } catch {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('{')) onStream(trimmed);
+        }
+      }
+    });
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer);
+          if (event.type === 'item.completed' && event.item?.type === 'agent_message' && event.item.text) {
+            fullText += event.item.text;
+          }
+        } catch {}
+      }
+
+      console.log(`  Codex finished (exit ${code}), ${fullText.length} chars`);
+      if (code !== 0) {
+        reject(new Error(`Codex exited with code ${code}: ${stderr}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(fullText));
+      } catch {
+        resolve({ raw: fullText });
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to spawn codex: ${err.message}. Is Codex CLI installed and authenticated?`));
+    });
+
+    const MAX_RUNTIME_MS = 15 * 60 * 1000;
+    const timeoutHandle = setTimeout(() => {
+      try { proc.kill('SIGTERM'); } catch {}
+      reject(new Error('Operation timed out after 15 minutes.'));
+    }, MAX_RUNTIME_MS);
+    proc.on('close', () => clearTimeout(timeoutHandle));
+  });
+}
+
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`Bridge listening on ws://127.0.0.1:${PORT} (localhost only)`);
-  console.log(`Claude runs from: ${PROJECT_ROOT}`);
+  console.log(`Agent provider: ${resolveAgentProvider()}`);
+  console.log(`Agent runs from: ${PROJECT_ROOT}`);
   console.log('─'.repeat(40));
 });

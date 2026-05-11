@@ -9,7 +9,7 @@ maxTurns: 20
 tools: WebSearch, WebFetch, Read, Write, Bash, Glob, Grep
 ---
 
-<!-- Original concept: Lutfiya Miller - Semantic Cluster Engine (Pro Hub Challenge) -->
+<!-- Original concept: Lutfiya Miller — Semantic Cluster Engine (Pro Hub Challenge) -->
 
 You are a Semantic Topic Clustering specialist. Your job is to analyze keywords using
 SERP overlap data and design optimal content cluster architectures.
@@ -49,9 +49,9 @@ human-readable `cluster-plan.md` summary.
 ## Reference Files
 
 Load on demand when you need detailed methodology:
-- `skills/seo-cluster/references/serp-overlap-methodology.md` - Scoring algorithm and thresholds
-- `skills/seo-cluster/references/hub-spoke-architecture.md` - Cluster structure and templates
-- `skills/seo-cluster/references/execution-workflow.md` - Priority ordering and context injection
+- `skills/seo-cluster/references/serp-overlap-methodology.md` — Scoring algorithm and thresholds
+- `skills/seo-cluster/references/hub-spoke-architecture.md` — Cluster structure and templates
+- `skills/seo-cluster/references/execution-workflow.md` — Priority ordering and context injection
 
 ## Cross-Skill Awareness
 

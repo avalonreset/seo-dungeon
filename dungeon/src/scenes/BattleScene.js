@@ -735,7 +735,7 @@ export class BattleScene extends Phaser.Scene {
 
     // Command descriptions - shown below menu when hovering
     this.commandDescs = [
-      'Talk to Claude. Describe what to fix or ask questions.',
+      'Talk to the agent. Describe what to fix or ask questions.',
       'Mark this demon defeated. Use when the issue is resolved.',
       'Brace for impact. The demon strikes back.',
       'Retreat to the dungeon hall. Issue stays unresolved.'
@@ -1258,7 +1258,7 @@ export class BattleScene extends Phaser.Scene {
         <div class="attack-prompt-title">⚔ COMMAND THE ${characterName}</div>
         <div class="attack-prompt-issue">${this._escapeHtml(this.issue.title)}</div>
         <textarea id="attack-prompt-input" class="attack-prompt-input" rows="6"
-          placeholder="Describe what you want Claude to fix..."></textarea>
+          placeholder="Describe what you want the agent to fix..."></textarea>
         <div class="attack-prompt-buttons">
           <button id="attack-prompt-execute" class="attack-prompt-btn attack-prompt-execute" style="opacity: 0.4; pointer-events: none;">EXECUTE</button>
           <button id="attack-prompt-cancel" class="attack-prompt-btn attack-prompt-cancel">CANCEL</button>
@@ -1605,8 +1605,8 @@ export class BattleScene extends Phaser.Scene {
 
     this.appendLog('> ' + userPrompt);
     if (this.game.addLog) this.game.addLog('> ' + userPrompt);
-    this.appendLog(`${this.charName} channels the power of Claude...`);
-    if (this.game.addLog) this.game.addLog(`${this.charName} channels Claude...`);
+    this.appendLog(`${this.charName} channels the agent...`);
+    if (this.game.addLog) this.game.addLog(`${this.charName} channels the agent...`);
     if (this.game.showLoading) this.game.showLoading();
 
     // 1. Disable menu and start channeling
@@ -1633,7 +1633,7 @@ export class BattleScene extends Phaser.Scene {
       }, model);
       this._activeRequestId = null;
 
-      // 3. Claude finished - stop channeling, THEN play the slash
+      // 3. Agent finished - stop channeling, THEN play the slash
       this._stopChanneling();
       SFX.play('channelComplete');
       this.streamText.setText('');
@@ -1678,8 +1678,8 @@ export class BattleScene extends Phaser.Scene {
       }
 
       const summary = (fixData && fixData.fixed)
-        ? (fixData.summary || 'Claude made changes.')
-        : (fixData?.summary || 'Claude analyzed the issue.');
+        ? (fixData.summary || 'The agent made changes.')
+        : (fixData?.summary || 'The agent analyzed the issue.');
 
       // 5. Narrate the attack via Haiku
       this._narrateAttack(rawLines, summary);

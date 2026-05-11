@@ -55,16 +55,12 @@
       font-family: 'Press Start 2P', monospace;
       font-size: clamp(24px, 4vw, 40px);
       color: #d4af37;
-      margin-bottom: 8px;
+      margin-bottom: 32px;
       text-shadow: 0 0 30px rgba(212, 175, 55, 0.15);
     }
 
     #title-screen .subtitle {
-      font-family: 'Press Start 2P', monospace;
-      font-size: clamp(10px, 1.8vw, 16px);
-      color: #c04040;
-      letter-spacing: 6px;
-      margin-bottom: 32px;
+      display: none;
     }
 
     /* ── Character Select Row ──────────────── */
@@ -534,8 +530,7 @@
   <div id="game-area">
     <!-- Title screen (HTML) - hidden when game starts -->
     <div id="title-screen">
-      <h1>SEO</h1>
-      <div class="subtitle">D U N G E O N</div>
+      <h1>SEO DUNGEON</h1>
 
       <div id="char-select">
         <div class="char-option selected" data-char="warrior">
@@ -592,7 +587,7 @@
     </div>
     <div id="log-input-bar">
       <span id="log-input-prompt">&gt;</span>
-      <textarea id="log-input" placeholder="Talk to Claude..." autocomplete="off" spellcheck="false" rows="1"></textarea>
+      <textarea id="log-input" placeholder="Talk to the agent..." autocomplete="off" spellcheck="false" rows="1"></textarea>
       <button id="log-cancel" title="Cancel (Esc x2)">&#x25A0;</button>
     </div>
   </div>

@@ -1,179 +1,128 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Claude SEO Installer
-# Wraps everything in main() to prevent partial execution on network failure
+resolve_python() {
+  command -v python3 >/dev/null 2>&1 && { printf '%s\n' python3; return; }
+  command -v python >/dev/null 2>&1 && { printf '%s\n' python; return; }
+  return 1
+}
+
+copy_dir_contents() {
+  local source="$1"
+  local target="$2"
+  [ -d "${source}" ] || return 0
+  mkdir -p "${target}"
+  cp -R "${source}/." "${target}/"
+}
+
+prepare_source() {
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [ -f "${script_dir}/skills/seo/SKILL.md" ]; then
+    printf '%s\n' "${script_dir}"
+    return
+  fi
+
+  command -v git >/dev/null 2>&1 || { echo "[ERROR] Git is required for remote install."; exit 1; }
+  local repo="${SEO_DUNGEON_REPO:-https://github.com/avalonreset/seo-dungeon}"
+  local ref="${SEO_DUNGEON_REF:-main}"
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  trap 'rm -rf "${temp_dir}"' EXIT
+  echo "[INFO] Downloading SEO Dungeon (${ref})..."
+  git clone --depth 1 --branch "${ref}" "${repo}" "${temp_dir}/seo-dungeon" 2>/dev/null
+  printf '%s\n' "${temp_dir}/seo-dungeon"
+}
+
+install_python_deps() {
+  local skill_dir="$1"
+  local python_bin="$2"
+  if [ "${SEO_DUNGEON_SKIP_DEPS:-}" = "1" ]; then
+    echo "[INFO] Skipping Python dependency install."
+    return 0
+  fi
+  [ -f "${skill_dir}/requirements.txt" ] || return 0
+  local venv_dir="${skill_dir}/.venv"
+  echo "[INFO] Bootstrapping Python runtime at ${venv_dir}"
+  if "${python_bin}" -m venv "${venv_dir}" 2>/dev/null; then
+    "${venv_dir}/bin/pip" install --quiet -r "${skill_dir}/requirements.txt" 2>/dev/null || \
+      echo "[WARN] Dependency install failed. Run: ${venv_dir}/bin/pip install -r ${skill_dir}/requirements.txt"
+  else
+    "${python_bin}" -m pip install --quiet --user -r "${skill_dir}/requirements.txt" 2>/dev/null || \
+      echo "[WARN] Dependency install failed. Run: ${python_bin} -m pip install --user -r ${skill_dir}/requirements.txt"
+  fi
+}
+
+install_claude() {
+  local source_dir="$1"
+  local python_bin="$2"
+  local skills_root="${CLAUDE_HOME:-${HOME}/.claude}/skills"
+  local agents_root="${CLAUDE_HOME:-${HOME}/.claude}/agents"
+  local skill_dir="${skills_root}/seo"
+
+  echo "[INFO] Installing Claude skill tree to ${skills_root}"
+  mkdir -p "${skills_root}" "${agents_root}"
+  for skill_dir_source in "${source_dir}/skills"/*/; do
+    [ -d "${skill_dir_source}" ] || continue
+    copy_dir_contents "${skill_dir_source}" "${skills_root}/$(basename "${skill_dir_source}")"
+  done
+  cp "${source_dir}/agents/"*.md "${agents_root}/" 2>/dev/null || true
+  for name in scripts schema pdf hooks extensions; do
+    copy_dir_contents "${source_dir}/${name}" "${skill_dir}/${name}"
+  done
+  cp "${source_dir}/requirements.txt" "${skill_dir}/requirements.txt" 2>/dev/null || true
+  install_python_deps "${skill_dir}" "${python_bin}"
+}
+
+install_codex() {
+  local source_dir="$1"
+  local python_bin="$2"
+  local codex_root="${CODEX_HOME:-${HOME}/.codex}"
+  local skills_root="${codex_root}/skills"
+  local agents_root="${codex_root}/agents"
+  local skill_dir="${skills_root}/seo"
+
+  echo "[INFO] Installing Codex skill tree to ${skills_root}"
+  mkdir -p "${skills_root}" "${agents_root}"
+  for skill_dir_source in "${source_dir}/skills"/*/; do
+    [ -d "${skill_dir_source}" ] || continue
+    copy_dir_contents "${skill_dir_source}" "${skills_root}/$(basename "${skill_dir_source}")"
+  done
+  cp "${source_dir}/agents-codex/"*.toml "${agents_root}/" 2>/dev/null || true
+  for name in scripts schema pdf hooks extensions; do
+    copy_dir_contents "${source_dir}/${name}" "${skill_dir}/${name}"
+  done
+  cp "${source_dir}/requirements.txt" "${skill_dir}/requirements.txt" 2>/dev/null || true
+  install_python_deps "${skill_dir}" "${python_bin}"
+}
 
 main() {
-    SKILL_DIR="${HOME}/.claude/skills/seo"
-    AGENT_DIR="${HOME}/.claude/agents"
-    REPO_URL="https://github.com/avalonreset/seo-dungeon"
-    # Pin to a specific release tag to prevent silent updates from main.
-    # Override: CLAUDE_SEO_TAG=main bash install.sh
-    REPO_TAG="${CLAUDE_SEO_TAG:-v1.9.0}"
+  local target="${SEO_DUNGEON_TARGET:-all}"
+  local python_bin
+  python_bin="$(resolve_python)" || { echo "[ERROR] Python 3 is required."; exit 1; }
+  command -v git >/dev/null 2>&1 || { echo "[ERROR] Git is required."; exit 1; }
 
-    echo "════════════════════════════════════════"
-    echo "║   Claude SEO - Installer             ║"
-    echo "║   Claude Code SEO Skill              ║"
-    echo "════════════════════════════════════════"
-    echo ""
+  local python_ok
+  python_ok="$("${python_bin}" -c 'import sys; print(1 if sys.version_info >= (3, 10) else 0)')"
+  [ "${python_ok}" = "1" ] || { echo "[ERROR] Python 3.10+ is required."; exit 1; }
 
-    # Check prerequisites
-    command -v python3 >/dev/null 2>&1 || { echo "✗ Python 3 is required but not installed."; exit 1; }
-    command -v git >/dev/null 2>&1 || { echo "✗ Git is required but not installed."; exit 1; }
-    command -v node >/dev/null 2>&1 || { echo "✗ Node.js 18+ is required but not installed."; exit 1; }
-    NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo "0")
-    if [ "${NODE_MAJOR}" -lt 18 ]; then
-        echo "✗ Node.js 18+ is required but ${NODE_MAJOR}.x was found."
-        exit 1
-    fi
-    if ! command -v claude >/dev/null 2>&1; then
-        echo "⚠  Claude Code CLI not found on PATH."
-        echo "   Install from: https://docs.anthropic.com/en/docs/claude-code"
-        echo "   The SEO skills will be installed, but the game will not be able"
-        echo "   to run audits until Claude Code is installed and authenticated."
-        echo ""
-    fi
+  local source_dir
+  source_dir="$(prepare_source)"
 
-    # Check Python version (3.10+ required)
-    PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    PYTHON_OK=$(python3 -c 'import sys; print(1 if sys.version_info >= (3, 10) else 0)')
-    if [ "${PYTHON_OK}" = "0" ]; then
-        echo "✗ Python 3.10+ is required but ${PYTHON_VERSION} was found."
-        exit 1
-    fi
-    echo "✓ Python ${PYTHON_VERSION} detected"
+  echo "========================================"
+  echo "  SEO Dungeon - Installer"
+  echo "  Claude + Codex Skill Suite"
+  echo "========================================"
 
-    # Create directories
-    mkdir -p "${SKILL_DIR}"
-    mkdir -p "${AGENT_DIR}"
+  case "${target}" in
+    all) install_claude "${source_dir}" "${python_bin}"; install_codex "${source_dir}" "${python_bin}" ;;
+    claude) install_claude "${source_dir}" "${python_bin}" ;;
+    codex) install_codex "${source_dir}" "${python_bin}" ;;
+    *) echo "[ERROR] SEO_DUNGEON_TARGET must be all, claude, or codex."; exit 1 ;;
+  esac
 
-    # Clone or update
-    TEMP_DIR=$(mktemp -d)
-    trap "rm -rf ${TEMP_DIR}" EXIT
-
-    echo "↓ Downloading Claude SEO (${REPO_TAG})..."
-    git clone --depth 1 --branch "${REPO_TAG}" "${REPO_URL}" "${TEMP_DIR}/claude-seo" 2>/dev/null
-
-    # Copy main orchestrator skill (located at skills/seo/)
-    echo "→ Installing skill files..."
-    if [ -d "${TEMP_DIR}/claude-seo/skills/seo" ]; then
-        cp -r "${TEMP_DIR}/claude-seo/skills/seo/"* "${SKILL_DIR}/"
-    elif [ -d "${TEMP_DIR}/claude-seo/seo" ]; then
-        # Legacy layout fallback
-        cp -r "${TEMP_DIR}/claude-seo/seo/"* "${SKILL_DIR}/"
-    else
-        echo "✗ Could not find main seo skill in downloaded archive"
-        exit 1
-    fi
-
-    # Copy sub-skills
-    if [ -d "${TEMP_DIR}/claude-seo/skills" ]; then
-        for skill_dir in "${TEMP_DIR}/claude-seo/skills"/*/; do
-            skill_name=$(basename "${skill_dir}")
-            target="${HOME}/.claude/skills/${skill_name}"
-            mkdir -p "${target}"
-            cp -r "${skill_dir}"* "${target}/"
-        done
-    fi
-
-    # Copy schema templates
-    if [ -d "${TEMP_DIR}/claude-seo/schema" ]; then
-        mkdir -p "${SKILL_DIR}/schema"
-        cp -r "${TEMP_DIR}/claude-seo/schema/"* "${SKILL_DIR}/schema/"
-    fi
-
-    # Copy reference docs
-    if [ -d "${TEMP_DIR}/claude-seo/pdf" ]; then
-        mkdir -p "${SKILL_DIR}/pdf"
-        cp -r "${TEMP_DIR}/claude-seo/pdf/"* "${SKILL_DIR}/pdf/"
-    fi
-
-    # Copy agents
-    echo "→ Installing subagents..."
-    cp -r "${TEMP_DIR}/claude-seo/agents/"*.md "${AGENT_DIR}/" 2>/dev/null || true
-
-    # Copy shared scripts
-    if [ -d "${TEMP_DIR}/claude-seo/scripts" ]; then
-        mkdir -p "${SKILL_DIR}/scripts"
-        cp -r "${TEMP_DIR}/claude-seo/scripts/"* "${SKILL_DIR}/scripts/"
-    fi
-
-    # Copy hooks
-    if [ -d "${TEMP_DIR}/claude-seo/hooks" ]; then
-        mkdir -p "${SKILL_DIR}/hooks"
-        cp -r "${TEMP_DIR}/claude-seo/hooks/"* "${SKILL_DIR}/hooks/"
-        chmod +x "${SKILL_DIR}/hooks/"*.sh 2>/dev/null || true
-        chmod +x "${SKILL_DIR}/hooks/"*.py 2>/dev/null || true
-    fi
-
-    # Copy extensions (optional add-ons: dataforseo, banana)
-    if [ -d "${TEMP_DIR}/claude-seo/extensions" ]; then
-        echo "=> Installing extensions..."
-        for ext_dir in "${TEMP_DIR}/claude-seo/extensions"/*/; do
-            [ -d "${ext_dir}" ] || continue
-            ext_name=$(basename "${ext_dir}")
-            # Extension skills
-            if [ -d "${ext_dir}skills" ]; then
-                for ext_skill in "${ext_dir}skills"/*/; do
-                    [ -d "${ext_skill}" ] || continue
-                    ext_skill_name=$(basename "${ext_skill}")
-                    target="${HOME}/.claude/skills/${ext_skill_name}"
-                    mkdir -p "${target}"
-                    cp -r "${ext_skill}"* "${target}/"
-                done
-            fi
-            # Extension agents
-            if [ -d "${ext_dir}agents" ]; then
-                cp -r "${ext_dir}agents/"*.md "${AGENT_DIR}/" 2>/dev/null || true
-            fi
-            # Extension references
-            if [ -d "${ext_dir}references" ]; then
-                mkdir -p "${SKILL_DIR}/extensions/${ext_name}/references"
-                cp -r "${ext_dir}references/"* "${SKILL_DIR}/extensions/${ext_name}/references/"
-            fi
-            # Extension scripts
-            if [ -d "${ext_dir}scripts" ]; then
-                mkdir -p "${SKILL_DIR}/extensions/${ext_name}/scripts"
-                cp -r "${ext_dir}scripts/"* "${SKILL_DIR}/extensions/${ext_name}/scripts/"
-            fi
-        done
-    fi
-
-    # Copy requirements.txt to skill dir so users can retry later
-    cp "${TEMP_DIR}/claude-seo/requirements.txt" "${SKILL_DIR}/requirements.txt" 2>/dev/null || true
-
-    # Install Python dependencies (venv preferred, --user fallback)
-    echo "→ Installing Python dependencies..."
-    VENV_DIR="${SKILL_DIR}/.venv"
-    if python3 -m venv "${VENV_DIR}" 2>/dev/null; then
-        "${VENV_DIR}/bin/pip" install --quiet -r "${TEMP_DIR}/claude-seo/requirements.txt" 2>/dev/null && \
-            echo "  ✓ Installed in venv at ${VENV_DIR}" || \
-            echo "  ⚠  Venv pip install failed. Run: ${VENV_DIR}/bin/pip install -r ${SKILL_DIR}/requirements.txt"
-    else
-        pip install --quiet --user -r "${TEMP_DIR}/claude-seo/requirements.txt" 2>/dev/null || \
-        echo "  ⚠  Could not auto-install. Run: pip install --user -r ${SKILL_DIR}/requirements.txt"
-    fi
-
-    # Optional: Install Playwright browsers (for screenshot analysis)
-    echo "→ Installing Playwright browsers (optional, for visual analysis)..."
-    if [ -f "${VENV_DIR}/bin/playwright" ]; then
-        "${VENV_DIR}/bin/python" -m playwright install chromium 2>/dev/null || \
-        echo "  ⚠  Playwright install failed. Visual analysis will use WebFetch fallback."
-    else
-        python3 -m playwright install chromium 2>/dev/null || \
-        echo "  ⚠  Playwright install failed. Visual analysis will use WebFetch fallback."
-    fi
-
-    echo ""
-    echo "✓ Claude SEO installed successfully!"
-    echo ""
-    echo "Usage:"
-    echo "  1. Start Claude Code:  claude"
-    echo "  2. Run commands:       /seo audit https://example.com"
-    echo ""
-    echo "Python deps location: ${SKILL_DIR}/requirements.txt"
-    echo "To uninstall: curl -fsSL ${REPO_URL}/raw/main/uninstall.sh | bash"
+  echo "[OK] SEO Dungeon skills installed for ${target}."
+  echo "Set SEO_DUNGEON_AGENT=codex before starting the game bridge to use Codex runtime."
 }
 
 main "$@"

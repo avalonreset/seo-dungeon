@@ -1,7 +1,7 @@
 ---
 name: seo-maps
 description: >
-  Maps intelligence for local SEO - geo-grid rank tracking, GBP profile
+  Maps intelligence for local SEO — geo-grid rank tracking, GBP profile
   auditing via API, review intelligence across Google/Tripadvisor/Trustpilot,
   cross-platform NAP verification (Google/Bing/Apple/OSM), competitor
   radius mapping, and LocalBusiness schema generation from API data.
@@ -16,7 +16,7 @@ license: MIT
 compatibility: "DataForSEO MCP for Tier 1+, Google Maps API for Tier 2"
 metadata:
   author: AgriciDaniel
-  version: "1.9.0"
+  version: "1.9.6"
   category: seo
 ---
 

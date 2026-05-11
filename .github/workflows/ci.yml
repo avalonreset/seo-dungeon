@@ -28,3 +28,8 @@ jobs:
           python3 -m py_compile scripts/analyze_visual.py
           python3 -m py_compile scripts/capture_screenshot.py
           echo "All scripts passed syntax check"
+
+      - name: Run manifest consistency tests
+        run: |
+          python3 -m pip install --quiet pytest
+          python3 -m pytest tests/

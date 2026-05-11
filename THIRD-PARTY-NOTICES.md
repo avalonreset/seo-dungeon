@@ -6,7 +6,7 @@ This project includes or depends on the following third-party software:
 
 | Package | License | Author | Source |
 |---------|---------|--------|--------|
-| Claude SEO v1.9.0 | MIT | AgriciDaniel | https://github.com/AgriciDaniel/claude-seo |
+| Claude SEO v1.9.8 | MIT | AgriciDaniel | https://github.com/AgriciDaniel/claude-seo |
 
 The SEO analysis backend (skills/, agents/, scripts/) is derived from Claude SEO,
 an open-source SEO skill suite for Claude Code. Used under the MIT license.

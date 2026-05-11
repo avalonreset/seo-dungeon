@@ -1,0 +1,60 @@
+{
+  "name": "seo-dungeon",
+  "version": "1.9.8",
+  "description": "SEO Dungeon skill suite for Codex: gamified SEO audits backed by the bundled SEO engine.",
+  "author": {
+    "name": "Avalon Reset",
+    "url": "https://github.com/avalonreset"
+  },
+  "homepage": "https://github.com/avalonreset/seo-dungeon",
+  "repository": "https://github.com/avalonreset/seo-dungeon",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "codex-cli",
+    "codex-skills",
+    "seo",
+    "ai-seo",
+    "technical-seo",
+    "content-quality",
+    "schema-markup",
+    "core-web-vitals",
+    "local-seo",
+    "generative-engine-optimization",
+    "ai-search",
+    "sitemap",
+    "image-optimization",
+    "google-search-console",
+    "dataforseo",
+    "mcp",
+    "pagespeed",
+    "crux",
+    "backlinks",
+    "semantic-clustering",
+    "sxo",
+    "drift-monitoring",
+    "ecommerce-seo",
+    "automation",
+    "marketing-automation"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "SEO Dungeon",
+    "shortDescription": "Run SEO Dungeon audits and SEO workflows in Codex.",
+    "longDescription": "SEO Dungeon is a gamified SEO analysis suite with Codex-compatible skills, Codex agent profiles, shared cache artifacts, optional API integrations, and a dungeon crawler UI.",
+    "developerName": "Avalon Reset",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/avalonreset/seo-dungeon",
+    "defaultPrompt": [
+      "Audit this website for SEO issues.",
+      "Check schema and Core Web Vitals for this URL.",
+      "Build an SEO action plan for this business."
+    ],
+    "brandColor": "#D4AF37"
+  }
+}

@@ -1,23 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+remove_suite() {
+  local root="$1"
+  local label="$2"
+  local skills_root="${root}/skills"
+  local agents_root="${root}/agents"
+
+  echo "[INFO] Removing SEO Dungeon ${label} install from ${root}"
+  rm -rf "${skills_root}/seo" "${skills_root}"/seo-* 2>/dev/null || true
+  rm -f "${agents_root}"/seo-*.md "${agents_root}"/seo-*.toml 2>/dev/null || true
+}
+
 main() {
-    echo "→ Uninstalling Claude SEO..."
-
-    # Remove main skill (includes venv and requirements.txt)
-    rm -rf "${HOME}/.claude/skills/seo"
-
-    # Remove sub-skills
-    for skill in seo-audit seo-competitor-pages seo-content seo-geo seo-hreflang seo-images seo-page seo-plan seo-programmatic seo-schema seo-sitemap seo-technical; do
-        rm -rf "${HOME}/.claude/skills/${skill}"
-    done
-
-    # Remove agents
-    for agent in seo-technical seo-content seo-schema seo-sitemap seo-performance seo-visual seo-geo; do
-        rm -f "${HOME}/.claude/agents/${agent}.md"
-    done
-
-    echo "✓ Claude SEO uninstalled."
+  local target="${SEO_DUNGEON_TARGET:-all}"
+  case "${target}" in
+    all)
+      remove_suite "${CLAUDE_HOME:-${HOME}/.claude}" "Claude"
+      remove_suite "${CODEX_HOME:-${HOME}/.codex}" "Codex"
+      ;;
+    claude) remove_suite "${CLAUDE_HOME:-${HOME}/.claude}" "Claude" ;;
+    codex) remove_suite "${CODEX_HOME:-${HOME}/.codex}" "Codex" ;;
+    *) echo "[ERROR] SEO_DUNGEON_TARGET must be all, claude, or codex."; exit 1 ;;
+  esac
+  echo "[OK] SEO Dungeon skills removed for ${target}."
 }
 
 main "$@"

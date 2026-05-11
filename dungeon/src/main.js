@@ -549,8 +549,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Outside battle - neutral chat. Pass-through to claude -p in the
-    // user's project dir with their selected model. No demon anchoring;
+    // Outside battle - neutral chat. Pass-through to the active agent in
+    // the user's project dir with their selected model. No demon anchoring;
     // the user can ask anything, just like a normal CLI session.
     logInputBar.classList.add('running');
     showLoadingIndicator();
@@ -612,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Global Escape handler - double-tap cancels any active Claude operation
+  // Global Escape handler - double-tap cancels any active agent operation
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       const now = Date.now();

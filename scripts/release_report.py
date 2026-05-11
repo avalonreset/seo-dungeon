@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-release_report.py - Claude SEO v1.9.0 Pro Hub Challenge Release Report
+release_report.py — Claude SEO v1.9.0 Pro Hub Challenge Release Report
 
 Usage:
     python scripts/release_report.py --output ~/Desktop/

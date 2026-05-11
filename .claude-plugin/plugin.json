@@ -1,7 +1,7 @@
 {
-  "name": "claude-seo",
-  "version": "1.9.0",
-  "description": "Comprehensive SEO analysis skill for Claude Code with gamified dungeon crawler UI. 20 core sub-skills covering technical SEO, content quality (E-E-A-T), schema markup, image optimization, sitemap architecture, AI search optimization (GEO), local SEO, maps intelligence, semantic topic clustering, search experience optimization (SXO), SEO drift monitoring, e-commerce SEO, international SEO with cultural profiles, and strategic planning across all industries.",
+  "name": "seo-dungeon",
+  "version": "1.9.8",
+  "description": "SEO Dungeon skill suite for Claude Code. 25 sub-skills (21 core + 1 orchestrator + 1 framework integration + 2 extension mirrors) and 18 sub-agents (15 core + 1 framework integration + 2 extension mirrors) backed by Claude SEO v1.9.8, with a gamified dungeon crawler UI.",
   "author": {
     "name": "Avalon Reset",
     "url": "https://github.com/avalonreset"
@@ -9,6 +9,7 @@
   "license": "MIT",
   "homepage": "https://github.com/avalonreset/seo-dungeon",
   "repository": "https://github.com/avalonreset/seo-dungeon",
+  "category": "marketing",
   "keywords": [
     "seo",
     "technical-seo",
@@ -41,8 +42,6 @@
     "ecommerce-seo",
     "google-shopping",
     "cultural-profiles",
-    "content-parity",
-    "dungeon-crawler",
-    "gamified-seo"
+    "content-parity"
   ]
 }

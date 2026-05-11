@@ -116,9 +116,9 @@ export class BridgeClient {
   }
 
   /**
-   * Neutral "talk to Claude" - used outside of battle (Demon Lodge /
+   * Neutral "talk to agent" - used outside of battle (Demon Lodge /
    * Dungeon Hall / between fights). No demon context, no framing. The
-   * message goes to `claude -p <text>` in the user's project directory
+   * message goes to the active agent in the user's project directory
    * under their selected character model. Functionally the same as
    * invoking the CLI yourself.
    */
