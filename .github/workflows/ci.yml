@@ -30,6 +30,8 @@ jobs:
           echo "All scripts passed syntax check"
 
       - name: Run manifest consistency tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 -m pip install --quiet pytest
           python3 -m pytest tests/

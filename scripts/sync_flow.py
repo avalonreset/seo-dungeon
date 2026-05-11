@@ -62,7 +62,11 @@ def _base_headers():
 
 
 def _authed_headers():
-    """Returns authenticated headers, or base headers if gh CLI is absent or unauthed."""
+    """Returns authenticated headers, or base headers if no token is available."""
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        return {**_base_headers(), "Authorization": f"Bearer {token}"}
+
     try:
         result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True)
     except FileNotFoundError:

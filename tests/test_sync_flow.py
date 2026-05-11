@@ -131,6 +131,8 @@ def test_base_headers_has_no_authorization():
 def test_authed_headers_degrades_when_gh_missing(monkeypatch):
     """_authed_headers() returns base headers if gh CLI is not on PATH (VULN-A06)."""
     sf = _load_sync_flow_module()
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
     def _fake_run(*args, **kwargs):
         raise FileNotFoundError("gh not found")
@@ -138,6 +140,19 @@ def test_authed_headers_degrades_when_gh_missing(monkeypatch):
     monkeypatch.setattr(sf.subprocess, "run", _fake_run)
     headers = sf._authed_headers()
     assert "Authorization" not in headers
+
+
+def test_authed_headers_prefers_env_token(monkeypatch):
+    """_authed_headers() must support non-interactive CI tokens."""
+    sf = _load_sync_flow_module()
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setattr(
+        sf.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("gh should not be called")),
+    )
+    headers = sf._authed_headers()
+    assert headers["Authorization"] == "Bearer test-token"
 
 
 # ── Task 3 tests ──────────────────────────────────────────────────────────────
