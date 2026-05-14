@@ -4,14 +4,21 @@
 
 # SEO Dungeon - Gamified SEO Audit Tool
 
-Most SEO audit tools hand you a spreadsheet and wish you luck. SEO Dungeon turns every issue into a demon you can fight, and every fix into a real commit to your codebase. Built on the **Claude SEO v1.9.8** engine with 25 sub-skills, 18 sub-agents, Claude Code support, Codex support, and a 16-bit dungeon crawler interface that makes SEO audits something you actually want to do.
-
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.9.8-blue)](CHANGELOG.md)
 [![SEO Engine](https://img.shields.io/badge/SEO%20Engine-v1.9.8-green)](skills/seo/SKILL.md)
 [![Built with Phaser](https://img.shields.io/badge/built%20with-Phaser%203-orange)](https://phaser.io/)
-[![Claude + Codex](https://img.shields.io/badge/runtime-Claude%20%2B%20Codex-blueviolet)](install.sh)
+[![Codex First](https://img.shields.io/badge/runtime-Codex%20first-2ea44f)](install.sh)
+
+> [!WARNING]
+> **Use Codex by default. Do not use the Claude runtime unless you understand and accept Anthropic/Claude billing risk.**
+>
+> SEO Dungeon still contains legacy Claude compatibility because the bundled SEO engine originated in Claude SEO. That does **not** mean Claude is the recommended runtime. Claude Code usage can consume paid Anthropic resources depending on your subscription, API-key environment, and current Anthropic billing rules. In particular, if `ANTHROPIC_API_KEY` is present in your environment, Claude Code may use API-key billing instead of the subscription path you expected.
+>
+> For that reason, SEO Dungeon now defaults to Codex only. Claude requires explicit opt-in with `SEO_DUNGEON_AGENT=claude` and `SEO_DUNGEON_ALLOW_CLAUDE=1`. If `ANTHROPIC_API_KEY` is set, the bridge will not pass it through unless you also set `SEO_DUNGEON_ALLOW_ANTHROPIC_API_KEY=1`.
+
+Most SEO audit tools hand you a spreadsheet and wish you luck. SEO Dungeon turns every issue into a demon you can fight, and every fix into a real commit to your codebase. Built on the **Claude SEO v1.9.8** engine with 25 sub-skills, 18 sub-agents, Codex support, legacy Claude compatibility, and a 16-bit dungeon crawler interface that makes SEO audits something you actually want to do.
 
 ## Screenshots
 
@@ -45,9 +52,9 @@ Most SEO audit tools hand you a spreadsheet and wish you luck. SEO Dungeon turns
 
 ## How It Works
 
-1. **Choose your warrior.** In Claude mode, Warrior, Samurai, and Knight map to Opus, Sonnet, and Haiku. In Codex mode, the selected warrior is visual and Codex uses your configured Codex model.
+1. **Choose your warrior.** In Codex mode, the selected warrior is visual and Codex uses your configured Codex model. Legacy Claude mode maps Warrior, Samurai, and Knight to Opus, Sonnet, and Haiku only after explicit opt-in.
 2. **Enter a domain and project path.** Point the dungeon at any website and its source code directory.
-3. **Descend into the dungeon.** The bundled SEO engine runs a full audit through Claude Code or Codex, discovering issues as dungeon demons.
+3. **Descend into the dungeon.** The bundled SEO engine runs a full audit through Codex by default, discovering issues as dungeon demons.
 4. **Explore the Dungeon Hall.** Browse discovered SEO issues sorted by severity. Critical issues are deadly bosses. Info-level issues are goblins.
 5. **Battle demons.** Turn-based combat with four actions:
    - **Attack** - Prompt the active agent directly with what you want it to do about this issue. The agent streams its work into the Guild Ledger on the right and can edit your project files.
@@ -77,10 +84,11 @@ This refresh updates SEO Dungeon from the v1.9.0 SEO engine to **Claude SEO v1.9
 
 ### Game Improvements
 
-- **Dual runtime support** - Run the bridge through Claude Code or `codex exec`
-- **Dual installer support** - Install skills into `~/.claude` and `~/.codex`
+- **Codex-first runtime support** - Run the bridge through `codex exec` by default
+- **Legacy Claude support** - Claude compatibility remains available behind explicit opt-in for users who understand the billing risk
+- **Dual installer support** - Install skills into `~/.codex` by default, or into `~/.claude` only when requested
 - **Guild Ledger Terminal** - Type prompts directly to the active agent during gameplay
-- **Persistent Interactive Sessions** - Claude maintains context across battle actions with token tracking; Codex uses per-turn exec calls
+- **Persistent Interactive Sessions** - Legacy Claude mode maintains context across battle actions with token tracking; Codex uses per-turn exec calls
 - **RPG Narrator** - Haiku narrates attack results in the battle log with cinematic flair
 - **Smart Scroll** - Guild Ledger respects your scroll position during updates
 - **Double-Escape Cancel** - Press Escape twice to cancel any active agent operation
@@ -90,7 +98,7 @@ This refresh updates SEO Dungeon from the v1.9.0 SEO engine to **Claude SEO v1.9
 
 ### Combat and Gameplay
 - **Turn-based combat atmosphere** with HP bars, attack animations, and an RPG narrator
-- **Attack** sends your message to Claude with the selected demon as a structured focus header - severity, category, URL, file, selector all travel with every turn. Claude reads your intent naturally, so polite directives work as fixes and questions get answered without triggering edits.
+- **Attack** sends your message to the active agent with the selected demon as a structured focus header - severity, category, URL, file, selector all travel with every turn. The agent reads your intent naturally, so polite directives work as fixes and questions get answered without triggering edits.
 - **Vanquish** is your judgment call. You decide when the issue has been handled enough to mark it defeated.
 - **Neutral chat outside battle** - the Guild Ledger input becomes a plain pass-through to the active agent when no demon is selected, so you can ask anything with no SEO scope applied.
 - **Quest caching** via localStorage so you can resume audits without re-running them
@@ -109,14 +117,14 @@ This refresh updates SEO Dungeon from the v1.9.0 SEO engine to **Claude SEO v1.9
 - **Cinematic transitions** with fade-to-black sequences for descending and ascending
 
 ### Guild Ledger
-- **Real-time activity log** showing every tool call, agent spawn, file read, and decision Claude makes
+- **Real-time activity log** showing every tool call, agent spawn, file read, and decision the active agent makes
 - **14 icon categories** with per-line color coding (tools, agents, fetches, errors, completions)
 - **Typewriter animation** with configurable speed and idle state detection
-- **Interactive terminal mode** for typing prompts directly to Claude mid-gameplay
+- **Interactive terminal mode** for typing prompts directly to the active agent mid-gameplay
 
 ## SEO Engine (25 Skills)
 
-The full [Claude SEO v1.9.8](https://github.com/AgriciDaniel/claude-seo) engine is bundled, giving you 25 specialized skills that work through the game and directly from Claude Code or Codex.
+The full [Claude SEO v1.9.8](https://github.com/AgriciDaniel/claude-seo) engine is bundled, giving you 25 specialized skills that work through the game and directly from Codex. Claude compatibility is retained as an advanced, opt-in legacy path.
 
 ### Core Analysis (14 skills)
 
@@ -162,7 +170,8 @@ The full [Claude SEO v1.9.8](https://github.com/AgriciDaniel/claude-seo) engine 
 
 - **Node.js 18+**
 - **Python 3.10+** (for SEO analysis scripts)
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** or **Codex CLI** installed and authenticated
+- **Codex CLI** installed and authenticated
+- **Claude Code is optional and not recommended as the default runtime** because it may incur Anthropic charges depending on your setup
 - **Git**
 
 ### 1. Clone and install
@@ -172,7 +181,7 @@ git clone https://github.com/avalonreset/seo-dungeon.git
 cd seo-dungeon
 ```
 
-Install the SEO Dungeon skill suite. By default this installs both Claude and Codex skill trees:
+Install the SEO Dungeon skill suite. By default this installs the Codex skill tree only:
 
 ```powershell
 # Windows
@@ -182,10 +191,12 @@ Install the SEO Dungeon skill suite. By default this installs both Claude and Co
 bash install.sh
 ```
 
-Install only one runtime when needed:
+Install a specific runtime when needed:
 
 ```powershell
 $env:SEO_DUNGEON_TARGET='codex'; .\install.ps1
+
+# Legacy/advanced only: may incur Anthropic/Claude charges when used
 $env:SEO_DUNGEON_TARGET='claude'; .\install.ps1
 ```
 
@@ -202,19 +213,25 @@ Open `http://localhost:3000`. The bridge server starts on port 3001 automaticall
 Runtime selection:
 
 ```powershell
-# Default: Claude Code
+# Default: Codex runtime
 npm run dev
 
-# Codex runtime
+# Codex runtime explicitly
 $env:SEO_DUNGEON_AGENT='codex'; npm run dev
 
-# Auto-pick Codex when available, otherwise Claude
+# Auto-pick Codex when available
 $env:SEO_DUNGEON_AGENT='auto'; npm run dev
+
+# Legacy/advanced only: use Claude after accepting billing risk
+$env:SEO_DUNGEON_AGENT='claude'
+$env:SEO_DUNGEON_ALLOW_CLAUDE='1'
+npm run dev
+
+# If ANTHROPIC_API_KEY is set and you intentionally want API-key billing risk:
+$env:SEO_DUNGEON_ALLOW_ANTHROPIC_API_KEY='1'
 ```
 
-> **Windows users:** The first time the dungeon runs an audit, Windows Defender Firewall may prompt to allow `claude.exe` network access. Click **Allow**. Without this, audits will hang silently because Claude cannot reach Anthropic's API. This prompt only appears once per install.
->
-> **First audit takes 5-10 minutes.** The `/seo audit` skill runs up to 15 subagents in parallel and fans out tool calls across many pages. The progress bar shows 0% during tool-call phases because nothing text-based is streaming yet. This is normal. Subsequent cached audits are near-instant.
+> **First audit takes 5-10 minutes.** The `/seo audit` skill fans out tool calls across many pages. The progress bar shows 0% during tool-call phases because nothing text-based is streaming yet. This is normal. Subsequent cached audits are near-instant.
 
 ### 3. Production build (recommended for recording)
 
@@ -232,17 +249,17 @@ npx serve dist -l 3000 -s  # Terminal 2: Static build
 
 ## Character Classes
 
-In Claude mode, each character maps to a Claude model. In Codex mode, the character selection is visual and Codex uses your configured Codex model, or `SEO_DUNGEON_CODEX_MODEL` when set.
+In Codex mode, the character selection is visual and Codex uses your configured Codex model, or `SEO_DUNGEON_CODEX_MODEL` when set. In legacy Claude mode, each character maps to a Claude model after explicit opt-in.
 
 | Character | Model | Strengths | Best For |
 |-----------|-------|-----------|----------|
-| **Warrior** | Claude Opus | Deepest analysis, most thorough fixes, highest accuracy | Complex enterprise sites, critical audits |
-| **Samurai** | Claude Sonnet | Balanced depth and speed, reliable JSON output | General use, most reliable for structured data |
-| **Knight** | Claude Haiku | Fastest responses, efficient combat, lowest cost | Quick audits, simple sites, rapid iteration |
+| **Warrior** | Visual class in Codex / Claude Opus in legacy Claude mode | Deepest analysis style | Complex enterprise sites, critical audits |
+| **Samurai** | Visual class in Codex / Claude Sonnet in legacy Claude mode | Balanced style | General use, structured data work |
+| **Knight** | Visual class in Codex / Claude Haiku in legacy Claude mode | Fast iteration style | Quick audits, simple sites, rapid iteration |
 
 ## SEO Commands
 
-The skills work directly from Claude Code or Codex without the game interface:
+The skills work directly from Codex without the game interface. They can also work in Claude Code only if you intentionally install and use the legacy Claude path:
 
 | Command | What It Does |
 |---------|-------------|
@@ -314,7 +331,7 @@ bash extensions/banana/install.sh
 The game and the SEO engine are completely separate layers connected by a WebSocket bridge.
 
 ```
-Browser (Phaser.js)  <-->  WebSocket (3001)  <-->  Bridge Server  <-->  Claude Code CLI
+Browser (Phaser.js)  <-->  WebSocket (3001)  <-->  Bridge Server  <-->  Codex CLI
                                                                           |
                                                                     23 SEO Skills
                                                                     17 Subagents
@@ -323,15 +340,15 @@ Browser (Phaser.js)  <-->  WebSocket (3001)  <-->  Bridge Server  <-->  Claude C
 ```
 
 1. The **Phaser game** sends commands (`audit`, `fix`, `commit`, `narrate`) over WebSocket
-2. The **bridge server** spawns Claude Code CLI processes with the selected model
-3. Claude Code or Codex loads **SEO skills** from its skill directory and runs the analysis
+2. The **bridge server** spawns Codex CLI processes by default
+3. Codex loads **SEO skills** from its skill directory and runs the analysis
 4. Results stream back through WebSocket to the game in real time
-5. The **Guild Ledger** displays every tool call, file read, and decision Claude makes
+5. The **Guild Ledger** displays every tool call, file read, and decision the active agent makes
 
 ```
 seo-dungeon/
   dungeon/                         # Game application (Phaser.js)
-    server/index.js                # WebSocket bridge to Claude Code
+    server/index.js                # WebSocket bridge to Codex, with legacy Claude opt-in
     src/scenes/                    # 8 game scenes (Boot, Gate, Summoning, Hall, Battle, Victory...)
     src/utils/                     # Sound manager, WebSocket client, colors, particles
     assets/luizmelo/               # Character sprite sheets (Warrior, Samurai, Knight)
@@ -348,7 +365,7 @@ seo-dungeon/
 | Game engine | [Phaser 3](https://phaser.io/) | 2D scenes, sprites, tweens, input handling |
 | Build tool | [Vite](https://vitejs.dev/) | Dev server + production bundling |
 | Audio | [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) | 25+ procedural synthesized sounds |
-| Bridge | Express + ws | WebSocket bridge to Claude Code CLI |
+| Bridge | Express + ws | WebSocket bridge to Codex CLI, with legacy Claude opt-in |
 | SEO engine | [Claude SEO v1.9.8](https://github.com/AgriciDaniel/claude-seo) | 25 skills, 18 Claude agents, Codex TOML agent profiles |
 | Characters | [LuizMelo](https://luizmelo.itch.io/) | Warrior, Samurai, Knight sprite sheets |
 | Demons | [0x72](https://0x72.itch.io/dungeontileset-ii) | DungeonTileset II monster sprites |
@@ -361,7 +378,9 @@ seo-dungeon/
 | Audit hangs or takes very long | Normal for first run. Subsequent runs use cached results via the Gate scene. |
 | JSON parse error after audit | Auto-retry is built in. If it persists, try Samurai (Sonnet), the most reliable for structured JSON output. |
 | Blurry text on 4K display | Should auto-detect. Game renders at 3x DPR minimum for high-DPI clarity. |
-| Skills not found by Claude | Run the installer (`install.ps1` or `install.sh`) to copy skills to `~/.claude/` |
+| Skills not found by Codex | Run the installer (`install.ps1` or `install.sh`) to copy skills to `~/.codex/` |
+| Claude runtime does not start | This is intentional. Set `SEO_DUNGEON_AGENT=claude` and `SEO_DUNGEON_ALLOW_CLAUDE=1` only if you accept Anthropic/Claude billing risk. |
+| Claude refuses to run with `ANTHROPIC_API_KEY` set | Unset `ANTHROPIC_API_KEY`, or set `SEO_DUNGEON_ALLOW_ANTHROPIC_API_KEY=1` only if you intentionally accept API-key billing risk. |
 | "No module named playwright" | Optional dependency. Install with `pip install playwright && python -m playwright install chromium` |
 | Bridge port 3001 in use | Kill the process on that port or change `PORT` in `dungeon/server/index.js` |
 | Google API commands fail | Run `/seo google` for setup instructions. Requires API key at minimum (free). |
@@ -392,18 +411,14 @@ SEO engine based on [Claude SEO](https://github.com/AgriciDaniel/claude-seo) by 
 
 ## Cost expectations
 
-Every `Attack` in battle and every `/seo audit` run spawns a Claude Code process that calls the Anthropic API under your own credentials. **This consumes real tokens against your plan.** A full-site audit with 15 parallel subagents is not a cheap call.
+SEO Dungeon defaults to Codex so users do not accidentally route audits through Claude. Full-site audits still perform substantial model/tool work, so understand the pricing and limits of whichever agent runtime you choose.
 
-- **Warrior (Opus)** is the deepest and most expensive. Reserve for high-stakes audits. Expect several minutes per full audit and meaningful token usage.
-- **Samurai (Sonnet)** is the recommended default. Balanced cost and depth.
-- **Knight (Haiku)** is the fastest and cheapest. Good for regular use, iteration, and large backlogs of small issues.
-
-Users on Claude Pro may hit the 5-hour usage cap mid-audit if they run multiple Opus-class audits back-to-back. Not a bug; that is how the subscription plan works. If you are doing heavy audit work, consider Max or API credits.
+The legacy Claude runtime is **not recommended as the default**. If you explicitly enable it, every `Attack` in battle and every `/seo audit` run can consume Anthropic/Claude resources under your own credentials. A full-site audit with many agent/tool calls may be expensive. If `ANTHROPIC_API_KEY` is present, SEO Dungeon blocks passing it through unless you set `SEO_DUNGEON_ALLOW_ANTHROPIC_API_KEY=1`.
 
 ## Disclaimer
 
 **SEO Dungeon is an independent, open-source project. It is not affiliated with, endorsed by, or sponsored by Anthropic.**
 
-"Claude," "Claude Code," "Opus," "Sonnet," and "Haiku" are trademarks of Anthropic and are referenced here descriptively to identify the underlying models the tool spawns. No endorsement or partnership is implied. Users provide their own Claude Code authentication (subscription or API credits) and are responsible for their own token usage under their agreement with Anthropic.
+"Claude," "Claude Code," "Opus," "Sonnet," and "Haiku" are trademarks of Anthropic and are referenced here descriptively for legacy compatibility. No endorsement or partnership is implied. Users who opt into Claude provide their own Claude Code authentication and are responsible for their own token usage, billing, and compliance under their agreement with Anthropic.
 
 Use of the Anthropic API through Claude Code is subject to Anthropic's [Usage Policies](https://www.anthropic.com/legal/aup) and any applicable terms of service. This project does not proxy, redistribute, or resell access to Anthropic services.

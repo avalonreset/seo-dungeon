@@ -24,7 +24,7 @@ function Get-CodexRoot {
     return (Join-Path $HOME ".codex")
 }
 
-$target = if ($env:SEO_DUNGEON_TARGET) { $env:SEO_DUNGEON_TARGET.ToLowerInvariant() } else { "all" }
+$target = if ($env:SEO_DUNGEON_TARGET) { $env:SEO_DUNGEON_TARGET.ToLowerInvariant() } else { "codex" }
 
 switch ($target) {
     "all" {

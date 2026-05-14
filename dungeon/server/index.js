@@ -125,11 +125,25 @@ function commandExists(command) {
   }
 }
 
+let warnedClaudeDisabled = false;
+
 function resolveAgentProvider() {
-  const configured = (process.env.SEO_DUNGEON_AGENT || process.env.SEO_DUNGEON_PROVIDER || 'claude').toLowerCase();
+  const configured = (process.env.SEO_DUNGEON_AGENT || process.env.SEO_DUNGEON_PROVIDER || 'codex').toLowerCase();
   if (configured === 'codex') return 'codex';
-  if (configured === 'auto') return commandExists('codex') ? 'codex' : 'claude';
-  return 'claude';
+  if (configured === 'auto') {
+    if (commandExists('codex')) return 'codex';
+    if (process.env.SEO_DUNGEON_ALLOW_CLAUDE === '1') return 'claude';
+    return 'codex';
+  }
+  if (configured === 'claude') {
+    if (process.env.SEO_DUNGEON_ALLOW_CLAUDE === '1') return 'claude';
+    if (!warnedClaudeDisabled) {
+      warnedClaudeDisabled = true;
+      console.warn('Claude runtime requested but disabled by default because it can incur Anthropic charges. Falling back to Codex. Set SEO_DUNGEON_ALLOW_CLAUDE=1 to opt in.');
+    }
+    return 'codex';
+  }
+  return 'codex';
 }
 
 /**
@@ -178,7 +192,9 @@ function safeEnv() {
   if (process.env.APPDATA) env.APPDATA = process.env.APPDATA;
   if (process.env.USERPROFILE) env.USERPROFILE = process.env.USERPROFILE;
   if (process.env.LOCALAPPDATA) env.LOCALAPPDATA = process.env.LOCALAPPDATA;
-  if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (process.env.ANTHROPIC_API_KEY && process.env.SEO_DUNGEON_ALLOW_ANTHROPIC_API_KEY === '1') {
+    env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  }
   if (process.env.CODEX_HOME) env.CODEX_HOME = process.env.CODEX_HOME;
   if (process.env.OPENAI_API_KEY) env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
@@ -781,6 +797,9 @@ async function runCommit(message, projectCwd, onStream, requestId, model) {
 function runClaude(prompt, onStream, cwd, requestId, model) {
   if (resolveAgentProvider() === 'codex') {
     return runCodex(prompt, onStream, cwd, requestId);
+  }
+  if (process.env.ANTHROPIC_API_KEY && process.env.SEO_DUNGEON_ALLOW_ANTHROPIC_API_KEY !== '1') {
+    return Promise.reject(new Error('ANTHROPIC_API_KEY is set, so Claude Code may bill API usage. Unset ANTHROPIC_API_KEY or set SEO_DUNGEON_ALLOW_ANTHROPIC_API_KEY=1 to explicitly accept API-key billing risk.'));
   }
   const workDir = cwd || PROJECT_ROOT;
   return new Promise((resolve, reject) => {

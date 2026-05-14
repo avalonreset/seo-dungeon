@@ -1,5 +1,6 @@
 # SEO Dungeon installer for Windows
-# Installs the bundled SEO skill suite for Claude Code, Codex, or both.
+# Installs the bundled SEO skill suite for Codex by default.
+# Claude installation is legacy/advanced and must be requested explicitly.
 
 $ErrorActionPreference = "Stop"
 
@@ -103,13 +104,17 @@ $versionOk = & $python.Exe @($python.Args + @("-c", "import sys; print(1 if sys.
 if ($versionOk -ne "1") { throw "Python 3.10+ is required." }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw "Git is required." }
 
-$target = if ($env:SEO_DUNGEON_TARGET) { $env:SEO_DUNGEON_TARGET.ToLowerInvariant() } else { "all" }
+$target = if ($env:SEO_DUNGEON_TARGET) { $env:SEO_DUNGEON_TARGET.ToLowerInvariant() } else { "codex" }
 $sourceDir = Get-SourceDir
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  SEO Dungeon - Installer" -ForegroundColor Cyan
-Write-Host "  Claude + Codex Skill Suite" -ForegroundColor Cyan
+Write-Host "  Codex Skill Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
+
+if ($target -eq "claude" -or $target -eq "all") {
+    Write-Host "[WARN] Claude install is legacy/advanced. Claude Code usage may incur Anthropic charges depending on your authentication and environment." -ForegroundColor Yellow
+}
 
 switch ($target) {
     "all" { Install-Claude $sourceDir $python; Install-Codex $sourceDir $python }
@@ -119,4 +124,4 @@ switch ($target) {
 }
 
 Write-Host "[OK] SEO Dungeon skills installed for $target." -ForegroundColor Green
-Write-Host "Set SEO_DUNGEON_AGENT=codex before starting the game bridge to use Codex runtime." -ForegroundColor Cyan
+Write-Host "Codex is the default runtime. Claude requires SEO_DUNGEON_AGENT=claude and SEO_DUNGEON_ALLOW_CLAUDE=1." -ForegroundColor Cyan

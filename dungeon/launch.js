@@ -16,7 +16,7 @@ const DIST = path.join(ROOT, 'dist');
 const LOG_DIR = path.join(ROOT, '.logs');
 
 // Ensure log directory exists. Bridge stdout/stderr get piped here so we
-// can diagnose audit parse failures, disconnects, and Claude CLI errors
+// can diagnose audit parse failures, disconnects, and agent CLI errors
 // after the fact. Previously the bridge ran with stdio:'ignore' and
 // every console.log inside server/index.js went to /dev/null.
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -83,7 +83,7 @@ const serve = spawn('npx', ['serve', 'dist', '-l', '3000', '-s'], {
 console.log('  ✓ Game server starting (port 3000)');
 console.log('');
 console.log('  Open http://localhost:3000 in your browser.');
-console.log('  Then open Claude Code in another terminal and play!');
+console.log('  Codex is the default agent runtime. Open the game and play!');
 console.log('');
 
 // Clean up bridge on exit

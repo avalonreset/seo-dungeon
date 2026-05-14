@@ -13,7 +13,7 @@ remove_suite() {
 }
 
 main() {
-  local target="${SEO_DUNGEON_TARGET:-all}"
+  local target="${SEO_DUNGEON_TARGET:-codex}"
   case "${target}" in
     all)
       remove_suite "${CLAUDE_HOME:-${HOME}/.claude}" "Claude"

@@ -1,7 +1,7 @@
 {
   "name": "seo-dungeon",
   "version": "1.9.8",
-  "description": "A 16-bit dungeon crawler interface for Claude and Codex SEO audits",
+  "description": "A Codex-first 16-bit dungeon crawler interface for SEO audits with legacy Claude compatibility",
   "scripts": {
     "start": "node launch.js",
     "dev": "concurrently \"npm run server\" \"npm run game\"",

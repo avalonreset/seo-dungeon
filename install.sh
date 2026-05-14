@@ -97,7 +97,7 @@ install_codex() {
 }
 
 main() {
-  local target="${SEO_DUNGEON_TARGET:-all}"
+  local target="${SEO_DUNGEON_TARGET:-codex}"
   local python_bin
   python_bin="$(resolve_python)" || { echo "[ERROR] Python 3 is required."; exit 1; }
   command -v git >/dev/null 2>&1 || { echo "[ERROR] Git is required."; exit 1; }
@@ -111,8 +111,12 @@ main() {
 
   echo "========================================"
   echo "  SEO Dungeon - Installer"
-  echo "  Claude + Codex Skill Suite"
+  echo "  Codex Skill Suite"
   echo "========================================"
+
+  if [ "${target}" = "claude" ] || [ "${target}" = "all" ]; then
+    echo "[WARN] Claude install is legacy/advanced. Claude Code usage may incur Anthropic charges depending on your authentication and environment."
+  fi
 
   case "${target}" in
     all) install_claude "${source_dir}" "${python_bin}"; install_codex "${source_dir}" "${python_bin}" ;;
@@ -122,7 +126,7 @@ main() {
   esac
 
   echo "[OK] SEO Dungeon skills installed for ${target}."
-  echo "Set SEO_DUNGEON_AGENT=codex before starting the game bridge to use Codex runtime."
+  echo "Codex is the default runtime. Claude requires SEO_DUNGEON_AGENT=claude and SEO_DUNGEON_ALLOW_CLAUDE=1."
 }
 
 main "$@"
