@@ -15,7 +15,7 @@
     "express": "^4.21.2",
     "phaser": "^3.87.0",
     "playwright": "^1.58.2",
-    "ws": "^8.18.0"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "vite": "^6.3.0"
