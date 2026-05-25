@@ -6,7 +6,7 @@ argument-hint: "[command] [url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "1.9.9"
+  version: "2.0.0"
   category: seo
 ---
 
@@ -17,9 +17,10 @@ metadata:
 **Scripts:** Located at the plugin root `scripts/` directory.
 
 Comprehensive SEO analysis across all industries (SaaS, local services,
-e-commerce, publishers, agencies). Orchestrates 23 sub-skills (21 core + 1 framework
-integration + 1 extension mirror) and 23 sub-agents. A separate optional Firecrawl
-extension is also installable (see "Optional Extensions" below).
+e-commerce, publishers, agencies). Orchestrates 24 sub-skills (21 core + 1
+orchestrator + 1 framework integration + 1 extension mirror) and 23 Codex
+sub-agents. Optional SEO data and crawl extensions are also installable (see
+"Optional Extensions" below).
 
 ## Quick Reference
 
@@ -67,11 +68,34 @@ When the user invokes `/seo audit`, delegate to subagents in parallel:
 10. If drift baseline exists for this URL (`python scripts/drift_history.py <url>`), also spawn seo-drift agent
 11. Always include seo-sxo in full audits (search experience applies to all sites)
 12. Collect results and generate unified report with SEO Health Score (0-100)
-13. Create prioritized action plan (Critical -> High -> Medium -> Low)
-14. **Offer PDF report**: "Generate a professional PDF report? Use `/seo google report full`"
+13. **Synthesize via the 10-principle framework** (see "Synthesis Methodology" below) — walk PERCEIVE → ANALYZE → VALIDATE → ACT before bucketing findings into Critical / High / Medium / Low
+14. Create prioritized action plan with dependency sequencing + falsifiability per recommendation
+15. **Offer PDF report**: "Generate a professional PDF report? Use `/seo google report full`"
 
 For individual commands, load the relevant sub-skill directly.
 After any analysis command completes, offer to generate a PDF report via `scripts/google_report.py`.
+
+## Synthesis Methodology
+
+Audits are not just findings — they are findings synthesized into a coherent
+strategy. SEO Dungeon uses a 10-principle thinking framework grouped into four
+phases: **PERCEIVE** (observe-external · observe-internal · listen),
+**ANALYZE** (think · connect-lateral · connect-system), **VALIDATE** (feel ·
+accept), **ACT** (create · grow).
+
+Full audits (`/seo audit`, `/seo page`) walk every phase before emitting the
+action plan. Narrower commands (`/seo schema`, `/seo images`, etc.) pass at
+least THINK + ACCEPT before emitting (sound first principle, surfaced
+falsifiability). The Critical / High / Medium / Low priority buckets are the
+**output** of validation, not a substitute for it.
+
+Full methodology + per-principle SEO mapping: `references/thinking-framework.md`.
+
+Each emitted recommendation should carry:
+- The first-principle observation it rests on (THINK)
+- The dependency on / unblock relationship to other recommendations (CONNECT-system)
+- An explicit "how would we know this failed?" check (ACCEPT)
+- A leading indicator the user can monitor without re-running the audit (GROW)
 
 ## Industry Detection
 
@@ -171,9 +195,9 @@ Weighted aggregate of all categories:
 
 ## Sub-Skills
 
-This skill orchestrates 23 sub-skills (21 core + 1 framework integration + 1 extension
-mirror). The orchestrator itself (`seo`) is the 24th in `skills/`, but does not
-orchestrate itself, so it is not enumerated below.
+This skill orchestrates 24 sub-skills (21 core + 1 orchestrator + 1 framework
+integration + 1 extension mirror). The orchestrator itself (`seo`) is not
+enumerated below.
 
 1. **seo-audit** -- Full website audit with parallel delegation
 2. **seo-page** -- Deep single-page analysis
@@ -204,9 +228,12 @@ orchestrate itself, so it is not enumerated below.
 The following ship in `extensions/` rather than `skills/` and require a separate
 installer to activate (see each extension's `install.sh`/`install.ps1`):
 
-- **seo-firecrawl** -- Full-site crawling and site mapping via Firecrawl MCP. Install
-  via `extensions/firecrawl/install.sh` (Unix) or `extensions/firecrawl/install.ps1`
-  (Windows). Once installed, invoke via `/seo firecrawl <command>`.
+- **seo-firecrawl** -- Full-site crawling and site mapping via Firecrawl MCP.
+- **seo-ahrefs** -- Ahrefs-backed backlink and keyword intelligence.
+- **seo-bing** -- Bing Webmaster Tools integration.
+- **seo-profound** -- AI search visibility and share-of-voice intelligence.
+- **seo-seranking** -- SE Ranking data integration.
+- **seo-unlighthouse** -- Lighthouse-at-scale crawl audits.
 
 ## Subagents
 
@@ -215,7 +242,6 @@ For parallel analysis during audits:
 - `seo-content` -- E-E-A-T, readability, thin content
 - `seo-schema` -- Detection, validation, generation
 - `seo-sitemap` -- Structure, coverage, quality gates
-- `seo-images` -- Image SEO, formats, lazy loading, dimensions, alt text
 - `seo-performance` -- Core Web Vitals measurement
 - `seo-visual` -- Screenshots, mobile testing, above-fold
 - `seo-geo` -- AI crawler access, llms.txt, citability, brand mention signals
@@ -223,17 +249,18 @@ For parallel analysis during audits:
 - `seo-maps` -- Geo-grid rank tracking, GBP audit, review intelligence, competitor radius mapping (conditional: spawned when Local Service detected AND DataForSEO MCP available)
 - `seo-google` -- CWV field data, URL indexation status, organic traffic trends (conditional: spawned when Google API credentials detected)
 - `seo-backlinks` -- Backlink profile data: DA/PA, referring domains, anchor text, toxic links (conditional: spawned when Moz/Bing API keys detected or always for CC domain-level metrics)
+- `seo-competitor-pages` -- Competitor comparison page planning and generation
 - `seo-cluster` -- Semantic clustering analysis (conditional: content strategy detected)
 - `seo-sxo` -- Page-type mismatch, user stories, persona scoring (always in full audits)
 - `seo-drift` -- Baseline comparison (conditional: drift baseline exists for URL)
 - `seo-ecommerce` -- Product schema, marketplace intel (conditional: e-commerce detected)
-- `seo-plan` -- Strategic planning and roadmap generation
-- `seo-programmatic` -- Template, URL pattern, and scaled page analysis
-- `seo-competitor-pages` -- Comparison and alternatives page planning
-- `seo-hreflang` -- Hreflang/i18n validation and generation
+- `seo-firecrawl` -- Full-site crawl discovery when Firecrawl MCP is configured
 - `seo-flow` -- FLOW framework prompts (conditional: spawned for content strategy workflows)
+- `seo-hreflang` -- International SEO and hreflang validation
+- `seo-images` -- Image SEO, SERP, and file optimization analysis
+- `seo-plan` -- Strategic SEO planning by business type
+- `seo-programmatic` -- Programmatic SEO analysis and planning
 - `seo-dataforseo` -- Live SERP, keyword, backlink, local SEO data (extension, optional)
-- `seo-firecrawl` -- Full-site crawling and URL discovery (extension, optional)
 
 ## Error Handling
 

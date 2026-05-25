@@ -25,7 +25,7 @@ prepare_source() {
 
   command -v git >/dev/null 2>&1 || { echo "[ERROR] Git is required for remote install."; exit 1; }
   local repo="${SEO_DUNGEON_REPO:-https://github.com/avalonreset/seo-dungeon}"
-  local ref="${SEO_DUNGEON_REF:-v1.9.9}"
+  local ref="${SEO_DUNGEON_REF:-v2.0.0}"
   local temp_dir
   temp_dir="$(mktemp -d)"
   trap 'rm -rf "${temp_dir}"' EXIT

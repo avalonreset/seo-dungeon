@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-05-25
+
+### Changed
+- **Public v2 engine refresh**: synchronized the bundled SEO engine with the
+  public `AgriciDaniel/claude-seo` v2.0.0 release, including hardened URL
+  safety, shared rendering support, schema v2 coverage, content-quality gates,
+  parasite-risk scanning, and new technical SEO helper scripts.
+- **Codex-only packaging preserved**: retained SEO Dungeon's Codex bridge,
+  Codex agent profiles, installer path, docs, and tests while excluding
+  Claude/Gemini runtime packaging and the Gemini-backed image generation skill.
+- **Optional SEO integrations expanded**: bundled public v2 extension skill
+  mirrors for Ahrefs, Bing Webmaster, Profound, SE Ranking, and Unlighthouse
+  alongside the existing DataForSEO and Firecrawl integrations.
+
+### Fixed
+- **Version triangulation**: bumped plugin, Python metadata, citation metadata,
+  installer defaults, and dungeon package metadata to `2.0.0`.
+
 ## [1.9.9] - 2026-05-11
 
 ### Fixed

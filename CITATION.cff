@@ -1,11 +1,23 @@
 cff-version: 1.2.0
 title: SEO Dungeon
-version: 1.9.9
-date-released: '2026-05-11'
-message: 'If you use this project, please cite it as below.'
+message: >-
+  If you use this software, please cite it using the metadata from this file.
+type: software
 authors:
-  - family-names: Reset
-    given-names: Avalon
+  - alias: AgriciDaniel
+    given-names: Daniel
+    family-names: Agrici
+    email: agricidaniel@gmail.com
+    website: 'https://agricidaniel.com'
 repository-code: 'https://github.com/avalonreset/seo-dungeon'
 url: 'https://github.com/avalonreset/seo-dungeon'
 license: MIT
+version: 2.0.0
+date-released: '2026-05-25'
+keywords:
+  - seo
+  - codex
+  - ai-tools
+  - schema-markup
+  - e-e-a-t
+  - geo

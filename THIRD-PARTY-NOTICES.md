@@ -6,11 +6,11 @@ This project includes or depends on the following third-party software:
 
 | Package | License | Author | Source |
 |---------|---------|--------|--------|
-| SEO skill suite v1.9.9 lineage | MIT | AgriciDaniel | https://github.com/AgriciDaniel/claude-seo |
+| SEO skill suite v2.0 lineage | MIT | AgriciDaniel | https://github.com/AgriciDaniel/claude-seo |
 
 The SEO analysis backend (skills/, agents-codex/, scripts/) is derived from an
 open-source SEO skill suite by Daniel Agrici. SEO Dungeon adapts that code for a
-Codex-only runtime. Used under the MIT license.
+Codex runtime. Used under the MIT license.
 Original copyright: Copyright (c) 2026 AgriciDaniel.
 
 ## Runtime Dependencies

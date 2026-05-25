@@ -2,17 +2,23 @@
 """
 Fetch a web page with proper headers and error handling.
 
+In v2.0.0 the raw-HTTP path delegates to url_safety.safe_requests_get for
+DNS-rebinding protection, and a --render flag delegates to render_page for
+SPA-aware fetching.
+
 Usage:
     python fetch_page.py https://example.com
     python fetch_page.py https://example.com --output page.html
+    python fetch_page.py https://example.com --render auto    # SPA-aware
+    python fetch_page.py https://example.com --render always  # force render
 """
 
+from __future__ import annotations
+
 import argparse
-import ipaddress
-import socket
+import os
 import sys
 from typing import Optional
-from urllib.parse import urlparse
 
 try:
     import requests
@@ -20,10 +26,15 @@ except ImportError:
     print("Error: requests library required. Install with: pip install requests")
     sys.exit(1)
 
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+from url_safety import URLSafetyError, safe_requests_session, validate_url_strict  # noqa: E402
+
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 ClaudeSEO/1.2"
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 ClaudeSEO/2.0"
 )
 
 # Googlebot UA for prerender/dynamic rendering detection.
@@ -54,22 +65,23 @@ def fetch_page(
     """
     Fetch a web page and return response details.
 
+    SSRF protection is delegated to url_safety.validate_url_strict +
+    safe_requests_session, which resolves DNS once, validates every A
+    record against private/loopback/reserved ranges, and pins the
+    connection so the resolver cannot rebind between checks.
+
     Args:
         url: The URL to fetch
         timeout: Request timeout in seconds
         follow_redirects: Whether to follow redirects
         max_redirects: Maximum number of redirects to follow
+        user_agent: Override the default User-Agent
 
     Returns:
-        Dictionary with:
-            - url: Final URL after redirects
-            - status_code: HTTP status code
-            - content: Response body
-            - headers: Response headers
-            - redirect_chain: List of redirect URLs
-            - error: Error message if failed
+        Dictionary with url, status_code, content, headers, redirect_chain,
+        redirect_details, and error.
     """
-    result = {
+    result: dict = {
         "url": url,
         "status_code": None,
         "content": None,
@@ -79,47 +91,37 @@ def fetch_page(
         "error": None,
     }
 
-    # Validate URL
-    parsed = urlparse(url)
-    if not parsed.scheme:
+    # Normalize scheme-less inputs (e.g. "example.com") before validation.
+    if "://" not in url:
         url = f"https://{url}"
-        parsed = urlparse(url)
 
-    if parsed.scheme not in ("http", "https"):
-        result["error"] = f"Invalid URL scheme: {parsed.scheme}"
+    try:
+        norm_url, _pinned_ip = validate_url_strict(url)
+    except URLSafetyError as exc:
+        result["error"] = f"url_safety: {exc}"
         return result
 
-    # SSRF prevention: block private/internal IPs
-    try:
-        resolved_ip = socket.gethostbyname(parsed.hostname)
-        ip = ipaddress.ip_address(resolved_ip)
-        if ip.is_private or ip.is_loopback or ip.is_reserved:
-            result["error"] = f"Blocked: URL resolves to private/internal IP ({resolved_ip})"
-            return result
-    except (socket.gaierror, ValueError):
-        pass  # DNS resolution failure handled by requests below
+    result["url"] = norm_url
+
+    headers = dict(DEFAULT_HEADERS)
+    if user_agent:
+        headers["User-Agent"] = user_agent
 
     try:
-        session = requests.Session()
-        session.max_redirects = max_redirects
-
-        headers = dict(DEFAULT_HEADERS)
-        if user_agent:
-            headers["User-Agent"] = user_agent
-
-        response = session.get(
-            url,
-            headers=headers,
-            timeout=timeout,
-            allow_redirects=follow_redirects,
-        )
+        with safe_requests_session(norm_url) as session:
+            session.max_redirects = max_redirects
+            response = session.get(
+                norm_url,
+                headers=headers,
+                timeout=timeout,
+                allow_redirects=follow_redirects,
+            )
 
         result["url"] = response.url
         result["status_code"] = response.status_code
         result["content"] = response.text
         result["headers"] = dict(response.headers)
 
-        # Track redirect chain with status codes
         if response.history:
             result["redirect_chain"] = [r.url for r in response.history]
             result["redirect_details"] = [
@@ -137,6 +139,10 @@ def fetch_page(
         result["error"] = f"Connection error: {e}"
     except requests.exceptions.RequestException as e:
         result["error"] = f"Request failed: {e}"
+    except URLSafetyError as e:
+        # Raised if a redirect tries to land on a non-public IP and the
+        # rebinding-pinned session is asked to chase it.
+        result["error"] = f"url_safety: {e}"
 
     return result
 
@@ -156,12 +162,49 @@ def main():
             "Compare response size with default UA to identify SPA prerender configuration."
         ),
     )
+    parser.add_argument(
+        "--render",
+        choices=("auto", "always", "never"),
+        default="never",
+        help=(
+            "Delegate to scripts/render_page.py for SPA-aware fetching. "
+            "auto: render only when an SPA shell is detected. "
+            "always: force headless render. "
+            "never (default): raw HTTP only, preserves v1.x behaviour."
+        ),
+    )
 
     args = parser.parse_args()
 
     ua = args.user_agent
     if args.googlebot:
         ua = GOOGLEBOT_USER_AGENT
+
+    if args.render != "never":
+        # Delegate to render_page for SPA-aware fetching.
+        from render_page import render_page as _render
+        rendered = _render(
+            args.url,
+            mode=args.render,
+            timeout_ms=args.timeout * 1000,
+            user_agent=ua,
+        )
+        if rendered["error"]:
+            print(f"Error: {rendered['error']}", file=sys.stderr)
+            sys.exit(1)
+        if args.output:
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(rendered["content"] or "")
+            print(f"Saved to {args.output}")
+        else:
+            print(rendered["content"])
+        print(
+            f"\nURL: {rendered['url']}\n"
+            f"Status: {rendered['status_code']} | "
+            f"render={rendered['mode_used']} | is_spa={rendered['is_spa']}",
+            file=sys.stderr,
+        )
+        return
 
     result = fetch_page(
         args.url,

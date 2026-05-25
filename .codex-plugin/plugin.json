@@ -1,7 +1,7 @@
 {
   "name": "seo-dungeon",
-  "version": "1.9.9",
-  "description": "SEO Dungeon skill suite for Codex. 24 sub-skills (21 core + 1 orchestrator + 1 framework integration + 1 extension mirror) and 23 sub-agents backed by the bundled SEO engine and a gamified dungeon crawler UI.",
+  "version": "2.0.0",
+  "description": "SEO Dungeon skill suite for Codex. 24 sub-skills (21 core + 1 orchestrator + 1 framework integration + 1 extension mirror) and 23 sub-agents backed by the v2 SEO engine and a gamified dungeon crawler UI.",
   "author": {
     "name": "Avalon Reset",
     "email": "avalonreset@users.noreply.github.com",

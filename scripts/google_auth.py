@@ -159,10 +159,26 @@ def _load_oauth_client(creds_path: str) -> Optional[dict]:
         return None
 
 
+def _chmod_quiet(path: str, mode: int) -> None:
+    """Best-effort chmod that swallows errors (e.g. on filesystems that don't
+    support POSIX permissions). Used to remediate legacy 0o644 token files
+    written by v1.9.x without forcing the user to re-auth."""
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        pass
+
+
 def _load_oauth_token() -> Optional[dict]:
-    """Load saved OAuth token from TOKEN_PATH."""
+    """Load saved OAuth token from TOKEN_PATH.
+
+    Also remediates legacy file permissions: v1.9.x wrote tokens with the
+    umask default (typically 0o644, world-readable). Each load forces the
+    file to 0o600 so users upgrading to v2 are protected without a re-auth.
+    """
     if not os.path.exists(TOKEN_PATH):
         return None
+    _chmod_quiet(TOKEN_PATH, 0o600)
     try:
         with open(TOKEN_PATH, "r") as f:
             return json.load(f)
@@ -171,9 +187,34 @@ def _load_oauth_token() -> Optional[dict]:
 
 
 def _save_oauth_token(token_data: dict):
-    """Save OAuth token to TOKEN_PATH."""
+    """Save OAuth token to TOKEN_PATH with secure (0o600) permissions.
+
+    Belt-and-suspenders sequence:
+        1. Pre-chmod any existing file (closes a v1.9.x umask=022 legacy).
+        2. ``os.open`` with explicit mode 0o600 (mode applies only to
+           newly-created files, ignored when the file already exists).
+        3. ``os.fchmod`` on the open fd to *force* 0o600 even if the
+           file pre-existed at step 2 — defeats the
+           os.path.exists()/os.open() TOCTOU race where an external
+           creator could install a 0o644 file between the two calls.
+
+    The token file is never world-readable, even briefly.
+    """
     os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
-    with open(TOKEN_PATH, "w") as f:
+    if os.path.exists(TOKEN_PATH):
+        _chmod_quiet(TOKEN_PATH, 0o600)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    fd = os.open(TOKEN_PATH, flags, 0o600)
+    # fchmod on the open fd guarantees 0o600 even if the file existed at
+    # open time (in which case os.open's mode arg is ignored by the OS).
+    # os.fdopen takes ownership of fd — it closes the fd whether the
+    # write succeeds or raises, so there is no fd-leak path here.
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+    except OSError:
+        pass  # FS may not support fchmod (e.g. some Windows filesystems)
+    with os.fdopen(fd, "w") as f:
         json.dump(token_data, f, indent=2)
 
 
@@ -422,29 +463,22 @@ def validate_url(url: str) -> bool:
 
     Returns:
         True if the URL is a valid public http/https URL, False otherwise.
-    """
-    from urllib.parse import urlparse
 
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        return False
-    if not parsed.hostname:
-        return False
-    blocked = [
-        "localhost", "127.0.0.1", "0.0.0.0", "::1",
-        "metadata.google.internal",
-    ]
-    if parsed.hostname in blocked:
-        return False
-    # Block private IP ranges (10.x, 172.16-31.x, 192.168.x)
-    try:
-        import ipaddress
-        ip = ipaddress.ip_address(parsed.hostname)
-        if ip.is_private or ip.is_loopback or ip.is_link_local:
-            return False
-    except ValueError:
-        pass  # Not an IP address (hostname), which is fine
-    return True
+    Note:
+        Back-compat wrapper around :func:`url_safety.validate_url`. The shared
+        module is the canonical implementation and adds DNS-rebinding-safe
+        helpers (``validate_url_strict``, ``safe_requests_get``) that
+        ``fetch_page.py`` and ``render_page.py`` use before opening sockets.
+    """
+    # Lazy import: avoids a hard requirement on url_safety for callers that
+    # only need google_auth's other helpers (e.g. token refresh) and keeps
+    # the import graph one-directional.
+    _scripts_dir = os.path.dirname(os.path.abspath(__file__))
+    if _scripts_dir not in sys.path:
+        sys.path.insert(0, _scripts_dir)
+    from url_safety import validate_url as _validate_url
+
+    return _validate_url(url)
 
 
 def get_api_key() -> Optional[str]:

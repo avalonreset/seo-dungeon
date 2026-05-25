@@ -33,5 +33,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          python3 -m pip install --quiet pytest beautifulsoup4
+          python3 -m pip install --quiet pytest
+          python3 -m pip install --quiet -r requirements.txt
           python3 -m pytest tests/

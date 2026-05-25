@@ -1,6 +1,6 @@
 {
   "name": "seo-dungeon",
-  "version": "1.9.9",
+  "version": "2.0.0",
   "description": "A Codex-only 16-bit dungeon crawler interface for SEO audits",
   "scripts": {
     "start": "node launch.js",

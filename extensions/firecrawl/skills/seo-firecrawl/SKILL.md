@@ -11,11 +11,11 @@ license: MIT
 compatibility: "Requires Firecrawl MCP server"
 metadata:
   author: AgriciDaniel
-  version: "1.9.9"
+  version: "2.0.0"
   category: seo
 ---
 
-# Firecrawl Extension for Claude SEO
+# Firecrawl Extension for SEO Dungeon
 
 This skill requires the Firecrawl extension to be installed:
 ```bash

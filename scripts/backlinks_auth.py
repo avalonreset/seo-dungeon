@@ -20,25 +20,22 @@ import os
 import sys
 from typing import Optional
 
-# Import SSRF protection from google_auth (reuse, don't duplicate)
+# Import SSRF protection from the canonical url_safety module.
+# google_auth.validate_url is a back-compat wrapper around the same function.
 _SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _SCRIPTS_DIR)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
 try:
-    from google_auth import validate_url
-except ImportError:
-    # Fallback: basic URL validation if google_auth not available
-    def validate_url(url: str) -> bool:
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https"):
-            return False
-        if not parsed.hostname:
-            return False
-        blocked = ["localhost", "127.0.0.1", "0.0.0.0", "::1",
-                    "metadata.google.internal"]
-        if parsed.hostname in blocked:
-            return False
-        return True
+    from url_safety import validate_url
+except ImportError as _import_exc:
+    # Hard fail: a private-IP/loopback fallback that omits SSRF checks is
+    # worse than no validation at all. The previous fallback shipped in
+    # v1.9.0 silently allowed private IP literals and was flagged in the
+    # cybersecurity audit (v2.0.0 Phase H). Refuse to run instead.
+    raise RuntimeError(
+        "scripts/url_safety.py is required for SSRF protection. "
+        "Install with: pip install -r requirements.txt"
+    ) from _import_exc
 
 CONFIG_PATH = os.path.expanduser("~/.config/claude-seo/backlinks-api.json")
 CACHE_DIR = os.path.expanduser("~/.cache/claude-seo/commoncrawl")

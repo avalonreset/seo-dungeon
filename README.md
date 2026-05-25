@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/assets/banner.webp"><img src="assets/banner.webp" alt="SEO Dungeon - Gamified SEO Audit Tool" width="100%"></a>
+  <a href="assets/banner.webp"><img src="assets/banner.webp" alt="SEO Dungeon - Gamified SEO Audit Tool" width="100%"></a>
 </p>
 
 # SEO Dungeon - Codex SEO Audit Game
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.9.9-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue)](CHANGELOG.md)
 [![Runtime](https://img.shields.io/badge/runtime-Codex%20only-2ea44f)](install.sh)
 
 SEO Dungeon turns SEO audits into a 16-bit dungeon crawler. Enter a domain,
@@ -18,12 +18,12 @@ development environment.
 
 <table>
 <tr>
-<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/screenshots/title-screen.webp"><img src="screenshots/title-screen.webp" alt="SEO Dungeon title screen with character selection"></a><br><em>Pick your warrior, enter a domain, seal your fate</em></td>
-<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/screenshots/gate-scene-full.webp"><img src="screenshots/gate-scene-full.webp" alt="Gate scene showing quest continuation options"></a><br><em>Continue a previous quest or begin a new one</em></td>
+<td width="50%"><a href="screenshots/title-screen.webp"><img src="screenshots/title-screen.webp" alt="SEO Dungeon title screen with character selection"></a><br><em>Pick your warrior, enter a domain, seal your fate</em></td>
+<td width="50%"><a href="screenshots/gate-scene-full.webp"><img src="screenshots/gate-scene-full.webp" alt="Gate scene showing quest continuation options"></a><br><em>Continue a previous quest or begin a new one</em></td>
 </tr>
 <tr>
-<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/screenshots/dungeon-hall.webp"><img src="screenshots/dungeon-hall.webp" alt="Dungeon hall showing SEO issue demons sorted by severity"></a><br><em>Browse SEO demons sorted by severity</em></td>
-<td width="50%"><a href="https://raw.githubusercontent.com/avalonreset/seo-dungeon/main/screenshots/battle-scene.webp"><img src="screenshots/battle-scene.webp" alt="Turn-based battle scene with real-time Guild Ledger"></a><br><em>Battle demons with Codex-powered fixes</em></td>
+<td width="50%"><a href="screenshots/dungeon-hall.webp"><img src="screenshots/dungeon-hall.webp" alt="Dungeon hall showing SEO issue demons sorted by severity"></a><br><em>Browse SEO demons sorted by severity</em></td>
+<td width="50%"><a href="screenshots/battle-scene.webp"><img src="screenshots/battle-scene.webp" alt="Turn-based battle scene with real-time Guild Ledger"></a><br><em>Battle demons with Codex-powered fixes</em></td>
 </tr>
 </table>
 
@@ -43,15 +43,15 @@ runtime.
 
 ## SEO Engine
 
-The bundled engine has 24 sub-skills and 23 Codex agent profiles:
+The bundled v2 engine has 24 sub-skills and 23 Codex agent profiles:
 
 | Area | Coverage |
 |------|----------|
-| Audit | Full-site audits, page audits, technical SEO, schema, sitemap, image SEO |
-| Content | E-E-A-T, content briefs, semantic clustering, SXO, competitor pages |
+| Audit | Full-site audits, page audits, technical SEO, schema, sitemap, image SEO, hardened URL safety |
+| Content | E-E-A-T, content briefs, semantic clustering, SXO, competitor pages, QRG-aligned quality gates |
 | Growth | Local SEO, maps intelligence, backlinks, e-commerce, programmatic SEO |
 | Monitoring | SEO drift baselines and comparisons |
-| Data | Google SEO APIs, DataForSEO, Firecrawl extension support |
+| Data | Google SEO APIs, DataForSEO, Firecrawl, Ahrefs, Bing Webmaster, Profound, SE Ranking, and Unlighthouse extension support |
 | Framework | FLOW prompts for Find, Leverage, Optimize, Win, and local workflows |
 
 ## Quick Start
@@ -105,6 +105,7 @@ tool calls. Cached audits are much faster.
 | `/seo page <url>` | Deep single-page analysis |
 | `/seo technical <url>` | Technical SEO audit |
 | `/seo content <url>` | E-E-A-T and content quality |
+| `/seo content-brief <topic or url>` | Detailed SEO content brief |
 | `/seo schema <url>` | Schema.org detection and generation |
 | `/seo sitemap <url>` | XML sitemap analysis or generation |
 | `/seo images <url>` | Image SEO analysis |

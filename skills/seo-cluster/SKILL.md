@@ -14,7 +14,7 @@ license: MIT
 metadata:
   author: AgriciDaniel
   original_author: "Lutfiya Miller (Pro Hub Challenge Winner)"
-  version: "1.9.9"
+  version: "2.0.0"
   category: seo
 ---
 
@@ -198,7 +198,7 @@ When `/seo cluster execute` is invoked:
 ### Check for claude-blog
 
 ```
-Test: Does ~/.claude/skills/blog/SKILL.md exist?
+Test: Does ~/.codex/skills/blog/SKILL.md exist?
 ```
 
 **If claude-blog IS installed:**
