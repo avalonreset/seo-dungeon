@@ -25,7 +25,7 @@ prepare_source() {
 
   command -v git >/dev/null 2>&1 || { echo "[ERROR] Git is required for remote install."; exit 1; }
   local repo="${SEO_DUNGEON_REPO:-https://github.com/avalonreset/seo-dungeon}"
-  local ref="${SEO_DUNGEON_REF:-main}"
+  local ref="${SEO_DUNGEON_REF:-v1.9.9}"
   local temp_dir
   temp_dir="$(mktemp -d)"
   trap 'rm -rf "${temp_dir}"' EXIT
@@ -53,27 +53,6 @@ install_python_deps() {
   fi
 }
 
-install_claude() {
-  local source_dir="$1"
-  local python_bin="$2"
-  local skills_root="${CLAUDE_HOME:-${HOME}/.claude}/skills"
-  local agents_root="${CLAUDE_HOME:-${HOME}/.claude}/agents"
-  local skill_dir="${skills_root}/seo"
-
-  echo "[INFO] Installing Claude skill tree to ${skills_root}"
-  mkdir -p "${skills_root}" "${agents_root}"
-  for skill_dir_source in "${source_dir}/skills"/*/; do
-    [ -d "${skill_dir_source}" ] || continue
-    copy_dir_contents "${skill_dir_source}" "${skills_root}/$(basename "${skill_dir_source}")"
-  done
-  cp "${source_dir}/agents/"*.md "${agents_root}/" 2>/dev/null || true
-  for name in scripts schema pdf hooks extensions; do
-    copy_dir_contents "${source_dir}/${name}" "${skill_dir}/${name}"
-  done
-  cp "${source_dir}/requirements.txt" "${skill_dir}/requirements.txt" 2>/dev/null || true
-  install_python_deps "${skill_dir}" "${python_bin}"
-}
-
 install_codex() {
   local source_dir="$1"
   local python_bin="$2"
@@ -97,7 +76,6 @@ install_codex() {
 }
 
 main() {
-  local target="${SEO_DUNGEON_TARGET:-codex}"
   local python_bin
   python_bin="$(resolve_python)" || { echo "[ERROR] Python 3 is required."; exit 1; }
   command -v git >/dev/null 2>&1 || { echo "[ERROR] Git is required."; exit 1; }
@@ -114,19 +92,10 @@ main() {
   echo "  Codex Skill Suite"
   echo "========================================"
 
-  if [ "${target}" = "claude" ] || [ "${target}" = "all" ]; then
-    echo "[WARN] Claude install is legacy/advanced. Claude Code usage may incur Anthropic charges depending on your authentication and environment."
-  fi
+  install_codex "${source_dir}" "${python_bin}"
 
-  case "${target}" in
-    all) install_claude "${source_dir}" "${python_bin}"; install_codex "${source_dir}" "${python_bin}" ;;
-    claude) install_claude "${source_dir}" "${python_bin}" ;;
-    codex) install_codex "${source_dir}" "${python_bin}" ;;
-    *) echo "[ERROR] SEO_DUNGEON_TARGET must be all, claude, or codex."; exit 1 ;;
-  esac
-
-  echo "[OK] SEO Dungeon skills installed for ${target}."
-  echo "Codex is the default runtime. Claude requires SEO_DUNGEON_AGENT=claude and SEO_DUNGEON_ALLOW_CLAUDE=1."
+  echo "[OK] SEO Dungeon skills installed for Codex."
+  echo "Only Codex is supported."
 }
 
 main "$@"

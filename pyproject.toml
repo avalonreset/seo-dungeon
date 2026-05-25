@@ -1,7 +1,7 @@
 [project]
 name = "seo-dungeon"
-version = "1.9.8"
-description = "Gamified 16-bit dungeon crawler that turns SEO audits into boss battles (SEO engine v1.9.8)"
+version = "1.9.9"
+description = "Gamified 16-bit dungeon crawler that turns SEO audits into boss battles (SEO engine v1.9.9)"
 requires-python = ">=3.10"
 license = "MIT"
 readme = "README.md"

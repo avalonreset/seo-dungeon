@@ -454,62 +454,18 @@ document.addEventListener('DOMContentLoaded', () => {
   connectBridge();
   setTimeout(() => domainInput.focus(), 300);
 
-  // ── Ledger Terminal (persistent interactive session) ─────
+  // ── Ledger Terminal (one-shot Codex turns) ─────
   const logInput = document.getElementById('log-input');
   const logInputBar = document.getElementById('log-input-bar');
   const logCancel = document.getElementById('log-cancel');
   let lastEscTime = 0;
-  let interactiveRunning = false;
-
-  // Listen for interactive session events
-  bridge.onInteractive((type, data) => {
-    if (type === 'stream') {
-      const clean = (data || '').replace(/[\n\r]+/g, ' ').trim();
-      if (clean.length > 0) addLog(clean);
-    } else if (type === 'done') {
-      interactiveRunning = false;
-      logInputBar.classList.remove('running');
-      hideLoadingIndicator();
-      addLog('[Complete]');
-    } else if (type === 'usage') {
-      // Context window tracking
-      if (data) {
-        const inputTokens = data.input_tokens || 0;
-        const outputTokens = data.output_tokens || 0;
-        const cacheRead = data.cache_read_input_tokens || 0;
-        const cacheCreate = data.cache_creation_input_tokens || 0;
-        const total = inputTokens + outputTokens;
-        const header = document.getElementById('log-header');
-        if (header) {
-          let meter = document.getElementById('context-meter');
-          if (!meter) {
-            meter = document.createElement('div');
-            meter.id = 'context-meter';
-            meter.style.cssText = 'font-size:10px; color:#606078; text-align:center; padding:2px 0; font-family:"JetBrains Mono",monospace; letter-spacing:1px;';
-            header.appendChild(meter);
-          }
-          const pct = Math.min(100, Math.round((inputTokens / 200000) * 100));
-          const barLen = 20;
-          const filled = Math.round(pct / 100 * barLen);
-          const bar = '█'.repeat(filled) + '░'.repeat(barLen - filled);
-          const color = pct > 80 ? '#cc4444' : pct > 50 ? '#d4af37' : '#60c060';
-          meter.innerHTML = `<span style="color:${color}">${bar}</span> ${pct}% · ${Math.round(inputTokens/1000)}k in · ${Math.round(outputTokens/1000)}k out`;
-        }
-      }
-    } else if (type === 'interactive_started') {
-      addLog('Session started.');
-    } else if (type === 'interactive_closed') {
-      interactiveRunning = false;
-      logInputBar.classList.remove('running');
-      hideLoadingIndicator();
-    }
-  });
+  let ledgerRunning = false;
 
   let interactiveTimeout = null;
   let lastStreamTime = 0;
 
   const resetLoadingState = () => {
-    interactiveRunning = false;
+    ledgerRunning = false;
     logInputBar.classList.remove('running');
     hideLoadingIndicator();
     if (interactiveTimeout) { clearTimeout(interactiveTimeout); interactiveTimeout = null; }
@@ -519,20 +475,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const startWatchdog = () => {
     if (interactiveTimeout) clearTimeout(interactiveTimeout);
     interactiveTimeout = setTimeout(() => {
-      if (interactiveRunning) {
+      if (ledgerRunning) {
         resetLoadingState();
       }
     }, 30000);
   };
-
-  // Reset watchdog whenever we get stream data
-  bridge.onInteractive((type) => {
-    if (type === 'stream') {
-      lastStreamTime = Date.now();
-      if (interactiveTimeout) clearTimeout(interactiveTimeout);
-      startWatchdog(); // restart the timer
-    }
-  });
 
   const sendLedgerCommand = (text) => {
     if (!text.trim()) return;
@@ -549,13 +496,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Outside battle - neutral chat. Pass-through to the active agent in
-    // the user's project dir with their selected model. No demon anchoring;
-    // the user can ask anything, just like a normal CLI session.
+    // Outside battle - neutral chat. Pass-through to Codex in the user's
+    // project dir. No demon anchoring; the user can ask anything.
     logInputBar.classList.add('running');
     showLoadingIndicator();
     addLog('> ' + text);
-    interactiveRunning = true;
+    ledgerRunning = true;
     lastStreamTime = Date.now();
     startWatchdog();
 
@@ -566,6 +512,8 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const result = await bridge.chat(text, projectPath, model, (chunk) => {
           lastStreamTime = Date.now();
+          if (interactiveTimeout) clearTimeout(interactiveTimeout);
+          startWatchdog();
           const clean = chunk.replace(/[\n\r]+/g, ' ').trim();
           if (clean.length > 0) addLog(clean);
         });
@@ -600,12 +548,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (e.key === 'Escape') {
       const now = Date.now();
-      if (now - lastEscTime < 500 && interactiveRunning) {
-        // Escape in interactive mode - send Escape key to Claude
-        bridge.sendInteractive('\x1b');
+      if (now - lastEscTime < 500 && ledgerRunning) {
+        bridge.cancelLedger();
         addLog('Interrupted.');
         logInputBar.classList.remove('running');
-        interactiveRunning = false;
+        ledgerRunning = false;
         hideLoadingIndicator();
       }
       lastEscTime = now;
@@ -617,12 +564,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') {
       const now = Date.now();
       if (now - lastEscTime < 500) {
-        // Cancel interactive session activity
-        if (interactiveRunning) {
-          bridge.sendInteractive('\x1b');
+        // Cancel neutral ledger activity
+        if (ledgerRunning) {
+          bridge.cancelLedger();
           addLog('Interrupted.');
           logInputBar.classList.remove('running');
-          interactiveRunning = false;
+          ledgerRunning = false;
           hideLoadingIndicator();
         }
         // Cancel active battle attack
@@ -643,11 +590,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   logCancel.addEventListener('click', () => {
-    if (interactiveRunning) {
-      bridge.sendInteractive('\x1b');
+    if (ledgerRunning) {
+      bridge.cancelLedger();
       addLog('Interrupted.');
       logInputBar.classList.remove('running');
-      interactiveRunning = false;
+      ledgerRunning = false;
       hideLoadingIndicator();
     }
     // Also cancel battle/audit

@@ -22,4 +22,4 @@ Only the latest version receives security updates.
 
 - No credentials or API keys are stored in this repository
 - The WebSocket bridge runs locally and does not expose ports externally
-- All Claude API calls are made server-side through the bridge
+- The bridge only spawns local `codex exec --json` processes

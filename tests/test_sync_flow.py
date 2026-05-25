@@ -82,8 +82,8 @@ def test_synced_files_have_attribution_headers():
 # ── Task 1 tests ──────────────────────────────────────────────────────────────
 
 def test_agent_tools_does_not_include_bash():
-    """agents/seo-flow.md must not grant Bash to the agent (VULN-A01)."""
-    agent_file = REPO_ROOT / "agents" / "seo-flow.md"
+    """agents-codex/seo-flow.toml must not grant Bash to the agent (VULN-A01)."""
+    agent_file = REPO_ROOT / "agents-codex" / "seo-flow.toml"
     content = agent_file.read_text(encoding="utf-8")
     tools_line = next(
         (line for line in content.splitlines() if line.startswith("tools:")),
@@ -91,13 +91,13 @@ def test_agent_tools_does_not_include_bash():
     )
     assert "Bash" not in tools_line, (
         f"Bash found in tools grant: {tools_line!r}\n"
-        "Remove 'Bash' from the tools line in agents/seo-flow.md"
+        "Remove 'Bash' from the tools line in agents-codex/seo-flow.toml"
     )
 
 
 def test_agent_has_untrusted_webfetch_rule():
-    """agents/seo-flow.md must warn the agent that WebFetch responses are untrusted (VULN-A05)."""
-    agent_file = REPO_ROOT / "agents" / "seo-flow.md"
+    """agents-codex/seo-flow.toml must warn the agent that WebFetch responses are untrusted (VULN-A05)."""
+    agent_file = REPO_ROOT / "agents-codex" / "seo-flow.toml"
     content = agent_file.read_text(encoding="utf-8")
     assert "WebFetch responses are untrusted" in content, (
         "Missing untrusted-WebFetch security rule in agents/seo-flow.md"

@@ -1,6 +1,5 @@
 # SEO Dungeon installer for Windows
-# Installs the bundled SEO skill suite for Codex by default.
-# Claude installation is legacy/advanced and must be requested explicitly.
+# Installs the bundled SEO skill suite for Codex.
 
 $ErrorActionPreference = "Stop"
 
@@ -30,7 +29,7 @@ function Get-SourceDir {
     }
 
     $repo = if ($env:SEO_DUNGEON_REPO) { $env:SEO_DUNGEON_REPO } else { "https://github.com/avalonreset/seo-dungeon" }
-    $ref = if ($env:SEO_DUNGEON_REF) { $env:SEO_DUNGEON_REF } else { "main" }
+    $ref = if ($env:SEO_DUNGEON_REF) { $env:SEO_DUNGEON_REF } else { "v1.9.9" }
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
     New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
     $checkout = Join-Path $tempDir "seo-dungeon"
@@ -56,26 +55,6 @@ function Install-PythonDeps {
     } catch {
         Write-Host "[WARN] Dependency install failed. Run: $($Python.Exe) $($Python.Args -join ' ') -m pip install -r `"$requirements`"" -ForegroundColor Yellow
     }
-}
-
-function Install-Claude {
-    param([string]$SourceDir, [hashtable]$Python)
-    $claudeRoot = if ($env:CLAUDE_HOME) { $env:CLAUDE_HOME } else { Join-Path $HOME ".claude" }
-    $skillsRoot = Join-Path $claudeRoot "skills"
-    $agentsRoot = Join-Path $claudeRoot "agents"
-    $skillDir = Join-Path $skillsRoot "seo"
-
-    Write-Host "[INFO] Installing Claude skill tree to $skillsRoot" -ForegroundColor Yellow
-    New-Item -ItemType Directory -Force -Path $skillsRoot, $agentsRoot | Out-Null
-    Get-ChildItem -Path (Join-Path $SourceDir "skills") -Directory | ForEach-Object {
-        Copy-DirContents $_.FullName (Join-Path $skillsRoot $_.Name)
-    }
-    Copy-Item -Path (Join-Path $SourceDir "agents\*.md") -Destination $agentsRoot -Force -ErrorAction SilentlyContinue
-    foreach ($name in @("scripts", "schema", "pdf", "hooks", "extensions")) {
-        Copy-DirContents (Join-Path $SourceDir $name) (Join-Path $skillDir $name)
-    }
-    Copy-Item -Path (Join-Path $SourceDir "requirements.txt") -Destination (Join-Path $skillDir "requirements.txt") -Force -ErrorAction SilentlyContinue
-    Install-PythonDeps $skillDir $Python
 }
 
 function Install-Codex {
@@ -104,7 +83,6 @@ $versionOk = & $python.Exe @($python.Args + @("-c", "import sys; print(1 if sys.
 if ($versionOk -ne "1") { throw "Python 3.10+ is required." }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw "Git is required." }
 
-$target = if ($env:SEO_DUNGEON_TARGET) { $env:SEO_DUNGEON_TARGET.ToLowerInvariant() } else { "codex" }
 $sourceDir = Get-SourceDir
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -112,16 +90,7 @@ Write-Host "  SEO Dungeon - Installer" -ForegroundColor Cyan
 Write-Host "  Codex Skill Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-if ($target -eq "claude" -or $target -eq "all") {
-    Write-Host "[WARN] Claude install is legacy/advanced. Claude Code usage may incur Anthropic charges depending on your authentication and environment." -ForegroundColor Yellow
-}
+Install-Codex $sourceDir $python
 
-switch ($target) {
-    "all" { Install-Claude $sourceDir $python; Install-Codex $sourceDir $python }
-    "claude" { Install-Claude $sourceDir $python }
-    "codex" { Install-Codex $sourceDir $python }
-    default { throw "SEO_DUNGEON_TARGET must be all, claude, or codex." }
-}
-
-Write-Host "[OK] SEO Dungeon skills installed for $target." -ForegroundColor Green
-Write-Host "Codex is the default runtime. Claude requires SEO_DUNGEON_AGENT=claude and SEO_DUNGEON_ALLOW_CLAUDE=1." -ForegroundColor Cyan
+Write-Host "[OK] SEO Dungeon skills installed for Codex." -ForegroundColor Green
+Write-Host "Only Codex is supported." -ForegroundColor Cyan

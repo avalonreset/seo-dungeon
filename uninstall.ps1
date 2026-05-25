@@ -14,26 +14,11 @@ function Remove-Suite {
     Get-ChildItem -Path $agentsRoot -File -Filter "seo-*.toml" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
-function Get-ClaudeRoot {
-    if ($env:CLAUDE_HOME) { return $env:CLAUDE_HOME }
-    return (Join-Path $HOME ".claude")
-}
-
 function Get-CodexRoot {
     if ($env:CODEX_HOME) { return $env:CODEX_HOME }
     return (Join-Path $HOME ".codex")
 }
 
-$target = if ($env:SEO_DUNGEON_TARGET) { $env:SEO_DUNGEON_TARGET.ToLowerInvariant() } else { "codex" }
+Remove-Suite (Get-CodexRoot) "Codex"
 
-switch ($target) {
-    "all" {
-        Remove-Suite (Get-ClaudeRoot) "Claude"
-        Remove-Suite (Get-CodexRoot) "Codex"
-    }
-    "claude" { Remove-Suite (Get-ClaudeRoot) "Claude" }
-    "codex" { Remove-Suite (Get-CodexRoot) "Codex" }
-    default { throw "SEO_DUNGEON_TARGET must be all, claude, or codex." }
-}
-
-Write-Host "[OK] SEO Dungeon skills removed for $target." -ForegroundColor Green
+Write-Host "[OK] SEO Dungeon skills removed for Codex." -ForegroundColor Green

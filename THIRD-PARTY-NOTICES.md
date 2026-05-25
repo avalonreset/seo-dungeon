@@ -6,10 +6,11 @@ This project includes or depends on the following third-party software:
 
 | Package | License | Author | Source |
 |---------|---------|--------|--------|
-| Claude SEO v1.9.8 | MIT | AgriciDaniel | https://github.com/AgriciDaniel/claude-seo |
+| SEO skill suite v1.9.9 lineage | MIT | AgriciDaniel | https://github.com/AgriciDaniel/claude-seo |
 
-The SEO analysis backend (skills/, agents/, scripts/) is derived from Claude SEO,
-an open-source SEO skill suite for Claude Code. Used under the MIT license.
+The SEO analysis backend (skills/, agents-codex/, scripts/) is derived from an
+open-source SEO skill suite by Daniel Agrici. SEO Dungeon adapts that code for a
+Codex-only runtime. Used under the MIT license.
 Original copyright: Copyright (c) 2026 AgriciDaniel.
 
 ## Runtime Dependencies
@@ -32,9 +33,9 @@ Original copyright: Copyright (c) 2026 AgriciDaniel.
 
 | Asset | License | Source |
 |-------|---------|--------|
-| Medieval Warrior Pack (Warrior class / Opus) | Free for personal and commercial use | https://luizmelo.itch.io/medieval-warrior-pack-2 |
-| Martial Hero Pack (Samurai class / Sonnet) | Free for personal and commercial use | https://luizmelo.itch.io/martial-hero |
-| Warrior Pack 2 (Knight class / Haiku) | Free for personal and commercial use | https://luizmelo.itch.io/medieval-warrior-pack-2 |
+| Medieval Warrior Pack (Warrior class) | Free for personal and commercial use | https://luizmelo.itch.io/medieval-warrior-pack-2 |
+| Martial Hero Pack (Samurai class) | Free for personal and commercial use | https://luizmelo.itch.io/martial-hero |
+| Warrior Pack 2 (Knight class) | Free for personal and commercial use | https://luizmelo.itch.io/medieval-warrior-pack-2 |
 
 ## Art Assets - UI
 

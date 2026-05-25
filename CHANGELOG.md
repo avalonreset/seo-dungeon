@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.9] - 2026-05-11
+
+### Fixed
+- **Upstream SEO engine v1.9.9 parity**: synchronized the bundled SEO engine with
+  the final public 1.x patch from `AgriciDaniel/claude-seo`, including
+  orchestrator list cleanup, skill `metadata.version` alignment, extension mirror
+  version alignment, and manifest guardrails.
+- **Image lazy-loading detection**: `scripts/parse_html.py` now reports
+  `lazy_method` per image and detects native lazy loading, Perfmatters, EWWW Image
+  Optimizer, and generic JavaScript lazy-loader patterns. This prevents optimized
+  WordPress sites from being incorrectly reported as missing lazy loading.
+- **Sub-skill/sub-agent drift checks**: expanded `tests/test_manifest_consistency.py`
+  to verify orchestrator sub-skill and sub-agent lists, skill metadata versions,
+  installer default release refs, pyproject version parity, and marketplace author
+  parity.
+
+### Changed
+- **Dependency floors**: bumped Playwright, WeasyPrint, OpenPyXL,
+  google-api-python-client, and google-auth-oauthlib floors to match upstream
+  v1.9.9 while preserving upper bounds.
+- **Codex-only runtime stance**: documentation, installers, manifests, tests, and
+  the game bridge now support Codex only. Claude Code, Gemini CLI, Claude API
+  harnesses, Gemini API harnesses, and consumer-app wrappers are intentionally
+  unsupported.
+- **Gemini-backed image generation removed**: removed the Banana/Gemini extension,
+  `/seo image-gen` skill, and matching agent profiles so the project no longer
+  points users toward high-cost or account-risky runtime paths.
+- **Installer default**: remote installs now default to `v1.9.9` instead of the
+  floating `main` ref.
+
 ## [1.9.8] - 2026-05-09
 
 ### Fixed

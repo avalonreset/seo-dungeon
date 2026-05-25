@@ -3,9 +3,9 @@ import { bridge } from '../utils/ws.js';
 import { ENCOUNTER_MESSAGES, VICTORY_MESSAGES } from '../utils/flavor-text.js';
 import { SFX } from '../utils/sound-manager.js';
 
-/**
- * Battle scene - Final Fantasy style turn-based combat.
- * Knight vs SEO Demon. Selecting ATTACK triggers Claude to fix the issue.
+ /**
+  * Battle scene - Final Fantasy style turn-based combat.
+ * Knight vs SEO Demon. Selecting ATTACK triggers Codex to handle the issue.
  * High-quality 16-bit retro RPG battle screen with dramatic animations.
  */
 export class BattleScene extends Phaser.Scene {
@@ -1497,7 +1497,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════════════════════════════
-  //  CHANNELING STATE (while Claude works)
+  //  CHANNELING STATE (while Codex works)
   // ═══════════════════════════════════════════════════
 
   _startChanneling() {
@@ -1613,9 +1613,9 @@ export class BattleScene extends Phaser.Scene {
     this._disableMenu();
     this._startChanneling();
 
-    // 2. Send to Claude - pass the full demon (issue) object and the
+    // 2. Send to Codex - pass the full demon (issue) object and the
     //    user's turn message as separate fields. The server builds a
-    //    structured focus header so Claude always knows which demon we
+    //    structured focus header so Codex always knows which demon we
     //    are fighting, regardless of how vague the user's message is.
     try {
       const model = this.game.characterConfig?.model;
@@ -1647,7 +1647,7 @@ export class BattleScene extends Phaser.Scene {
       //      both feel like they're taking real hits.
       //    - HP has a HARD FLOOR at 15% of max (or 1, whichever is
       //      higher). Only VANQUISH can actually kill the demon.
-      //    - If Claude actually edited files (fixData.fixed=true), the
+      //    - If Codex actually edited files (fixData.fixed=true), the
       //      hit is stronger than a diagnostic question.
       //    - If the demon is at/near the floor, a flavor line prompts
       //      the player to VANQUISH.
@@ -1718,7 +1718,7 @@ export class BattleScene extends Phaser.Scene {
     const severity = this.issue.severity;
     const condensed = rawLines.slice(-15).join('\n');
 
-    const prompt = `You are the narrator of a dark fantasy dungeon crawler. The warrior "${charName}" just attacked the demon ${demonName} - a being whose essence is the flaw "${issueTitle}" (severity: ${severity}). Below is what actually happened during the attack - technical SEO actions performed by Claude. Write 2-3 short, grim sentences narrating this as a battle action. Refer to the demon by name when natural. Stay relevant to the actual work described. No humor, no corniness. Dark, terse, atmospheric. Like a Souls game narrator. Do NOT use markdown. Plain text only.
+    const prompt = `You are the narrator of a dark fantasy dungeon crawler. The warrior "${charName}" just attacked the demon ${demonName} - a being whose essence is the flaw "${issueTitle}" (severity: ${severity}). Below is what actually happened during the attack - technical SEO actions performed by Codex. Write 2-3 short, grim sentences narrating this as a battle action. Refer to the demon by name when natural. Stay relevant to the actual work described. No humor, no corniness. Dark, terse, atmospheric. Like a Souls game narrator. Do NOT use markdown. Plain text only.
 
 What happened:
 ${condensed}
@@ -1728,7 +1728,7 @@ Summary: ${fallbackSummary}`;
     bridge.narrate(prompt).then(result => {
       const text = typeof result === 'string' ? result
         : (result?.data?.raw || result?.data?.result || result?.raw || fallbackSummary);
-      // Extract clean text from Claude's response
+      // Extract clean text from Codex's response
       const clean = text.replace(/```[\s\S]*?```/g, '').replace(/[*#`]/g, '').trim();
       const narration = clean.split('\n').filter(l => l.trim()).slice(0, 4).join(' ');
       this.setLog(narration || `${charName} strikes! ${fallbackSummary}`);

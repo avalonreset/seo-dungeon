@@ -735,7 +735,7 @@ export const DESCENT_MESSAGES = [
   "The silence has texture now.",
 ];
 
-// Ticker idle phrases - shown in the single-line readout while Claude
+// Ticker idle phrases - shown in the single-line readout while Codex
 // is spinning up, before any real tool-call data arrives. Gothic, terse.
 // The ticker swaps to real stream data the moment it arrives.
 export const TICKER_IDLE_MESSAGES = [

@@ -11,8 +11,7 @@ export class BridgeClient {
     this._url = 'ws://localhost:3001';
     this._reconnectTimer = null;
     this._onStatusChange = []; // callbacks: (connected: boolean) => void
-    this._onInteractive = []; // callbacks: (type, data) => void
-    this.interactiveActive = false;
+    this.activeLedgerId = null;
   }
 
   /** Register a callback that fires whenever connection status changes. */
@@ -57,24 +56,6 @@ export class BridgeClient {
       this.ws.onmessage = (event) => {
         let data;
         try { data = JSON.parse(event.data); } catch (e) { console.warn('WS: bad JSON', e); return; }
-        // Interactive session events
-        if (data.type === 'interactive_stream') {
-          this._onInteractive.forEach(fn => { try { fn('stream', data.content); } catch(_) {} });
-          return;
-        }
-        if (data.type === 'interactive_done') {
-          this._onInteractive.forEach(fn => { try { fn('done', data.result); } catch(_) {} });
-          return;
-        }
-        if (data.type === 'interactive_usage') {
-          this._onInteractive.forEach(fn => { try { fn('usage', data.usage); } catch(_) {} });
-          return;
-        }
-        if (data.type === 'interactive_started' || data.type === 'interactive_closed') {
-          this._onInteractive.forEach(fn => { try { fn(data.type); } catch(_) {} });
-          return;
-        }
-
         const handler = this.handlers.get(data.id);
         if (handler) {
           if (data.type === 'stream') {
@@ -82,9 +63,11 @@ export class BridgeClient {
           } else if (data.type === 'result') {
             handler.resolve(data);
             this.handlers.delete(data.id);
+            if (this.activeLedgerId === data.id) this.activeLedgerId = null;
           } else if (data.type === 'error') {
             handler.reject(new Error(data.message));
             this.handlers.delete(data.id);
+            if (this.activeLedgerId === data.id) this.activeLedgerId = null;
           }
         }
       };
@@ -116,16 +99,15 @@ export class BridgeClient {
   }
 
   /**
-   * Neutral "talk to agent" - used outside of battle (Demon Lodge /
+   * Neutral "talk to Codex" - used outside of battle (Demon Lodge /
    * Dungeon Hall / between fights). No demon context, no framing. The
-   * message goes to the active agent in the user's project directory
-   * under their selected character model. Functionally the same as
-   * invoking the CLI yourself.
+   * message goes to Codex in the user's project directory.
    */
   chat(text, projectPath, model, onStream) {
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const id = ++this.requestId;
+      this.activeLedgerId = id;
       this.handlers.set(id, { resolve, reject, onStream });
       this.ws.send(JSON.stringify({
         id,
@@ -206,29 +188,11 @@ export class BridgeClient {
     });
   }
 
-  /** Register a callback for interactive session events. */
-  onInteractive(fn) {
-    this._onInteractive.push(fn);
-  }
-
-  /** Start a persistent interactive Claude session. */
-  startInteractive(projectPath, model) {
-    this._ensureOpen();
-    this.interactiveActive = true;
-    this.ws.send(JSON.stringify({ type: 'interactive_start', projectPath, model }));
-  }
-
-  /** Send a message to the interactive session. */
-  sendInteractive(text) {
-    this._ensureOpen();
-    this.ws.send(JSON.stringify({ type: 'interactive_send', command: text }));
-  }
-
-  /** Stop the interactive session. */
-  stopInteractive() {
-    this.interactiveActive = false;
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'interactive_stop' }));
+  /** Cancel the current neutral ledger request, if one is running. */
+  cancelLedger() {
+    if (this.activeLedgerId) {
+      this.cancel(this.activeLedgerId);
+      this.activeLedgerId = null;
     }
   }
 

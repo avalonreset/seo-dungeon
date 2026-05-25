@@ -1,9 +1,10 @@
 {
   "name": "seo-dungeon",
-  "version": "1.9.8",
-  "description": "SEO Dungeon skill suite for Codex: gamified SEO audits backed by the bundled SEO engine.",
+  "version": "1.9.9",
+  "description": "SEO Dungeon skill suite for Codex. 24 sub-skills (21 core + 1 orchestrator + 1 framework integration + 1 extension mirror) and 23 sub-agents backed by the bundled SEO engine and a gamified dungeon crawler UI.",
   "author": {
     "name": "Avalon Reset",
+    "email": "avalonreset@users.noreply.github.com",
     "url": "https://github.com/avalonreset"
   },
   "homepage": "https://github.com/avalonreset/seo-dungeon",
@@ -42,7 +43,7 @@
   "interface": {
     "displayName": "SEO Dungeon",
     "shortDescription": "Run SEO Dungeon audits and SEO workflows in Codex.",
-    "longDescription": "SEO Dungeon is a gamified SEO analysis suite with Codex-compatible skills, Codex agent profiles, shared cache artifacts, optional API integrations, and a dungeon crawler UI.",
+    "longDescription": "SEO Dungeon is a gamified SEO analysis suite with Codex-compatible skills, Codex agent profiles, shared cache artifacts, optional SEO data integrations, and a dungeon crawler UI.",
     "developerName": "Avalon Reset",
     "category": "Productivity",
     "capabilities": [

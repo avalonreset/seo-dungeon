@@ -13,17 +13,8 @@ remove_suite() {
 }
 
 main() {
-  local target="${SEO_DUNGEON_TARGET:-codex}"
-  case "${target}" in
-    all)
-      remove_suite "${CLAUDE_HOME:-${HOME}/.claude}" "Claude"
-      remove_suite "${CODEX_HOME:-${HOME}/.codex}" "Codex"
-      ;;
-    claude) remove_suite "${CLAUDE_HOME:-${HOME}/.claude}" "Claude" ;;
-    codex) remove_suite "${CODEX_HOME:-${HOME}/.codex}" "Codex" ;;
-    *) echo "[ERROR] SEO_DUNGEON_TARGET must be all, claude, or codex."; exit 1 ;;
-  esac
-  echo "[OK] SEO Dungeon skills removed for ${target}."
+  remove_suite "${CODEX_HOME:-${HOME}/.codex}" "Codex"
+  echo "[OK] SEO Dungeon skills removed for Codex."
 }
 
 main "$@"
