@@ -26,7 +26,8 @@ const envKeys = [
   'SEO_DUNGEON_GEMINI_MODEL_DEEP',
   'SEO_DUNGEON_GEMINI_MODEL_BALANCED',
   'SEO_DUNGEON_GEMINI_MODEL_FAST',
-  'SEO_DUNGEON_ALLOW_NO_ORIGIN'
+  'SEO_DUNGEON_ALLOW_NO_ORIGIN',
+  'SEO_DUNGEON_DISABLE_FOLDER_PICKER'
 ];
 const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-dungeon-cli-'));
@@ -143,6 +144,17 @@ exit $LASTEXITCODE
   assert(!redacted.includes('abcdefghijklmnopqrstuvwxyz123456'), 'GitHub token should be redacted');
   assert(!redacted.includes('1234567890ABCDEF'), 'AWS key body should be redacted');
   assert(redacted.includes('api_key=sk-1****'), 'generic key assignment should be redacted');
+
+  const validProjectDir = fs.mkdtempSync(path.join(tmp, 'project-'));
+  const missingProjectDir = path.join(tmp, 'missing-project');
+  assert.equal(bridge.validateProjectPath(validProjectDir), path.resolve(validProjectDir));
+  assert.equal(bridge.validateProjectPath(missingProjectDir), null);
+  assert.equal(bridge.folderPickerStartPath(missingProjectDir), tmp);
+  process.env.SEO_DUNGEON_DISABLE_FOLDER_PICKER = '1';
+  assert.throws(
+    () => bridge.revealOrPickProjectPath(missingProjectDir),
+    /Project folder does not exist or is not allowed/
+  );
 
   console.log('CLI launcher tests passed');
 } finally {

@@ -156,6 +156,124 @@ function revealProjectPath(projectPath) {
   return resolved;
 }
 
+function commandAvailable(command) {
+  try {
+    const lookup = process.platform === 'win32' ? 'where.exe' : 'which';
+    execFileSync(lookup, [command], { stdio: 'ignore' });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function folderPickerStartPath(projectPath) {
+  const candidates = [];
+  if (projectPath && String(projectPath).trim()) {
+    const resolved = path.resolve(projectPath);
+    candidates.push(resolved, path.dirname(resolved));
+  }
+  candidates.push(
+    process.env.USERPROFILE,
+    process.env.HOME,
+    process.env.HOMEDRIVE && process.env.HOMEPATH
+      ? `${process.env.HOMEDRIVE}${process.env.HOMEPATH}`
+      : null,
+    PROJECT_ROOT
+  );
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) return candidate;
+    } catch (_) {}
+  }
+  return PROJECT_ROOT;
+}
+
+function pickProjectPath(projectPath) {
+  if (process.env.SEO_DUNGEON_DISABLE_FOLDER_PICKER === '1') {
+    throw new Error('Project folder does not exist or is not allowed.');
+  }
+
+  const startPath = folderPickerStartPath(projectPath);
+  let selected = '';
+
+  try {
+    if (process.platform === 'win32') {
+      const powershell = path.join(
+        process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows',
+        'System32',
+        'WindowsPowerShell',
+        'v1.0',
+        'powershell.exe'
+      );
+      const psCommand = [
+        '$start = $env:SEO_DUNGEON_PICKER_START',
+        'if (-not (Test-Path -LiteralPath $start -PathType Container)) { $start = [Environment]::GetFolderPath("MyDocuments") }',
+        '$shell = New-Object -ComObject Shell.Application',
+        '$folder = $shell.BrowseForFolder(0, "Choose project folder for SEO Dungeon", 0, $start)',
+        'if ($folder -and $folder.Self -and $folder.Self.Path) { [Console]::Out.WriteLine($folder.Self.Path); exit 0 }',
+        'exit 2'
+      ].join('; ');
+      selected = execFileSync(fs.existsSync(powershell) ? powershell : 'powershell.exe', [
+        '-NoProfile',
+        '-STA',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        psCommand
+      ], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: { ...process.env, SEO_DUNGEON_PICKER_START: startPath }
+      });
+    } else if (process.platform === 'darwin') {
+      selected = execFileSync('osascript', [
+        '-e',
+        'POSIX path of (choose folder with prompt "Choose project folder for SEO Dungeon")'
+      ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    } else if (commandAvailable('zenity')) {
+      selected = execFileSync('zenity', [
+        '--file-selection',
+        '--directory',
+        '--title=Choose project folder for SEO Dungeon',
+        `--filename=${startPath}${path.sep}`
+      ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    } else if (commandAvailable('kdialog')) {
+      selected = execFileSync('kdialog', [
+        '--getexistingdirectory',
+        startPath,
+        '--title',
+        'Choose project folder for SEO Dungeon'
+      ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    } else {
+      throw new Error('No native folder picker is available on this system.');
+    }
+  } catch (err) {
+    if (err.status === 2 || err.status === 1) {
+      throw new Error('Folder selection cancelled.');
+    }
+    throw err;
+  }
+
+  const picked = String(selected || '').trim();
+  const validated = validateProjectPath(picked);
+  if (!validated) throw new Error('Selected folder is not allowed.');
+  return validated;
+}
+
+function revealOrPickProjectPath(projectPath) {
+  const hasPath = typeof projectPath === 'string' && projectPath.trim().length > 0;
+  const resolved = hasPath ? validateProjectPath(projectPath) : null;
+  if (resolved) {
+    return { action: 'opened', path: revealProjectPath(resolved) };
+  }
+  return {
+    action: 'selected',
+    path: pickProjectPath(projectPath),
+    previousPath: hasPath ? projectPath : ''
+  };
+}
+
 /**
  * Sanitize domain input for audit commands.
  */
@@ -447,9 +565,11 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // Validate and resolve projectPath
+    // Validate and resolve projectPath. Folder-open requests get their own
+    // fallback path: if the saved folder is invalid, the bridge opens a
+    // native folder picker instead of rejecting before the handler runs.
     const validatedPath = validateProjectPath(projectPath);
-    if (projectPath && !validatedPath) {
+    if (projectPath && !validatedPath && type !== 'open-folder') {
       console.warn(`Rejected invalid projectPath: ${projectPath}`);
       safeSend(JSON.stringify({ id, type: 'error', message: 'Invalid project path' }));
       return;
@@ -460,7 +580,7 @@ wss.on('connection', (ws) => {
 
     console.log(`Command #${id} [${type}]: ${command || '(no command)'}`);
     if (type !== 'cancel') console.log(`  Runtime: ${agentOptions.runtime}, profile: ${agentOptions.profile}`);
-    if (validatedPath !== PROJECT_ROOT) console.log(`  Project: ${validatedPath}`);
+    if (validatedPath && validatedPath !== PROJECT_ROOT) console.log(`  Project: ${validatedPath}`);
 
     // Cancel - kill the child process for a given request
     if (type === 'cancel') {
@@ -476,8 +596,8 @@ wss.on('connection', (ws) => {
 
     if (type === 'open-folder') {
       try {
-        const openedPath = revealProjectPath(projectPath);
-        safeSend(JSON.stringify({ id, type: 'result', data: { path: openedPath } }));
+        const folderResult = revealOrPickProjectPath(projectPath);
+        safeSend(JSON.stringify({ id, type: 'result', data: folderResult }));
       } catch (err) {
         safeSend(JSON.stringify({ id, type: 'error', message: err.message || 'Could not open project folder' }));
       }
@@ -1163,6 +1283,9 @@ module.exports = {
   getTextCliProfileConfig,
   insertPromptArg,
   safeEnv,
+  validateProjectPath,
+  folderPickerStartPath,
+  revealOrPickProjectPath,
   isAllowedOrigin,
   redactSensitiveText,
   startBridge

@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   arrow with emoji buttons for the website and project folder actions.
 
 ### Fixed
+- **Project folder recovery**: if the saved project path is missing or invalid,
+  the folder button now opens a native folder picker and saves the newly chosen
+  folder instead of stopping at an error.
+- **Default project folder**: the title screen now defaults to
+  `E:\seo-dungeon-website` for the SEO Dungeon website source instead of the
+  obsolete `D:\seodungeon` path.
 - **Domain quick-open reliability**: the website button now uses direct anchor
   navigation instead of popup-window routing, avoiding `about:blank` fallbacks.
 - **SEO Dungeon alias support**: typing `SEO Dungeon` in the domain field now

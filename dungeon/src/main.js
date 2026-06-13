@@ -460,11 +460,23 @@ document.addEventListener('DOMContentLoaded', () => {
   // so they don't collide with the audit cache.
   const LS_DOMAIN_KEY = 'seo_dungeon_last_domain';
   const LS_PATH_KEY = 'seo_dungeon_last_path';
+  const DEFAULT_PROJECT_PATH = pathInput?.defaultValue || '';
+  const staleDefaultPaths = new Set([
+    'd:\\seodungeon',
+    'd:/seodungeon',
+    'e:\\claude-seo-dungeon-website',
+    'e:/claude-seo-dungeon-website'
+  ]);
+  const isStaleDefaultPath = (value) => staleDefaultPaths.has(String(value || '').trim().toLowerCase());
   try {
     const savedDomain = localStorage.getItem(LS_DOMAIN_KEY);
     const savedPath = localStorage.getItem(LS_PATH_KEY);
     if (savedDomain && savedDomain.trim()) domainInput.value = savedDomain;
-    if (savedPath && savedPath.trim()) pathInput.value = savedPath;
+    if (savedPath && savedPath.trim()) {
+      pathInput.value = isStaleDefaultPath(savedPath) && DEFAULT_PROJECT_PATH
+        ? DEFAULT_PROJECT_PATH
+        : savedPath;
+    }
   } catch (_) { /* localStorage blocked or unavailable - use HTML defaults */ }
 
   const persistTitleInputs = () => {
@@ -543,7 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         openDomainBtn.removeAttribute('href');
       }
     }
-    if (openFolderBtn) openFolderBtn.disabled = !(pathOk && bridge.connected);
+    if (openFolderBtn) openFolderBtn.disabled = !bridge.connected;
     // Clear error area when both valid
     if (domainOk && pathOk) {
       errorArea.textContent = bridge.connected ? '' : 'Bridge server not connected';
@@ -602,7 +614,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   openFolderBtn?.addEventListener('click', async () => {
     const projectPath = pathInput.value.trim();
-    if (!projectPath) return;
     persistTitleInputs();
     if (!bridge.connected) {
       addLog('Bridge not connected.');
@@ -610,10 +621,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     openFolderBtn.disabled = true;
     try {
-      addLog(`Opening folder: ${projectPath}`);
+      addLog(projectPath ? `Opening folder: ${projectPath}` : 'Choosing project folder...');
       const result = await bridge.openFolder(projectPath);
-      const openedPath = String(result?.data?.path || projectPath).replace(/\\/g, '/');
-      addLog(`Opened folder: ${openedPath}`);
+      const folderPath = String(result?.data?.path || projectPath).trim();
+      const displayPath = folderPath.replace(/\\/g, '/');
+      if (result?.data?.action === 'selected') {
+        if (projectPath) addLog('Saved folder was unavailable; chose a new project folder.');
+        pathInput.value = folderPath;
+        pathInput.classList.add('valid');
+        pathInput.classList.remove('invalid');
+        persistTitleInputs();
+        addLog(`Selected folder: ${displayPath}`);
+      } else {
+        addLog(`Opened folder: ${displayPath}`);
+      }
     } catch (err) {
       addLog(`Could not open folder: ${err.message || 'unknown error'}`);
     } finally {
