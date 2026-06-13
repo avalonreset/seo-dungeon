@@ -53,6 +53,10 @@ Confirm the CLI is installed and authenticated:
 codex --version
 ```
 
+On Windows, SEO Dungeon resolves local `.ps1`, `.cmd`, `.bat`, and `.exe` shims
+before launching the CLI. If you still see `spawn EPERM`, point the bridge at a
+specific executable or shim:
+
 If Codex is installed in a non-standard path, set:
 
 ```powershell
@@ -109,7 +113,7 @@ choose.
 
 ```powershell
 $env:SEO_DUNGEON_CLAUDE_MODEL_DEEP='opus'
-$env:SEO_DUNGEON_GEMINI_MODEL_DEEP='default'
+$env:SEO_DUNGEON_GEMINI_MODEL_DEEP='pro'
 ```
 
 ## SEO Skills

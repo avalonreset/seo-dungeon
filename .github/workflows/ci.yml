@@ -76,6 +76,10 @@ jobs:
         working-directory: dungeon
         run: npm audit --audit-level=moderate
 
+      - name: Test CLI launcher
+        working-directory: dungeon
+        run: npm run test:cli
+
       - name: Build dungeon app
         working-directory: dungeon
         run: npm run build

@@ -2,17 +2,17 @@
   <a href="assets/banner.webp"><img src="assets/banner.webp" alt="SEO Dungeon - Gamified SEO Audit Tool" width="100%"></a>
 </p>
 
-# SEO Dungeon - Codex-Default SEO Audit Game
+# SEO Dungeon - AI SEO Audits as Dungeon Battles
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.0-blue)](CHANGELOG.md)
-[![Runtime](https://img.shields.io/badge/runtime-Codex%20default-2ea44f)](install.sh)
+[![Version](https://img.shields.io/badge/version-2.2.1-blue)](CHANGELOG.md)
+[![Runtime](https://img.shields.io/badge/runtime-Codex%20%7C%20Claude%20%7C%20Gemini-2ea44f)](dungeon/)
 
 SEO Dungeon turns SEO audits into a 16-bit dungeon crawler. Enter a domain,
-inspect the issues as demons, and use a local terminal agent to analyze or fix
-them inside your project. The app defaults to Codex, while the bundled SEO
-engine remains portable enough for local Claude Code or Gemini CLI workflows.
+inspect the issues as demons, and use a local AI CLI to analyze or fix them
+inside your project. The packaged bridge selects Codex by default and also
+supports Claude Code and Gemini CLI when those local tools are installed.
 
 ## Screenshots
 
@@ -29,11 +29,12 @@ engine remains portable enough for local Claude Code or Gemini CLI workflows.
 
 ## How It Works
 
-1. Choose a local CLI runtime. Codex is selected by default.
+1. Choose a local CLI runtime: Codex, Claude Code, or Gemini CLI. Codex is
+   selected by default in the packaged app.
 2. Choose a character profile:
-   - Warrior: deep profile. Codex uses `xhigh`; Claude uses `opus`; Gemini uses a Pro-oriented model.
-   - Samurai: balanced profile. Codex uses `high`; Claude uses `sonnet`; Gemini uses a Flash-oriented model.
-   - Knight: fast profile. Codex uses `medium`; Claude uses `haiku`; Gemini uses a faster Flash profile.
+   - Warrior: deep profile. Codex uses `xhigh`; Claude uses `opus`; Gemini uses `pro`.
+   - Samurai: balanced profile. Codex uses `high`; Claude uses `sonnet`; Gemini uses `flash`.
+   - Knight: fast profile. Codex uses `medium`; Claude uses `haiku`; Gemini uses `flash-lite`.
 3. Enter a domain and local project path.
 4. Run a full `/seo audit` through the selected local CLI.
 5. Review SEO issues as dungeon demons sorted by severity.
@@ -67,8 +68,8 @@ sub-agents, 23 Codex agent profiles, and 50 Python execution scripts.
 - Node.js 22+
 - Python 3.10+
 - Git
-- Codex CLI installed and signed in for the default runtime
-- Optional: Claude Code CLI or Gemini CLI for the non-default runtime picker options
+- Codex CLI installed and signed in for the packaged default runtime
+- Optional: Claude Code CLI or Gemini CLI for the runtime picker options
 
 ### Install Codex Skills
 
@@ -102,6 +103,9 @@ Runtime environment:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `SEO_DUNGEON_RUNTIME` | `codex` | Bridge fallback runtime when the UI does not send one |
+| `SEO_DUNGEON_CODEX_CLI` | `codex` | Codex executable override |
+| `SEO_DUNGEON_CLAUDE_CLI` | `claude` | Claude Code executable override |
+| `SEO_DUNGEON_GEMINI_CLI` | `gemini` | Gemini CLI executable override |
 | `SEO_DUNGEON_CODEX_MODEL` | Codex default | Optional Codex model override |
 | `SEO_DUNGEON_CODEX_EFFORT_DEEP` | `xhigh` | Codex Warrior effort |
 | `SEO_DUNGEON_CODEX_EFFORT_BALANCED` | `high` | Codex Samurai effort |
@@ -109,9 +113,9 @@ Runtime environment:
 | `SEO_DUNGEON_CLAUDE_MODEL_DEEP` | `opus` | Claude Warrior model alias |
 | `SEO_DUNGEON_CLAUDE_MODEL_BALANCED` | `sonnet` | Claude Samurai model alias |
 | `SEO_DUNGEON_CLAUDE_MODEL_FAST` | `haiku` | Claude Knight model alias |
-| `SEO_DUNGEON_GEMINI_MODEL_DEEP` | `gemini-3.1-pro-preview` | Gemini Warrior model |
-| `SEO_DUNGEON_GEMINI_MODEL_BALANCED` | `gemini-3.5-flash` | Gemini Samurai model |
-| `SEO_DUNGEON_GEMINI_MODEL_FAST` | `gemini-3.1-flash-lite` | Gemini Knight model |
+| `SEO_DUNGEON_GEMINI_MODEL_DEEP` | `pro` | Gemini Warrior model alias |
+| `SEO_DUNGEON_GEMINI_MODEL_BALANCED` | `flash` | Gemini Samurai model alias |
+| `SEO_DUNGEON_GEMINI_MODEL_FAST` | `flash-lite` | Gemini Knight model alias |
 | `SEO_DUNGEON_CLAUDE_ARGS` | `--print --output-format text --permission-mode acceptEdits` | Claude CLI argument template |
 | `SEO_DUNGEON_GEMINI_ARGS` | `--prompt {{prompt}} --output-format text --approval-mode auto_edit` | Gemini CLI argument template |
 
@@ -174,8 +178,7 @@ seo-dungeon/
 |---------|-----|
 | "The dungeon is unreachable" | Bridge server is not running. Run `npm run server` in `dungeon/`. |
 | Skills not found by Codex | Run `install.ps1` or `install.sh` from the repo root. |
-| Codex fails to spawn | Confirm `codex` is installed, signed in, and available on `PATH`. |
-| Claude or Gemini fails to spawn | Confirm the selected CLI is installed, signed in, and available on `PATH`; override `SEO_DUNGEON_CLAUDE_CLI` or `SEO_DUNGEON_GEMINI_CLI` if needed. |
+| Codex, Claude, or Gemini fails to spawn | Confirm the selected CLI is installed, signed in, and available on `PATH`. On Windows, the bridge resolves `.ps1`, `.cmd`, `.bat`, and `.exe` shims before launching; override `SEO_DUNGEON_CODEX_CLI`, `SEO_DUNGEON_CLAUDE_CLI`, or `SEO_DUNGEON_GEMINI_CLI` if your CLI lives elsewhere. |
 | Audit takes a long time | Normal for first full-site audits. Use cached audits when available. |
 | Google API commands fail | Run `/seo google` for setup instructions. |
 | Drift baseline not found | Run `/seo drift baseline <url>` before `/seo drift compare <url>`. |
@@ -195,5 +198,5 @@ seo-dungeon/
 [MIT](LICENSE) - Copyright (c) 2026 Avalon Reset.
 
 SEO engine code is derived from Daniel Agrici's open-source SEO skill suite and
-used under the MIT license. SEO Dungeon is independent, Codex-default, and
-portable across compatible local terminal-agent workflows.
+used under the MIT license. SEO Dungeon is independent and runs through local
+terminal-agent workflows selected in the app.

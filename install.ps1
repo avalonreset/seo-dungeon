@@ -37,7 +37,7 @@ function Get-SourceDir {
     }
 
     $repo = if ($env:SEO_DUNGEON_REPO) { $env:SEO_DUNGEON_REPO } else { "https://github.com/avalonreset/seo-dungeon" }
-    $ref = if ($env:SEO_DUNGEON_REF) { $env:SEO_DUNGEON_REF } else { "v2.2.0" }
+    $ref = if ($env:SEO_DUNGEON_REF) { $env:SEO_DUNGEON_REF } else { "v2.2.1" }
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
     New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
     $checkout = Join-Path $tempDir "seo-dungeon"
@@ -95,7 +95,7 @@ $sourceDir = Get-SourceDir
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  SEO Dungeon - Installer" -ForegroundColor Cyan
-Write-Host "  Codex-default Skill Suite" -ForegroundColor Cyan
+Write-Host "  Codex Skill Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 Install-Codex $sourceDir $python

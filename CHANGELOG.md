@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-06-13
+
+### Changed
+- **Public positioning refresh**: README, docs, package metadata, and installer
+  copy now frame SEO Dungeon as a local AI SEO audit app with Codex, Claude Code,
+  and Gemini CLI runtime options. Codex remains the packaged default without
+  making the public repo read like a Codex-only project.
+- **Gemini profile defaults**: Gemini Warrior/Samurai/Knight profiles now use
+  the Gemini CLI model aliases `pro`, `flash`, and `flash-lite` instead of
+  brittle concrete preview model names.
+
+### Fixed
+- **Windows CLI launching**: the dungeon bridge now resolves PATH-ordered
+  `.ps1`, `.cmd`, `.bat`, and `.exe` shims before spawning Codex, Claude, or
+  Gemini. This fixes the `ERROR: spawn EPERM` failure seen with Windows
+  package-manager and WindowsApps shims.
+- **Bridge child cleanup**: failed and timed-out child processes now clear their
+  active request slots, preventing one failed spawn from blocking later runs.
+- **Launcher test coverage**: added a Node CLI-launcher regression test and
+  wired it into the dungeon CI job before the app build.
+
 ## [2.2.0] - 2026-06-13
 
 ### Added
@@ -22,9 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alongside SEO Dungeon's Codex TOML profiles.
 
 ### Changed
-- **Codex-default packaging**: documentation, installer output, app metadata,
-  and runtime copy now describe SEO Dungeon as Codex-default rather than
-  Codex-only.
+- **Packaged default runtime**: documentation, installer output, app metadata,
+  and runtime copy now describe SEO Dungeon as Codex-compatible and
+  local-runtime compatible rather than Codex-only.
 - **Dependency hardening**: updated the dungeon app dependency set to clear
   `npm audit` and added a CI app build/audit job on Node 22.
 - **Version triangulation**: bumped plugin, Python metadata, citation metadata,

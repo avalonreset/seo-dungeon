@@ -46,10 +46,10 @@
 
 # SEO Dungeon: Multi-Agent Instructions
 
-SEO Dungeon is a Codex-default SEO audit application. The browser game bridge
-defaults to Codex CLI, while the bundled SEO engine can also be used by
-compatible local terminal agents such as Claude Code, Gemini CLI, Cursor, Cline,
-Aider, and Antigravity.
+SEO Dungeon is a local AI SEO audit application. The browser game bridge
+defaults to Codex CLI and can also launch local Claude Code or Gemini CLI
+runtimes, while the bundled SEO engine can be used by compatible terminal
+agents such as Cursor, Cline, Aider, and Antigravity.
 
 ## Overview
 
@@ -115,9 +115,9 @@ dungeon/                   # Phaser UI + local CLI bridge
 
 ## Portability Notes
 
-Codex is the default runtime for SEO Dungeon. Compatible terminal-agent
-workflows can read the same `skills/`, `agents/`, and `scripts/` files directly
-when a user chooses to adapt the package outside the dungeon UI.
+Codex is the packaged default runtime for SEO Dungeon. Compatible
+terminal-agent workflows can read the same `skills/`, `agents/`, and `scripts/`
+files directly when a user chooses to adapt the package outside the dungeon UI.
 
 Run `python scripts/portability_check.py --strict` before shipping changes that
 touch skill frontmatter, agent prompts, or extension mirrors.
@@ -132,8 +132,8 @@ touch skill frontmatter, agent prompts, or extension mirrors.
 
 ## Key Principles
 
-1. Keep the dungeon UI Codex-default and local-CLI only.
+1. Keep the dungeon UI local-CLI only, with Codex as the packaged default.
 2. Prefer existing skill and script patterns over new abstractions.
 3. Preserve SSRF protections in scripts that fetch URLs.
 4. Keep user-facing copy clear that SEO Dungeon is independent, public, and
-   Codex-default.
+   local-runtime compatible.

@@ -6,15 +6,15 @@ SEO Dungeon has two installation surfaces:
 - The local dungeon app under `dungeon/`, which starts a Phaser UI and a
   localhost WebSocket bridge.
 
-Codex is the default runtime. Claude Code and Gemini CLI are optional local CLI
-targets in the app runtime picker.
+The packaged app selects Codex by default. Claude Code and Gemini CLI are also
+available in the local runtime picker when those CLIs are installed.
 
 ## Requirements
 
 - Git
 - Python 3.10+
 - Node.js 22+ for the dungeon app
-- Codex CLI installed and signed in for the default app runtime
+- Codex CLI installed and signed in for the packaged default app runtime
 - Optional: Claude Code CLI or Gemini CLI installed and signed in
 
 ## Install Codex Skills
@@ -38,7 +38,7 @@ bash install.sh
 Remote installs default to the current release tag:
 
 ```powershell
-$env:SEO_DUNGEON_REF='v2.2.0'
+$env:SEO_DUNGEON_REF='v2.2.1'
 .\install.ps1
 ```
 
@@ -65,7 +65,7 @@ The title screen includes a local CLI selector:
 |---------|----------------|-----------------|
 | Codex | `codex exec --json` | Warrior `xhigh`, Samurai `high`, Knight `medium` |
 | Claude | `claude --print` | Warrior `opus`, Samurai `sonnet`, Knight `haiku` |
-| Gemini | `gemini --prompt` | Warrior Pro, Samurai Flash, Knight fast Flash |
+| Gemini | `gemini --prompt` | Warrior `pro`, Samurai `flash`, Knight `flash-lite` |
 
 Useful overrides:
 
@@ -73,7 +73,7 @@ Useful overrides:
 $env:SEO_DUNGEON_RUNTIME='codex'
 $env:SEO_DUNGEON_CODEX_MODEL='gpt-5.1'
 $env:SEO_DUNGEON_CLAUDE_MODEL_BALANCED='sonnet'
-$env:SEO_DUNGEON_GEMINI_MODEL_BALANCED='gemini-3.5-flash'
+$env:SEO_DUNGEON_GEMINI_MODEL_BALANCED='flash'
 ```
 
 Set a model variable to `default`, `auto`, or `none` to let that CLI use its own

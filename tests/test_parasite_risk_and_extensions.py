@@ -175,7 +175,7 @@ def test_extension_skillmd_has_required_frontmatter(
     assert f"name: {skill_dir}" in head, f"{name}: frontmatter name must be {skill_dir}"
     assert "description:" in head, f"{name}: missing description"
     assert "metadata:" in head, f"{name}: missing metadata block"
-    assert 'version: "2.2.0"' in head, f"{name}: SKILL.md must declare version 2.2.0"
+    assert 'version: "2.2.1"' in head, f"{name}: SKILL.md must declare version 2.2.1"
 
 
 # ---------------------------------------------------------------------------

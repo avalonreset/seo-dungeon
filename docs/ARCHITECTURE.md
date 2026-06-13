@@ -2,9 +2,10 @@
 
 ## Overview
 
-SEO Dungeon bundles the public v2.2 SEO skill architecture with a Codex-default
+SEO Dungeon bundles the public v2.2 SEO skill architecture with a local
 dungeon UI, Codex TOML profiles, and portable Markdown agent prompts for
-compatible terminal agents.
+compatible terminal agents. The packaged bridge defaults to Codex and can also
+launch local Claude Code or Gemini CLI runtimes.
 
 ## Directory Structure
 

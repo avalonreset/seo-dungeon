@@ -1,5 +1,5 @@
 const { WebSocketServer } = require('ws');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, execFileSync } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -129,11 +129,133 @@ function splitArgs(value) {
   });
 }
 
+function getPathEnv() {
+  return process.env.PATH || process.env.Path || process.env.path || '';
+}
+
+function isPathLike(value) {
+  return path.isAbsolute(value) || /[\\/]/.test(value);
+}
+
+function uniqueCaseInsensitive(values) {
+  const seen = new Set();
+  const result = [];
+  for (const value of values) {
+    const item = String(value || '').trim();
+    if (!item) continue;
+    const key = process.platform === 'win32' ? item.toLowerCase() : item;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+function windowsExecutableCandidates(command) {
+  const raw = String(command || '').trim();
+  if (!raw || process.platform !== 'win32') return [raw];
+
+  const candidates = [];
+  const pathExt = uniqueCaseInsensitive([
+    ...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';'),
+    '.PS1'
+  ]).filter(Boolean);
+  if (isPathLike(raw)) {
+    candidates.push(raw);
+    if (!path.extname(raw)) {
+      for (const ext of pathExt) candidates.push(`${raw}${ext.toLowerCase()}`);
+    }
+  } else {
+    for (const dir of getPathEnv().split(path.delimiter).filter(Boolean)) {
+      candidates.push(path.join(dir, raw));
+      if (!path.extname(raw)) {
+        for (const ext of pathExt) candidates.push(path.join(dir, `${raw}${ext.toLowerCase()}`));
+      }
+    }
+    try {
+      const pathEnv = getPathEnv();
+      const output = execFileSync('where.exe', [raw], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: { ...process.env, PATH: pathEnv, Path: pathEnv }
+      });
+      candidates.push(...output.split(/\r?\n/));
+    } catch (_) {
+      // Fall back to the raw command. The later spawn error will be clearer.
+    }
+    candidates.push(raw);
+  }
+
+  return uniqueCaseInsensitive(candidates).filter((candidate) => {
+    if (!isPathLike(candidate)) return candidate === raw;
+    try { return fs.existsSync(candidate); } catch (_) { return false; }
+  });
+}
+
+function selectWindowsCliCandidate(command) {
+  const candidates = windowsExecutableCandidates(command);
+  const directExts = new Set(['.exe', '.com', '.ps1']);
+  const direct = candidates.find((candidate) =>
+    directExts.has(path.extname(candidate).toLowerCase())
+  );
+  if (direct) return direct;
+
+  const batch = candidates.find((candidate) =>
+    ['.cmd', '.bat'].includes(path.extname(candidate).toLowerCase())
+  );
+  if (batch) return batch;
+
+  return candidates[0] || command;
+}
+
+function resolveCliLaunch(execPath) {
+  const raw = String(execPath || '').trim();
+  if (!raw) throw new Error('CLI executable path is empty.');
+  if (process.platform !== 'win32') {
+    return { command: raw, argsPrefix: [], shell: false, display: raw };
+  }
+
+  const selected = selectWindowsCliCandidate(raw);
+  const ext = path.extname(selected).toLowerCase();
+
+  if (ext === '.cmd' || ext === '.bat') {
+    return { command: selected, argsPrefix: [], shell: true, display: selected };
+  }
+
+  if (ext === '.ps1') {
+    const powershell = process.env.SystemRoot
+      ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+      : 'powershell.exe';
+    return {
+      command: powershell,
+      argsPrefix: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', selected],
+      shell: false,
+      display: selected
+    };
+  }
+
+  return {
+    command: selected,
+    argsPrefix: [],
+    shell: !path.extname(selected),
+    display: selected
+  };
+}
+
 /**
  * Build a minimal environment for child processes.
  */
 function safeEnv() {
-  const env = { PATH: process.env.PATH, HOME: process.env.HOME };
+  const pathEnv = getPathEnv();
+  const env = { HOME: process.env.HOME };
+  if (pathEnv) {
+    env.PATH = pathEnv;
+    if (process.platform === 'win32') env.Path = pathEnv;
+  }
+  if (process.env.ComSpec) env.ComSpec = process.env.ComSpec;
+  if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
+  if (process.env.WINDIR) env.WINDIR = process.env.WINDIR;
+  if (process.env.PATHEXT) env.PATHEXT = process.env.PATHEXT;
   if (process.env.APPDATA) env.APPDATA = process.env.APPDATA;
   if (process.env.USERPROFILE) env.USERPROFILE = process.env.USERPROFILE;
   if (process.env.LOCALAPPDATA) env.LOCALAPPDATA = process.env.LOCALAPPDATA;
@@ -152,16 +274,21 @@ function safeEnv() {
   return env;
 }
 
-// Catch crashes so server stays alive
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception (server stays alive):', err.message);
-});
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled rejection (server stays alive):', err.message || err);
-});
+function trackProcess(requestId, proc) {
+  if (requestId !== undefined && requestId !== null) activeProcesses.set(requestId, proc);
+}
 
-console.log('SEO Dungeon - Bridge Server');
-console.log('─'.repeat(40));
+function untrackProcess(requestId) {
+  if (requestId !== undefined && requestId !== null) activeProcesses.delete(requestId);
+}
+
+function createSpawnError(runtime, err, launch) {
+  const display = launch?.display || runtime;
+  const hint = err && err.code === 'EPERM'
+    ? ' On Windows this usually means the command resolved to a blocked script shim; set the matching SEO_DUNGEON_*_CLI variable to a .cmd, .bat, or .exe path.'
+    : '';
+  return new Error(`Failed to spawn ${runtime} CLI (${display}): ${err.message}.${hint} Is ${runtime} installed and authenticated?`);
+}
 
 wss.on('connection', (ws) => {
   console.log('Game client connected');
@@ -638,9 +765,9 @@ const DEFAULT_TEXT_CLI_MODELS = {
     fast: 'haiku',
   },
   gemini: {
-    deep: 'gemini-3.1-pro-preview',
-    balanced: 'gemini-3.5-flash',
-    fast: 'gemini-3.1-flash-lite',
+    deep: 'pro',
+    balanced: 'flash',
+    fast: 'flash-lite',
   },
 };
 
@@ -689,26 +816,38 @@ function runTextCli(runtime, prompt, onStream, cwd, requestId, profile) {
   const workDir = cwd || PROJECT_ROOT;
   return new Promise((resolve, reject) => {
     const { execPath: cliExec, args: cliArgs } = resolveTextCli(normalizedRuntime);
+    const launch = resolveCliLaunch(cliExec);
     const cliProfile = getTextCliProfileConfig(normalizedRuntime, profile);
     const args = [...cliArgs];
     if (cliProfile.model) args.push('--model', cliProfile.model);
     const finalArgs = insertPromptArg(args, prompt);
+    const launchArgs = [...launch.argsPrefix, ...finalArgs];
 
     console.log(`  Running with ${normalizedRuntime} CLI (profile: ${cliProfile.key}${cliProfile.model ? `, model: ${cliProfile.model}` : ', default model'})`);
+    console.log(`  Executable: ${launch.display}`);
     console.log(`  CWD: ${workDir}`);
-    const proc = spawn(cliExec, finalArgs, {
+    const proc = spawn(launch.command, launchArgs, {
       cwd: workDir,
       env: safeEnv(),
-      shell: process.platform === 'win32' && /\.ps1$/i.test(cliExec),
+      shell: launch.shell,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     });
 
-    if (requestId) activeProcesses.set(requestId, proc);
+    trackProcess(requestId, proc);
 
     let fullText = '';
     let lineBuffer = '';
     let stderr = '';
+    let settled = false;
+    let timeoutHandle;
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      untrackProcess(requestId);
+      fn(value);
+    };
 
     proc.stdout.on('data', (data) => {
       const text = data.toString();
@@ -733,26 +872,25 @@ function runTextCli(runtime, prompt, onStream, cwd, requestId, profile) {
       if (lineBuffer.trim()) onStream(lineBuffer.trim());
       console.log(`  ${normalizedRuntime} CLI finished (exit ${code}), ${fullText.length} chars`);
       if (code !== 0) {
-        reject(new Error(`${normalizedRuntime} CLI exited with code ${code}: ${stderr || fullText}`));
+        settle(reject, new Error(`${normalizedRuntime} CLI exited with code ${code}: ${stderr || fullText}`));
         return;
       }
       try {
-        resolve(JSON.parse(fullText));
+        settle(resolve, JSON.parse(fullText));
       } catch {
-        resolve({ raw: fullText });
+        settle(resolve, { raw: fullText });
       }
     });
 
     proc.on('error', (err) => {
-      reject(new Error(`Failed to spawn ${normalizedRuntime} CLI: ${err.message}. Is ${normalizedRuntime} installed and authenticated?`));
+      settle(reject, createSpawnError(normalizedRuntime, err, launch));
     });
 
     const MAX_RUNTIME_MS = 15 * 60 * 1000;
-    const timeoutHandle = setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       try { proc.kill('SIGTERM'); } catch {}
-      reject(new Error('Operation timed out after 15 minutes.'));
+      settle(reject, new Error('Operation timed out after 15 minutes.'));
     }, MAX_RUNTIME_MS);
-    proc.on('close', () => clearTimeout(timeoutHandle));
   });
 }
 
@@ -760,6 +898,7 @@ function runCodex(prompt, onStream, cwd, requestId, profile) {
   const workDir = cwd || PROJECT_ROOT;
   return new Promise((resolve, reject) => {
     const { execPath: cliExec, args: cliArgs } = resolveCodexCli();
+    const launch = resolveCliLaunch(cliExec);
     const codexProfile = getCodexProfileConfig(profile);
     const args = [
       ...cliArgs,
@@ -777,22 +916,33 @@ function runCodex(prompt, onStream, cwd, requestId, profile) {
     ];
     if (codexProfile.model) args.push('-m', codexProfile.model);
     args.push(prompt);
+    const launchArgs = [...launch.argsPrefix, ...args];
 
     console.log(`  Running with codex exec (profile: ${codexProfile.key}, effort: ${codexProfile.effort}${codexProfile.model ? `, model: ${codexProfile.model}` : ''})`);
+    console.log(`  Executable: ${launch.display}`);
     console.log(`  CWD: ${workDir}`);
-    const proc = spawn(cliExec, args, {
+    const proc = spawn(launch.command, launchArgs, {
       cwd: workDir,
       env: safeEnv(),
-      shell: false,
+      shell: launch.shell,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     });
 
-    if (requestId) activeProcesses.set(requestId, proc);
+    trackProcess(requestId, proc);
 
     let fullText = '';
     let buffer = '';
     let stderr = '';
+    let settled = false;
+    let timeoutHandle;
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      untrackProcess(requestId);
+      fn(value);
+    };
 
     proc.stdout.on('data', (data) => {
       buffer += data.toString();
@@ -839,32 +989,60 @@ function runCodex(prompt, onStream, cwd, requestId, profile) {
 
       console.log(`  Codex finished (exit ${code}), ${fullText.length} chars`);
       if (code !== 0) {
-        reject(new Error(`Codex exited with code ${code}: ${stderr}`));
+        settle(reject, new Error(`Codex exited with code ${code}: ${stderr}`));
         return;
       }
       try {
-        resolve(JSON.parse(fullText));
+        settle(resolve, JSON.parse(fullText));
       } catch {
-        resolve({ raw: fullText });
+        settle(resolve, { raw: fullText });
       }
     });
 
     proc.on('error', (err) => {
-      reject(new Error(`Failed to spawn codex: ${err.message}. Is Codex CLI installed and authenticated?`));
+      settle(reject, createSpawnError('codex', err, launch));
     });
 
     const MAX_RUNTIME_MS = 15 * 60 * 1000;
-    const timeoutHandle = setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       try { proc.kill('SIGTERM'); } catch {}
-      reject(new Error('Operation timed out after 15 minutes.'));
+      settle(reject, new Error('Operation timed out after 15 minutes.'));
     }, MAX_RUNTIME_MS);
-    proc.on('close', () => clearTimeout(timeoutHandle));
   });
 }
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Bridge listening on ws://127.0.0.1:${PORT} (localhost only)`);
-  console.log(`Agent provider: ${resolveAgentProvider()}`);
-  console.log(`Agent runs from: ${PROJECT_ROOT}`);
+function startBridge() {
+  // Catch crashes only in the live bridge. Tests import this module and should
+  // fail normally instead of being swallowed by global handlers.
+  process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception (server stays alive):', err.message);
+  });
+  process.on('unhandledRejection', (err) => {
+    console.error('Unhandled rejection (server stays alive):', err.message || err);
+  });
+
+  console.log('SEO Dungeon - Bridge Server');
   console.log('─'.repeat(40));
-});
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log(`Bridge listening on ws://127.0.0.1:${PORT} (localhost only)`);
+    console.log(`Agent provider: ${resolveAgentProvider()}`);
+    console.log(`Agent runs from: ${PROJECT_ROOT}`);
+    console.log('─'.repeat(40));
+  });
+}
+
+if (require.main === module) startBridge();
+
+module.exports = {
+  normalizeRuntime,
+  normalizeProfile,
+  splitArgs,
+  resolveCliLaunch,
+  resolveCodexCli,
+  resolveTextCli,
+  getCodexProfileConfig,
+  getTextCliProfileConfig,
+  insertPromptArg,
+  safeEnv,
+  startBridge
+};
