@@ -21,8 +21,8 @@ export const RUNTIME_LABELS = {
     name: 'Gemini',
     profiles: {
       deep: { label: 'PRO', detail: 'deep audit' },
-      balanced: { label: 'FLASH+', detail: 'balanced' },
-      fast: { label: 'FLASH', detail: 'quick pass' },
+      balanced: { label: 'FLASH', detail: 'balanced' },
+      fast: { label: 'FLASH-LITE', detail: 'quick pass' },
     },
   },
 };

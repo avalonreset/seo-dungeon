@@ -16,6 +16,9 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
+      --ledger-width: clamp(300px, 33.33vw, 600px);
+      --title-scale: 1;
+      --character-scale: 1;
       background: #060608;
       color: #c0c0d0;
       font-family: 'JetBrains Mono', monospace;
@@ -33,6 +36,7 @@
       min-width: 0;
       position: relative;
       background: #07070a;
+      transition: width 0.18s ease-out;
     }
 
     #game-container {
@@ -47,15 +51,15 @@
       justify-content: center;
       width: 100%;
       height: 100%;
-      padding: 40px 20px;
+      padding: calc(40px * var(--title-scale)) calc(20px * var(--title-scale));
       gap: 0;
     }
 
     #title-screen h1 {
       font-family: 'Press Start 2P', monospace;
-      font-size: clamp(24px, 4vw, 40px);
+      font-size: clamp(22px, calc(40px * var(--title-scale)), 42px);
       color: #d4af37;
-      margin-bottom: 32px;
+      margin-bottom: calc(32px * var(--title-scale));
       text-shadow: 0 0 30px rgba(212, 175, 55, 0.15);
     }
 
@@ -69,9 +73,9 @@
       align-items: center;
       justify-content: center;
       gap: 0;
-      margin-bottom: 14px;
+      margin-bottom: calc(14px * var(--title-scale));
       border: 1px solid #252540;
-      border-radius: 8px;
+      border-radius: calc(8px * var(--title-scale));
       background: #0d0d20;
       overflow: hidden;
       position: relative;
@@ -79,13 +83,13 @@
     }
 
     .runtime-option {
-      min-width: 92px;
-      min-height: 34px;
+      min-width: calc(92px * var(--title-scale));
+      min-height: calc(34px * var(--title-scale));
       border: 0;
       border-right: 1px solid #252540;
-      padding: 0 14px;
+      padding: 0 calc(14px * var(--title-scale));
       font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
+      font-size: clamp(9px, calc(11px * var(--title-scale)), 12px);
       font-weight: 700;
       color: #8c8ca2;
       background: transparent;
@@ -114,24 +118,22 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 18px;
-      margin-bottom: 12px;
+      gap: calc(18px * var(--character-scale));
+      margin-bottom: calc(12px * var(--title-scale));
     }
 
     .char-option {
-      --char-scale: 2;
-      --char-selected-scale: 2.15;
-      --char-y: 12px;
+      --sprite-box-height: calc(236px * var(--character-scale));
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: flex-end;
-      width: 260px;
-      height: 320px;
-      padding: 0 0 10px;
+      width: calc(268px * var(--character-scale));
+      height: calc(344px * var(--character-scale));
+      padding: 0 0 calc(10px * var(--title-scale));
       overflow: hidden;
       border: 2px solid transparent;
-      border-radius: 8px;
+      border-radius: calc(8px * var(--title-scale));
       cursor: pointer;
       transition: background 0.15s, border-color 0.25s;
     }
@@ -148,19 +150,21 @@
     .char-option canvas {
       image-rendering: pixelated;
       image-rendering: crisp-edges;
-      transform: translateY(var(--char-y)) scale(var(--char-scale));
-      transform-origin: center center;
+      width: 100%;
+      height: var(--sprite-box-height);
+      flex: 0 0 var(--sprite-box-height);
+      display: block;
     }
 
     .char-option span {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
+      font-size: clamp(9px, calc(11px * var(--title-scale)), 12px);
       font-weight: 600;
       color: #606078;
-      letter-spacing: 3px;
+      letter-spacing: calc(3px * var(--title-scale));
       text-transform: uppercase;
-      margin-top: 4px;
-      transform: translateY(-15px);
+      margin-top: calc(4px * var(--title-scale));
+      transform: translateY(calc(-15px * var(--title-scale)));
       transition: color 0.2s;
     }
 
@@ -175,12 +179,12 @@
 
     .char-model {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: clamp(8px, calc(9px * var(--title-scale)), 10px);
       font-weight: 600;
-      letter-spacing: 2px;
+      letter-spacing: calc(2px * var(--title-scale));
       text-transform: uppercase;
-      margin-top: -12px;
-      transform: translateY(-15px);
+      margin-top: calc(-12px * var(--title-scale));
+      transform: translateY(calc(-15px * var(--title-scale)));
       opacity: 0.5;
       transition: opacity 0.2s;
     }
@@ -190,10 +194,10 @@
     .char-model.green { color: #66ddaa; }
 
     .char-profile-detail {
-      font-size: 8px;
-      letter-spacing: 1px;
+      font-size: clamp(7px, calc(8px * var(--title-scale)), 9px);
+      letter-spacing: calc(1px * var(--title-scale));
       opacity: 0.45;
-      margin-top: -10px;
+      margin-top: calc(-10px * var(--title-scale));
     }
 
     .char-option.selected .char-profile-detail {
@@ -201,42 +205,115 @@
     }
 
     #title-screen .tagline {
-      font-size: 15px;
+      font-size: clamp(12px, calc(15px * var(--title-scale)), 16px);
       color: #a0a0b8;
       font-weight: 400;
-      margin-bottom: 36px;
+      margin-bottom: calc(36px * var(--title-scale));
     }
 
     .form-group {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 20px;
+      gap: calc(8px * var(--title-scale));
+      margin-bottom: calc(20px * var(--title-scale));
       width: 100%;
-      max-width: 400px;
+      max-width: calc(400px * var(--title-scale));
     }
 
     .form-group label {
-      font-size: 12px;
+      font-size: clamp(10px, calc(12px * var(--title-scale)), 13px);
       font-weight: 600;
       color: #9090a8;
-      letter-spacing: 3px;
+      letter-spacing: calc(3px * var(--title-scale));
       text-transform: uppercase;
     }
 
     .form-group input {
       width: 100%;
-      padding: 12px 18px;
+      padding: calc(12px * var(--title-scale)) calc(18px * var(--title-scale));
       font-family: 'JetBrains Mono', monospace;
-      font-size: 15px;
+      font-size: clamp(12px, calc(15px * var(--title-scale)), 16px);
       color: #d4af37;
       background: #10102a;
       border: 1px solid #252540;
-      border-radius: 6px;
+      border-radius: calc(6px * var(--title-scale));
       text-align: center;
       outline: none;
       transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .input-action-row {
+      position: relative;
+      width: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-action-row input {
+      padding-right: calc(52px * var(--title-scale));
+    }
+
+    .input-action-button {
+      position: absolute;
+      right: calc(6px * var(--title-scale));
+      top: 50%;
+      transform: translateY(-50%);
+      width: calc(32px * var(--title-scale));
+      min-width: 28px;
+      height: calc(32px * var(--title-scale));
+      min-height: 28px;
+      border: 1px solid rgba(212, 175, 55, 0.28);
+      border-radius: calc(4px * var(--title-scale));
+      background: rgba(5, 5, 7, 0.82);
+      color: #d4af37;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(13px, calc(17px * var(--title-scale)), 18px);
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 0 1px;
+    }
+
+    .input-action-button:hover {
+      background: rgba(18, 18, 28, 0.95);
+      color: #f0cc50;
+      border-color: rgba(212, 175, 55, 0.55);
+    }
+
+    .folder-glyph {
+      position: relative;
+      display: block;
+      width: calc(15px * var(--title-scale));
+      min-width: 12px;
+      height: calc(11px * var(--title-scale));
+      min-height: 9px;
+      border: 2px solid currentColor;
+      border-radius: 2px;
+      box-sizing: border-box;
+    }
+
+    .folder-glyph::before {
+      content: '';
+      position: absolute;
+      left: -2px;
+      top: calc(-6px * var(--title-scale));
+      width: calc(8px * var(--title-scale));
+      min-width: 6px;
+      height: calc(5px * var(--title-scale));
+      min-height: 4px;
+      border: 2px solid currentColor;
+      border-bottom: 0;
+      border-radius: 2px 2px 0 0;
+      box-sizing: border-box;
+      background: rgba(5, 5, 7, 0.82);
+    }
+
+    .input-action-button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
 
     .form-group input:focus {
@@ -245,7 +322,7 @@
     }
 
     .form-group input.path-input {
-      font-size: 13px;
+      font-size: clamp(11px, calc(13px * var(--title-scale)), 14px);
       color: #5cb8c8;
     }
 
@@ -255,15 +332,15 @@
     }
 
     #descend-btn {
-      margin-top: 12px;
-      padding: 14px 44px;
+      margin-top: calc(12px * var(--title-scale));
+      padding: calc(14px * var(--title-scale)) calc(44px * var(--title-scale));
       font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
+      font-size: clamp(11px, calc(13px * var(--title-scale)), 14px);
       font-weight: 600;
       color: #08081a;
       background: linear-gradient(180deg, #e0c050, #c49a30);
       border: none;
-      border-radius: 6px;
+      border-radius: calc(6px * var(--title-scale));
       cursor: pointer;
       letter-spacing: 3px;
       transition: transform 0.1s, box-shadow 0.2s, opacity 0.3s;
@@ -295,11 +372,11 @@
     }
 
     #validation-errors {
-      margin-top: 8px;
-      font-size: 12px;
+      margin-top: calc(8px * var(--title-scale));
+      font-size: clamp(10px, calc(12px * var(--title-scale)), 13px);
       color: #cc4444;
       text-align: center;
-      min-height: 18px;
+      min-height: calc(18px * var(--title-scale));
     }
 
     .safety-note {
@@ -311,8 +388,8 @@
     }
 
     #bridge-status {
-      margin-top: 16px;
-      font-size: 13px;
+      margin-top: calc(16px * var(--title-scale));
+      font-size: clamp(11px, calc(13px * var(--title-scale)), 14px);
       color: #8080a0;
       transition: color 0.3s;
     }
@@ -382,9 +459,9 @@
        border-left as a seam, and a header treated like an embossed
        brass plate. The interior scrolls through the live ledger. */
     #log-panel {
-      width: 33.33%;
-      min-width: 300px;
-      max-width: 600px;
+      width: var(--ledger-width);
+      min-width: min(300px, 42vw);
+      max-width: min(760px, 62vw);
       background:
         radial-gradient(ellipse 140% 80% at 50% 0%,
                         rgba(212, 175, 55, 0.035) 0%,
@@ -397,6 +474,79 @@
       flex-direction: column;
       overflow: hidden;
       position: relative;
+      transition: width 0.18s ease-out, min-width 0.18s ease-out, border-color 0.18s ease-out;
+    }
+
+    body.ledger-hidden #log-panel {
+      width: 0;
+      min-width: 0;
+      max-width: 0;
+      border-left-color: transparent;
+    }
+
+    body.ledger-resizing,
+    body.ledger-resizing * {
+      cursor: ew-resize !important;
+      user-select: none !important;
+    }
+
+    body.ledger-resizing #log-panel {
+      transition: none;
+    }
+
+    #ledger-resizer {
+      position: absolute;
+      top: 0;
+      left: -5px;
+      width: 10px;
+      height: 100%;
+      z-index: 8;
+      cursor: ew-resize;
+      background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.08), transparent);
+      opacity: 0.4;
+      transition: opacity 0.14s ease-out, background 0.14s ease-out;
+    }
+
+    #ledger-resizer:hover,
+    body.ledger-resizing #ledger-resizer {
+      opacity: 1;
+      background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.24), transparent);
+    }
+
+    body.ledger-hidden #ledger-resizer {
+      display: none;
+    }
+
+    #ledger-open-toggle {
+      position: fixed;
+      top: 10px;
+      right: 0;
+      z-index: 20;
+      width: 36px;
+      height: 36px;
+      border: 1px solid rgba(212, 175, 55, 0.35);
+      border-right: 0;
+      border-radius: 6px 0 0 6px;
+      background: #0a0a0e;
+      color: #d4af37;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px;
+      line-height: 1;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 0 0 2px;
+      box-shadow: 0 0 18px rgba(0, 0, 0, 0.45);
+    }
+
+    #ledger-open-toggle:hover {
+      background: #11111c;
+      color: #f0cc50;
+    }
+
+    body.ledger-hidden #ledger-open-toggle {
+      display: flex;
     }
 
     /* Top and bottom vignette for depth - pseudo-elements so they
@@ -418,19 +568,50 @@
       background: linear-gradient(0deg, rgba(0, 0, 0, 0.45), transparent);
       pointer-events: none;
       z-index: 2;
+      display: none;
     }
 
     /* Header - "GUILD LEDGER" brass plate feel. Static gold with
        subtle embossed shadow. A thin gold hairline above and below
        frames the title like a plate rivet. */
     #log-header {
-      padding: 14px 20px 12px;
+      height: 56px;
+      padding: 0 54px;
       border-bottom: 1px solid rgba(212, 175, 55, 0.22);
       background: linear-gradient(180deg,
                   rgba(212, 175, 55, 0.04) 0%,
                   rgba(212, 175, 55, 0.015) 100%);
       flex-shrink: 0;
       position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #ledger-toggle {
+      position: absolute;
+      top: 10px;
+      left: 14px;
+      z-index: 3;
+      width: 36px;
+      height: 36px;
+      border: 1px solid rgba(212, 175, 55, 0.28);
+      border-radius: 4px;
+      background: rgba(5, 5, 7, 0.8);
+      color: #d4af37;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 0 2px;
+    }
+
+    #ledger-toggle:hover {
+      background: rgba(18, 18, 28, 0.95);
+      color: #f0cc50;
     }
     /* Hairline gold accent below the header */
     #log-header::after {
@@ -456,6 +637,7 @@
       text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7),
                    0 0 10px rgba(212, 175, 55, 0.2);
       margin: 0;
+      line-height: 1;
     }
 
     /* Scroll body - where the ledger lines live. A faint horizontal
@@ -463,6 +645,7 @@
        the header. Subtle top/bottom shadow inset gives depth. */
     #log-content {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding: 18px 20px 24px;
       font-size: 13px;
@@ -504,14 +687,20 @@
       display: flex;
       align-items: flex-start;
       gap: 8px;
-      padding: 8px 12px;
+      padding: 10px 12px;
       border-top: 1px solid #1a1710;
-      background: #060608;
+      background:
+        linear-gradient(180deg, rgba(100, 0, 0, 0.08), transparent 34%),
+        #060608;
       flex-shrink: 0;
+      max-height: min(50vh, 430px);
+      box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.36);
+      position: relative;
+      z-index: 3;
     }
 
     #log-input-prompt {
-      padding-top: 2px;
+      padding-top: 4px;
     }
 
     #log-input-prompt {
@@ -534,11 +723,23 @@
       resize: none;
       overflow-y: hidden;
       line-height: 1.5;
-      max-height: 120px;
-      scrollbar-width: none;
+      min-height: 22px;
+      max-height: min(50vh, 400px);
+      padding: 0 2px;
+      box-sizing: border-box;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(212, 175, 55, 0.35) rgba(10, 10, 14, 0.5);
     }
 
-    #log-input::-webkit-scrollbar { width: 0; }
+    #log-input::-webkit-scrollbar { width: 5px; }
+    #log-input::-webkit-scrollbar-track {
+      background: rgba(10, 10, 14, 0.5);
+      border-radius: 3px;
+    }
+    #log-input::-webkit-scrollbar-thumb {
+      background: rgba(212, 175, 55, 0.4);
+      border-radius: 3px;
+    }
 
     #log-input::placeholder {
       color: #353548;
@@ -578,6 +779,158 @@
     @keyframes promptPulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.4; }
+    }
+
+    .runtime-warning-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .runtime-warning-modal.open {
+      display: flex;
+    }
+
+    .runtime-warning-backdrop {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 50% 48%, rgba(140, 0, 0, 0.26), transparent 32%),
+        rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(6px);
+    }
+
+    .runtime-warning-box {
+      position: relative;
+      width: min(520px, calc(100vw - 40px));
+      border: 1px solid rgba(255, 36, 36, 0.55);
+      border-radius: 8px;
+      background:
+        radial-gradient(circle at 50% -20%, rgba(180, 0, 0, 0.28), transparent 42%),
+        linear-gradient(180deg, #170305 0%, #080506 64%, #030203 100%);
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.8),
+        0 0 48px rgba(190, 0, 0, 0.32),
+        inset 0 0 42px rgba(0, 0, 0, 0.7);
+      padding: 28px;
+      color: #f1d0d0;
+      text-align: center;
+      overflow: hidden;
+    }
+
+    .runtime-warning-box::before,
+    .runtime-warning-box::after {
+      content: '';
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 55, 55, 0.8), transparent);
+    }
+
+    .runtime-warning-box::before { top: 14px; }
+    .runtime-warning-box::after { bottom: 14px; }
+
+    .runtime-warning-sigil {
+      width: 62px;
+      height: 62px;
+      margin: 0 auto 16px;
+      border: 2px solid rgba(255, 45, 45, 0.78);
+      border-radius: 50%;
+      box-shadow: 0 0 24px rgba(255, 0, 0, 0.34), inset 0 0 20px rgba(255, 0, 0, 0.12);
+      position: relative;
+    }
+
+    .runtime-warning-sigil::before,
+    .runtime-warning-sigil::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 10px;
+      width: 2px;
+      height: 42px;
+      background: #ff3636;
+      transform-origin: center;
+      box-shadow: 0 0 10px rgba(255, 0, 0, 0.85);
+    }
+
+    .runtime-warning-sigil::before { transform: translateX(-50%) rotate(34deg); }
+    .runtime-warning-sigil::after { transform: translateX(-50%) rotate(-34deg); }
+
+    #runtime-warning-title {
+      margin: 0 0 10px;
+      color: #ff3c3c;
+      font-size: 18px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      text-shadow: 0 0 18px rgba(255, 0, 0, 0.55);
+    }
+
+    .runtime-warning-copy {
+      margin: 0 auto 18px;
+      max-width: 440px;
+      color: #d6b4b4;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .runtime-warning-oath {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 18px auto 20px;
+      max-width: 430px;
+      text-align: left;
+      color: #e0c0c0;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .runtime-warning-oath input {
+      margin-top: 2px;
+      accent-color: #c91515;
+    }
+
+    .runtime-warning-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .runtime-warning-actions button {
+      min-width: 150px;
+      border: 1px solid rgba(255, 55, 55, 0.4);
+      border-radius: 4px;
+      background: rgba(8, 4, 5, 0.92);
+      color: #f0c8c8;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 12px 14px;
+      cursor: pointer;
+    }
+
+    .runtime-warning-actions button:hover {
+      border-color: rgba(255, 70, 70, 0.85);
+      color: #fff0f0;
+      box-shadow: 0 0 18px rgba(180, 0, 0, 0.24);
+    }
+
+    #runtime-warning-proceed {
+      background: linear-gradient(180deg, #8a1010, #430707);
+      border-color: rgba(255, 75, 75, 0.72);
+    }
+
+    #runtime-warning-proceed:disabled {
+      opacity: 0.38;
+      cursor: not-allowed;
+      box-shadow: none;
     }
 
     @media (max-width: 900px) {
@@ -631,9 +984,7 @@
       }
 
       .char-option {
-        --char-scale: 0.74;
-        --char-selected-scale: 0.84;
-        --char-y: 8px;
+        --sprite-box-height: 150px;
         width: calc((100% - 12px) / 3);
         height: 220px;
         min-width: 0;
@@ -692,12 +1043,28 @@
       }
 
       #log-header {
-        padding: 10px 14px 9px;
+        height: 46px;
+        padding: 0 48px;
       }
 
       #log-header h2 {
         font-size: 11px;
         letter-spacing: 4px;
+      }
+
+      #ledger-toggle {
+        top: 8px;
+        left: 10px;
+        width: 30px;
+        height: 30px;
+        font-size: 20px;
+      }
+
+      #ledger-open-toggle {
+        top: 8px;
+        width: 30px;
+        height: 30px;
+        font-size: 20px;
       }
     }
   </style>
@@ -740,12 +1107,18 @@
 
       <div class="form-group">
         <label>Domain</label>
-        <input type="text" id="domain-input" value="seodungeon.com" placeholder="example.com" autocomplete="off" spellcheck="false">
+        <div class="input-action-row">
+          <input type="text" id="domain-input" value="seodungeon.com" placeholder="example.com" autocomplete="off" spellcheck="false">
+          <button id="open-domain-btn" class="input-action-button" type="button" title="Open website" aria-label="Open website">↗</button>
+        </div>
       </div>
 
       <div class="form-group">
         <label>Project Folder</label>
-        <input type="text" id="path-input" class="path-input" value="D:\seodungeon" placeholder="/path/to/your/project" autocomplete="off" spellcheck="false">
+        <div class="input-action-row">
+          <input type="text" id="path-input" class="path-input" value="D:\seodungeon" placeholder="/path/to/your/project" autocomplete="off" spellcheck="false">
+          <button id="open-folder-btn" class="input-action-button" type="button" title="Open project folder" aria-label="Open project folder"><span class="folder-glyph" aria-hidden="true"></span></button>
+        </div>
       </div>
 
       <button id="descend-btn" disabled>SEAL YOUR FATE</button>
@@ -765,7 +1138,9 @@
   </div>
 
   <div id="log-panel">
+    <div id="ledger-resizer" role="separator" aria-orientation="vertical" aria-label="Resize Guild Ledger"></div>
     <div id="log-header">
+      <button id="ledger-toggle" type="button" title="Hide Guild Ledger" aria-label="Hide Guild Ledger">›</button>
       <h2>Guild Ledger</h2>
     </div>
     <div id="log-content">
@@ -773,8 +1148,28 @@
     </div>
     <div id="log-input-bar">
       <span id="log-input-prompt">&gt;</span>
-      <textarea id="log-input" placeholder="Talk to the agent..." autocomplete="off" spellcheck="false" rows="1"></textarea>
+      <textarea id="log-input" placeholder="Talk to the Demon Lord..." autocomplete="off" spellcheck="false" rows="1"></textarea>
       <button id="log-cancel" title="Cancel (Esc x2)">&#x25A0;</button>
+    </div>
+  </div>
+  <button id="ledger-open-toggle" type="button" title="Show Guild Ledger" aria-label="Show Guild Ledger">‹</button>
+
+  <div id="runtime-warning-modal" class="runtime-warning-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="runtime-warning-title">
+    <div class="runtime-warning-backdrop"></div>
+    <div class="runtime-warning-box">
+      <div class="runtime-warning-sigil" aria-hidden="true"></div>
+      <h2 id="runtime-warning-title">A Cursed Gate Opens</h2>
+      <p class="runtime-warning-copy">
+        <span id="runtime-warning-name">This</span> mode walks outside the Codex path. Claude and Gemini have complicated provider terms and account-risk policies. SEO Dungeon is not legal advice and cannot judge that risk for you.
+      </p>
+      <label class="runtime-warning-oath">
+        <input id="runtime-warning-check" type="checkbox">
+        <span>I understand the cursed gate may carry provider or account consequences, and I choose to walk through anyway.</span>
+      </label>
+      <div class="runtime-warning-actions">
+        <button id="runtime-warning-cancel" type="button">Stay with Codex</button>
+        <button id="runtime-warning-proceed" type="button" disabled>Walk Through</button>
+      </div>
     </div>
   </div>
 

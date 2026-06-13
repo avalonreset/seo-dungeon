@@ -38,7 +38,7 @@ bash install.sh
 Remote installs default to the current release tag:
 
 ```powershell
-$env:SEO_DUNGEON_REF='v2.2.2'
+$env:SEO_DUNGEON_REF='v2.2.3'
 .\install.ps1
 ```
 

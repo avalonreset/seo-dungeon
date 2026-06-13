@@ -737,7 +737,7 @@ export class BattleScene extends Phaser.Scene {
 
     // Command descriptions - shown below menu when hovering
     this.commandDescs = [
-      'Talk to the agent. Describe what to fix or ask questions.',
+      'Talk to the Demon Lord. Describe what to fix or ask questions.',
       'Mark this demon defeated. Use when the issue is resolved.',
       'Brace for impact. The demon strikes back.',
       'Retreat to the dungeon hall. Issue stays unresolved.'
@@ -1260,7 +1260,7 @@ export class BattleScene extends Phaser.Scene {
         <div class="attack-prompt-title">⚔ COMMAND THE ${characterName}</div>
         <div class="attack-prompt-issue">${this._escapeHtml(this.issue.title)}</div>
         <textarea id="attack-prompt-input" class="attack-prompt-input" rows="6"
-          placeholder="Describe what you want the agent to fix..."></textarea>
+          placeholder="Describe what you want fixed..."></textarea>
         <div class="attack-prompt-buttons">
           <button id="attack-prompt-execute" class="attack-prompt-btn attack-prompt-execute" style="opacity: 0.4; pointer-events: none;">EXECUTE</button>
           <button id="attack-prompt-cancel" class="attack-prompt-btn attack-prompt-cancel">CANCEL</button>

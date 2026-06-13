@@ -131,7 +131,7 @@ def api_get(path, ref, headers):
                 raise ValueError(f"Response for {path!r} exceeds {_SIZE_LIMIT} bytes")
             return json.loads(data)
     except urllib.error.HTTPError as exc:
-        if exc.code == 403 and "Authorization" not in headers:
+        if exc.code in (403, 429) and "Authorization" not in headers:
             authed = _authed_headers()
             if "Authorization" in authed:
                 return api_get(path, ref, authed)

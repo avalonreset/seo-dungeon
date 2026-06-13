@@ -8,7 +8,7 @@ export class BridgeClient {
     this.handlers = new Map();
     this.requestId = 0;
     this.connected = false;
-    this._url = 'ws://localhost:3001';
+    this._url = 'ws://127.0.0.1:3001';
     this._reconnectTimer = null;
     this._onStatusChange = []; // callbacks: (connected: boolean) => void
     this.activeLedgerId = null;
@@ -219,6 +219,19 @@ export class BridgeClient {
         profile: 'fast',
         model: 'fast',
         runtime: this._runtimeFallback(),
+      }));
+    });
+  }
+
+  openFolder(projectPath) {
+    return new Promise((resolve, reject) => {
+      try { this._ensureOpen(); } catch (e) { return reject(e); }
+      const id = ++this.requestId;
+      this.handlers.set(id, { resolve, reject });
+      this.ws.send(JSON.stringify({
+        id,
+        type: 'open-folder',
+        projectPath,
       }));
     });
   }

@@ -60,7 +60,7 @@ function logFailedAudit(domain, raw, note) {
 }
 
 // ── Security: Allowed message types and rate limits ──
-const ALLOWED_TYPES = ['audit', 'fix', 'commit', 'narrate', 'chat', 'cancel'];
+const ALLOWED_TYPES = ['audit', 'fix', 'commit', 'narrate', 'chat', 'cancel', 'open-folder'];
 const MAX_CONCURRENT_PROCESSES = 5;
 const MAX_MESSAGES_PER_MINUTE = 30;
 
@@ -112,6 +112,32 @@ function validateProjectPath(projectPath) {
   } catch {
     return null;
   }
+}
+
+function revealProjectPath(projectPath) {
+  const resolved = validateProjectPath(projectPath);
+  if (!resolved) {
+    throw new Error('Project folder does not exist or is not allowed.');
+  }
+
+  const platform = process.platform;
+  const command = platform === 'win32'
+    ? path.join(process.env.WINDIR || process.env.SystemRoot || 'C:\\Windows', 'explorer.exe')
+    : platform === 'darwin'
+      ? 'open'
+      : 'xdg-open';
+
+  const child = spawn(command, [resolved], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
+    shell: false,
+  });
+  child.once('error', (err) => {
+    console.error(`Could not open folder ${resolved}: ${err.message}`);
+  });
+  child.unref();
+  return resolved;
 }
 
 /**
@@ -429,6 +455,16 @@ wss.on('connection', (ws) => {
         activeProcesses.delete(id);
       }
       safeSend(JSON.stringify({ id, type: 'error', message: 'Cancelled by user' }));
+      return;
+    }
+
+    if (type === 'open-folder') {
+      try {
+        const openedPath = revealProjectPath(projectPath);
+        safeSend(JSON.stringify({ id, type: 'result', data: { path: openedPath } }));
+      } catch (err) {
+        safeSend(JSON.stringify({ id, type: 'error', message: err.message || 'Could not open project folder' }));
+      }
       return;
     }
 

@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-06-13
+
+### Added
+- **Resizable Guild Ledger**: the right-hand ledger can now be dragged wider or
+  narrower while the dungeon view keeps its aspect-ratio aware Phaser layout.
+- **Ledger hide/show control**: added a top-left ledger button to collapse the
+  sidebar and a small reopen tab when users want the dungeon view to take the
+  full window.
+- **Responsive title stage**: the splash screen now scales with the available
+  dungeon pane when users resize or hide the Guild Ledger.
+- **Unified character sprite fitting**: the Warrior, Samurai, and Knight
+  title-screen sprites now share the same centered viewport and cannot clip when
+  the Guild Ledger is widened.
+- **Remembered title inputs**: domain, project folder, ledger width, and ledger
+  open/closed state persist across reloads and later app launches.
+- **Quick-open title actions**: added a domain button that opens the current
+  website in a new tab and a project-folder button that reveals the folder
+  through the local bridge.
+- **Demon Lord prompt composer**: the Guild Ledger prompt now auto-grows for
+  long instructions up to half the viewport, then scrolls internally without
+  covering or collapsing the ledger feed.
+- **Claude/Gemini caution modal**: selecting Claude Code or Gemini CLI now
+  opens a full-screen blood-red warning modal that requires explicit consent
+  before leaving the Codex default path.
+
+### Fixed
+- **Quick-open reliability**: the website button now normalizes bare domains
+  to real HTTPS URLs, and the project-folder button launches the native file
+  manager visibly before logging the opened path.
+- **Character scale at roomy widths**: title-screen characters now grow into
+  their cards when the Guild Ledger is narrow or hidden while still avoiding
+  clipping when the ledger is maximized.
+- **FLOW sync dry-run resilience**: the FLOW reference sync now retries GitHub
+  429 rate-limit responses with authenticated headers when `gh` is available.
+
 ## [2.2.2] - 2026-06-13
 
 ### Added

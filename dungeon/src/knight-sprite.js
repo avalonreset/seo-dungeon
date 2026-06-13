@@ -3,7 +3,7 @@
  * Crops out transparent padding and displays characters at proper size.
  */
 import { SFX } from './utils/sound-manager.js';
-import { getProfileLabel, getSelectedRuntime, setSelectedRuntime } from './profile-config.js';
+import { RUNTIME_LABELS, getProfileLabel, getSelectedRuntime, setSelectedRuntime } from './profile-config.js';
 
 export const CHARACTERS = {
   warrior: {
@@ -96,12 +96,79 @@ function initRuntimePicker() {
     if (window.selectedCharacter) window.selectedCharacter.runtime = selectedRuntime;
     refreshProfileLabels();
     if (playSound) SFX.play('menuConfirm');
+    return selectedRuntime;
   };
 
-  applyRuntime(getSelectedRuntime(), false);
+  let activeRuntime = applyRuntime(getSelectedRuntime(), false);
   buttons.forEach((button) => {
-    button.addEventListener('click', () => applyRuntime(button.dataset.runtime, true));
+    button.addEventListener('click', async () => {
+      const nextRuntime = button.dataset.runtime;
+      if (nextRuntime === activeRuntime) return;
+      if (nextRuntime !== 'codex') {
+        const accepted = await showRuntimeWarning(nextRuntime);
+        if (!accepted) {
+          applyRuntime('codex', false);
+          activeRuntime = 'codex';
+          return;
+        }
+      }
+      activeRuntime = applyRuntime(nextRuntime, true);
+    });
     button.addEventListener('mouseenter', () => SFX.play('menuHover'));
+  });
+}
+
+function showRuntimeWarning(runtime) {
+  const modal = document.getElementById('runtime-warning-modal');
+  if (!modal) return Promise.resolve(true);
+
+  const runtimeName = RUNTIME_LABELS[runtime]?.name || runtime;
+  const nameEl = document.getElementById('runtime-warning-name');
+  const check = document.getElementById('runtime-warning-check');
+  const cancel = document.getElementById('runtime-warning-cancel');
+  const proceed = document.getElementById('runtime-warning-proceed');
+  const backdrop = modal.querySelector('.runtime-warning-backdrop');
+  if (!check || !cancel || !proceed) return Promise.resolve(true);
+
+  if (nameEl) nameEl.textContent = runtimeName;
+  check.checked = false;
+  proceed.disabled = true;
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      check.removeEventListener('input', onCheck);
+      cancel.removeEventListener('click', onCancel);
+      proceed.removeEventListener('click', onProceed);
+      backdrop?.removeEventListener('click', onCancel);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+
+    const finish = (accepted) => {
+      cleanup();
+      resolve(accepted);
+    };
+
+    const onCheck = () => {
+      proceed.disabled = !check.checked;
+    };
+    const onCancel = () => finish(false);
+    const onProceed = () => {
+      if (check.checked) finish(true);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') finish(false);
+    };
+
+    check.addEventListener('input', onCheck);
+    cancel.addEventListener('click', onCancel);
+    proceed.addEventListener('click', onProceed);
+    backdrop?.addEventListener('click', onCancel);
+    document.addEventListener('keydown', onKeyDown);
+    setTimeout(() => check.focus(), 50);
   });
 }
 
@@ -157,19 +224,16 @@ function _selectionBurst(el) {
     setTimeout(() => spark.remove(), 600);
   }
 
-  // Subtle scale bounce on the canvas
-  const canvas = el.querySelector('canvas');
-  if (canvas) {
-    const style = getComputedStyle(el);
-    const lift = style.getPropertyValue('--char-y').trim() || '12px';
-    const scale = style.getPropertyValue('--char-scale').trim() || '2';
-    const selectedScale = style.getPropertyValue('--char-selected-scale').trim() || '2.15';
-    canvas.style.transition = 'transform 0.15s ease-out';
-    canvas.style.transform = `translateY(${lift}) scale(${selectedScale})`;
-    setTimeout(() => {
-      canvas.style.transform = `translateY(${lift}) scale(${scale})`;
-    }, 150);
-  }
+  // Subtle card-level pulse. Sprites stay canvas-fit so narrow layouts never
+  // clip differently per character.
+  el.animate(
+    [
+      { transform: 'scale(1)' },
+      { transform: 'scale(1.025)' },
+      { transform: 'scale(1)' },
+    ],
+    { duration: 180, easing: 'ease-out' }
+  );
 }
 
 function setupCharCanvas(charKey) {
@@ -179,8 +243,6 @@ function setupCharCanvas(charKey) {
 
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
-  canvas.style.width = CANVAS_W + 'px';
-  canvas.style.height = CANVAS_H + 'px';
 
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
@@ -188,19 +250,72 @@ function setupCharCanvas(charKey) {
   const img = new Image();
   img.src = char.idlePath;
 
-  // Calculate scale: fit character so top doesn't clip above canvas
-  const feetOffsetInCrop = char.groundY - char.cropY;
-  const maxScale = GROUND_LINE / feetOffsetInCrop;
-  const scale = Math.min(maxScale, 2.2); // cap at 2.2x
+  animState[charKey] = { img, ctx, loaded: false, frame: 0, tick: 0 };
+  img.onload = () => {
+    animState[charKey].source = computeVisibleSourceBounds(img, char);
+    animState[charKey].loaded = true;
+  };
+}
 
-  const drawW = Math.round(char.cropW * scale);
-  const drawH = Math.round(char.cropH * scale);
-  const feetOffsetScaled = Math.round(feetOffsetInCrop * scale);
-  const drawY = GROUND_LINE - feetOffsetScaled;
-  const drawX = Math.round((CANVAS_W - drawW) / 2);
+function computeVisibleSourceBounds(img, char) {
+  const sample = document.createElement('canvas');
+  sample.width = img.naturalWidth || img.width;
+  sample.height = img.naturalHeight || img.height;
+  const sampleCtx = sample.getContext('2d');
+  sampleCtx.imageSmoothingEnabled = false;
+  sampleCtx.drawImage(img, 0, 0);
 
-  animState[charKey] = { img, ctx, loaded: false, frame: 0, tick: 0, drawX, drawY, drawW, drawH };
-  img.onload = () => { animState[charKey].loaded = true; };
+  const data = sampleCtx.getImageData(0, 0, sample.width, sample.height).data;
+  let minX = char.cropW;
+  let minY = char.cropH;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let frame = 0; frame < char.idleFrames; frame++) {
+    const baseX = frame * char.frameW + char.cropX;
+    for (let y = 0; y < char.cropH; y++) {
+      for (let x = 0; x < char.cropW; x++) {
+        const px = baseX + x;
+        const py = char.cropY + y;
+        if (px < 0 || py < 0 || px >= sample.width || py >= sample.height) continue;
+        const alpha = data[(py * sample.width + px) * 4 + 3];
+        if (alpha > 8) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return { x: char.cropX, y: char.cropY, w: char.cropW, h: char.cropH };
+  }
+
+  const pad = 4;
+  const x = Math.max(0, minX - pad);
+  const y = Math.max(0, minY - pad);
+  const right = Math.min(char.cropW - 1, maxX + pad);
+  const bottom = Math.min(char.cropH - 1, maxY + pad);
+  return {
+    x: char.cropX + x,
+    y: char.cropY + y,
+    w: right - x + 1,
+    h: bottom - y + 1,
+  };
+}
+
+function measureCanvasLayout(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const cssW = Math.max(1, Math.round(rect.width));
+  const cssH = Math.max(1, Math.round(rect.height));
+  if (canvas.width !== cssW || canvas.height !== cssH) {
+    canvas.width = cssW;
+    canvas.height = cssH;
+    canvas.getContext('2d').imageSmoothingEnabled = false;
+  }
+  return { cssW, cssH };
 }
 
 function animateAll() {
@@ -211,19 +326,33 @@ function animateAll() {
     if (!state || !state.loaded) continue;
 
     const char = CHARACTERS[charKey];
+    const canvas = state.ctx.canvas;
+    const { cssW, cssH } = measureCanvasLayout(canvas);
     state.tick++;
 
     if (state.tick % interval === 0) {
       state.frame = (state.frame + 1) % char.idleFrames;
     }
 
-    state.ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    state.ctx.clearRect(0, 0, cssW, cssH);
 
-    // Draw cropped sprite, bottom-aligned to ground line
+    const source = state.source || { x: char.cropX, y: char.cropY, w: char.cropW, h: char.cropH };
+    const labelReserve = Math.max(4, Math.round(cssH * 0.02));
+    const availableW = cssW * 0.94;
+    const availableH = Math.max(1, cssH - labelReserve);
+    const fitScale = Math.min(availableW / source.w, availableH / source.h);
+    const drawW = Math.round(source.w * fitScale);
+    const drawH = Math.round(source.h * fitScale);
+    const drawX = Math.round((cssW - drawW) / 2);
+    const drawY = Math.round(cssH - drawH - labelReserve);
+
+    // Draw cropped sprite centered and bottom-aligned inside the shared
+    // viewport. Every character uses the same box, so ledger resizing cannot
+    // clip one sprite differently from the others.
     state.ctx.drawImage(
       state.img,
-      state.frame * char.frameW + char.cropX, char.cropY, char.cropW, char.cropH,
-      state.drawX, state.drawY, state.drawW, state.drawH
+      state.frame * char.frameW + source.x, source.y, source.w, source.h,
+      drawX, drawY, drawW, drawH
     );
   }
 

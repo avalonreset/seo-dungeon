@@ -37,6 +37,133 @@ window.returnToTitle = returnToTitle;
 // debugging or linkifier verification. Harmless in production.
 window.addLog = addLog;
 
+function refreshGameLayout() {
+  if (game?.scale?.refresh) {
+    requestAnimationFrame(() => game?.scale?.refresh());
+  }
+}
+
+function initResponsiveTitleStage() {
+  const gameArea = document.getElementById('game-area');
+  if (!gameArea) return;
+
+  const updateTitleScale = () => {
+    const rect = gameArea.getBoundingClientRect();
+    const titleScale = Math.min(rect.width / 960, rect.height / 900);
+    const characterScale = Math.min(rect.width / 900, rect.height / 820);
+    const clampedTitle = Math.min(Math.max(titleScale, 0.62), 1.08);
+    const clampedCharacters = Math.min(Math.max(characterScale, 0.58), 1.34);
+    document.body.style.setProperty('--title-scale', clampedTitle.toFixed(3));
+    document.body.style.setProperty('--character-scale', clampedCharacters.toFixed(3));
+  };
+
+  updateTitleScale();
+
+  if ('ResizeObserver' in window) {
+    const observer = new ResizeObserver(updateTitleScale);
+    observer.observe(gameArea);
+  } else {
+    window.addEventListener('resize', updateTitleScale);
+  }
+}
+
+function initLedgerControls() {
+  const panel = document.getElementById('log-panel');
+  const resizer = document.getElementById('ledger-resizer');
+  const hideBtn = document.getElementById('ledger-toggle');
+  const showBtn = document.getElementById('ledger-open-toggle');
+  if (!panel || !resizer || !hideBtn || !showBtn) return;
+
+  const WIDTH_KEY = 'seo_dungeon_ledger_width';
+  const HIDDEN_KEY = 'seo_dungeon_ledger_hidden';
+
+  const clampWidth = (value) => {
+    const viewport = window.innerWidth || 1200;
+    const minGameWidth = Math.min(640, Math.max(420, viewport * 0.42));
+    const maxWidth = Math.max(280, Math.min(760, viewport - minGameWidth));
+    return Math.round(Math.min(Math.max(value, 280), maxWidth));
+  };
+
+  let currentWidth = clampWidth(window.innerWidth * 0.3333);
+
+  const applyWidth = (value, persist = true, refresh = true) => {
+    const width = clampWidth(value);
+    currentWidth = width;
+    document.body.style.setProperty('--ledger-width', `${width}px`);
+    if (persist) {
+      try { localStorage.setItem(WIDTH_KEY, String(width)); } catch (_) {}
+    }
+    if (refresh) refreshGameLayout();
+  };
+
+  const setHidden = (hidden, captureVisibleWidth = true) => {
+    if (hidden) {
+      if (captureVisibleWidth) {
+        const width = panel.getBoundingClientRect().width;
+        if (width > 2) currentWidth = clampWidth(width);
+      }
+      document.body.classList.add('ledger-hidden');
+    } else {
+      document.body.classList.remove('ledger-hidden');
+      applyWidth(currentWidth, false, false);
+    }
+    hideBtn.setAttribute('aria-expanded', String(!hidden));
+    showBtn.setAttribute('aria-expanded', String(!hidden));
+    try { localStorage.setItem(HIDDEN_KEY, hidden ? '1' : '0'); } catch (_) {}
+    refreshGameLayout();
+  };
+
+  try {
+    const savedWidth = parseInt(localStorage.getItem(WIDTH_KEY) || '', 10);
+    if (Number.isFinite(savedWidth)) currentWidth = clampWidth(savedWidth);
+    applyWidth(currentWidth, false, false);
+    setHidden(localStorage.getItem(HIDDEN_KEY) === '1', false);
+  } catch (_) {
+    applyWidth(currentWidth, false, false);
+    setHidden(false);
+  }
+
+  hideBtn.addEventListener('click', () => setHidden(true));
+  showBtn.addEventListener('click', () => setHidden(false));
+
+  let startX = 0;
+  let startWidth = 0;
+  let activePointerId = null;
+
+  resizer.addEventListener('pointerdown', (event) => {
+    if (document.body.classList.contains('ledger-hidden')) return;
+    activePointerId = event.pointerId;
+    startX = event.clientX;
+    startWidth = panel.getBoundingClientRect().width;
+    document.body.classList.add('ledger-resizing');
+    resizer.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  resizer.addEventListener('pointermove', (event) => {
+    if (activePointerId !== event.pointerId) return;
+    applyWidth(startWidth + (startX - event.clientX), false);
+  });
+
+  const endResize = (event) => {
+    if (activePointerId !== event.pointerId) return;
+    activePointerId = null;
+    document.body.classList.remove('ledger-resizing');
+    try { resizer.releasePointerCapture(event.pointerId); } catch (_) {}
+    const finalWidth = panel.getBoundingClientRect().width;
+    if (finalWidth > 0) applyWidth(finalWidth, true);
+  };
+
+  resizer.addEventListener('pointerup', endResize);
+  resizer.addEventListener('pointercancel', endResize);
+
+  window.addEventListener('resize', () => {
+    if (document.body.classList.contains('ledger-hidden')) return;
+    applyWidth(currentWidth, false, false);
+    refreshGameLayout();
+  });
+}
+
 // ── Bridge Connection ──────────────────────────
 function _createDisconnectBanner() {
   if (document.getElementById('bridge-disconnect-banner')) return;
@@ -271,6 +398,8 @@ document.addEventListener('visibilitychange', () => {
 // ── Title Screen Events ────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // Init animated systems
+  initResponsiveTitleStage();
+  initLedgerControls();
   initActivityLog();
   initKnightSprite();
 
@@ -321,6 +450,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const domainInput = document.getElementById('domain-input');
   const pathInput = document.getElementById('path-input');
+  const openDomainBtn = document.getElementById('open-domain-btn');
+  const openFolderBtn = document.getElementById('open-folder-btn');
   const btn = document.getElementById('descend-btn');
   const errorArea = document.getElementById('validation-errors');
 
@@ -335,6 +466,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (savedDomain && savedDomain.trim()) domainInput.value = savedDomain;
     if (savedPath && savedPath.trim()) pathInput.value = savedPath;
   } catch (_) { /* localStorage blocked or unavailable - use HTML defaults */ }
+
+  const persistTitleInputs = () => {
+    try {
+      const domain = domainInput.value.trim();
+      const projectPath = pathInput.value.trim();
+      if (domain) localStorage.setItem(LS_DOMAIN_KEY, domain);
+      else localStorage.removeItem(LS_DOMAIN_KEY);
+      if (projectPath) localStorage.setItem(LS_PATH_KEY, projectPath);
+      else localStorage.removeItem(LS_PATH_KEY);
+    } catch (_) {}
+  };
 
   // ── Validation helpers ──────────────────────
   function cleanDomain(raw) {
@@ -353,10 +495,39 @@ document.addEventListener('DOMContentLoaded', () => {
     return raw.trim().length > 0;
   }
 
+  function normalizeWebsiteUrl(raw) {
+    const trimmed = raw.trim();
+    const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const url = new URL(withProtocol);
+    if (!/^https?:$/i.test(url.protocol) || !url.hostname.includes('.')) {
+      throw new Error('Invalid website URL');
+    }
+    return url.href;
+  }
+
+  function openWebsiteUrl(url) {
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    if (popup) {
+      try { popup.opener = null; } catch (_) {}
+      return true;
+    }
+
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    return false;
+  }
+
   function updateButtonState() {
     const domainOk = isDomainValid(domainInput.value);
     const pathOk = isPathValid(pathInput.value);
     btn.disabled = !(domainOk && pathOk && bridge.connected);
+    if (openDomainBtn) openDomainBtn.disabled = !domainOk;
+    if (openFolderBtn) openFolderBtn.disabled = !(pathOk && bridge.connected);
     // Clear error area when both valid
     if (domainOk && pathOk) {
       errorArea.textContent = bridge.connected ? '' : 'Bridge server not connected';
@@ -378,6 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
       domainInput.classList.add('invalid');
       domainInput.classList.remove('valid');
     }
+    persistTitleInputs();
     updateButtonState();
   });
 
@@ -389,7 +561,44 @@ document.addEventListener('DOMContentLoaded', () => {
       pathInput.classList.add('valid');
       pathInput.classList.remove('invalid');
     }
+    persistTitleInputs();
     updateButtonState();
+  });
+
+  openDomainBtn?.addEventListener('click', () => {
+    const raw = domainInput.value.trim();
+    if (!isDomainValid(raw)) return;
+    let url;
+    try {
+      url = normalizeWebsiteUrl(raw);
+    } catch (_) {
+      addLog('Invalid website URL.');
+      return;
+    }
+    persistTitleInputs();
+    openWebsiteUrl(url);
+    addLog(`Opening website: ${url}`);
+  });
+
+  openFolderBtn?.addEventListener('click', async () => {
+    const projectPath = pathInput.value.trim();
+    if (!projectPath) return;
+    persistTitleInputs();
+    if (!bridge.connected) {
+      addLog('Bridge not connected.');
+      return;
+    }
+    openFolderBtn.disabled = true;
+    try {
+      addLog(`Opening folder: ${projectPath}`);
+      const result = await bridge.openFolder(projectPath);
+      const openedPath = String(result?.data?.path || projectPath).replace(/\\/g, '/');
+      addLog(`Opened folder: ${openedPath}`);
+    } catch (err) {
+      addLog(`Could not open folder: ${err.message || 'unknown error'}`);
+    } finally {
+      updateButtonState();
+    }
   });
 
   // Show red border when user leaves an empty path field
@@ -489,7 +698,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!text.trim()) return;
     if (!bridge.connected) { addLog('Bridge not connected.'); return; }
     logInput.value = '';
-    logInput.style.height = 'auto'; // reset textarea height
+    logInput.style.height = 'auto';
+    logInput.style.overflowY = 'hidden';
 
     // If we're in a battle, route through doAttack so everything is synchronized
     if (game) {
@@ -535,21 +745,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Auto-resize textarea as user types - push log content up
   const logContent = document.getElementById('log-content');
+  const getMaxLogInputHeight = () => Math.min(400, Math.max(120, Math.floor(window.innerHeight * 0.5) - 28));
   const autoResize = () => {
+    const maxInputHeight = getMaxLogInputHeight();
     logInput.style.height = 'auto';
-    logInput.style.height = Math.min(logInput.scrollHeight, 120) + 'px';
-    logInput.style.overflowY = logInput.scrollHeight > 120 ? 'auto' : 'hidden';
+    logInput.style.height = Math.min(logInput.scrollHeight, maxInputHeight) + 'px';
+    logInput.style.overflowY = logInput.scrollHeight > maxInputHeight ? 'auto' : 'hidden';
     // Keep log scrolled to bottom as input grows
     if (logContent) logContent.scrollTop = logContent.scrollHeight;
   };
   logInput.addEventListener('input', autoResize);
+  window.addEventListener('resize', autoResize);
+  autoResize();
 
   logInput.addEventListener('keydown', (e) => {
     // Enter submits, Shift+Enter adds newline
     if (e.key === 'Enter' && !e.shiftKey && logInput.value.trim()) {
       e.preventDefault();
       sendLedgerCommand(logInput.value);
-      logInput.style.height = 'auto'; // reset height after send
+      autoResize();
     }
     if (e.key === 'Escape') {
       const now = Date.now();
