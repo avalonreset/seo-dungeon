@@ -1,12 +1,20 @@
-# Firecrawl Extension for Claude SEO
+# Firecrawl Extension for SEO Dungeon
 
 Full-site crawling, scraping, and site mapping powered by [Firecrawl](https://www.firecrawl.dev/). Enables comprehensive site-wide SEO analysis with JavaScript rendering support.
 
+SEO Dungeon should use `FIRECRAWL_API_KEY` from the selected project `.env` and
+direct API scripts first. The Firecrawl MCP server is an optional adapter for
+users who already prefer MCP.
+
 ## Prerequisites
 
-- [Claude SEO](https://github.com/AgriciDaniel/claude-seo) installed
-- Node.js 20+
 - Firecrawl API key ([sign up](https://www.firecrawl.dev/app/sign-up) -- free tier: 500 credits/month)
+
+Add credentials to the selected project `.env`:
+
+```bash
+FIRECRAWL_API_KEY=fc-your-api-key
+```
 
 ## Installation
 
@@ -22,7 +30,8 @@ Full-site crawling, scraping, and site mapping powered by [Firecrawl](https://ww
 .\extensions\firecrawl\install.ps1
 ```
 
-The installer will prompt for your Firecrawl API key and configure the MCP server automatically.
+The optional installer will prompt for your Firecrawl API key and configure the
+MCP adapter automatically.
 
 ## Commands
 
@@ -33,9 +42,10 @@ The installer will prompt for your Firecrawl API key and configure the MCP serve
 | `/seo firecrawl scrape <url>` | Single-page deep scrape with JS rendering | 1 |
 | `/seo firecrawl search <query> <url>` | Search within a site | 1 per result |
 
-## Integration with Claude SEO
+## Integration with SEO Dungeon
 
-When installed, other Claude SEO skills automatically leverage Firecrawl:
+When project `.env` credentials are present, SEO Dungeon skills can leverage
+Firecrawl directly:
 
 - **`/seo audit`**: Uses `map` to discover all pages, then `crawl` for deep analysis
 - **`/seo technical`**: Broken link detection across entire site
@@ -55,8 +65,9 @@ When installed, other Claude SEO skills automatically leverage Firecrawl:
 
 ## Troubleshooting
 
-**MCP not connecting?**
-- Check: `cat ~/.claude/settings.json | python3 -m json.tool | grep firecrawl`
+**Optional MCP adapter not connecting?**
+- Normal SEO Dungeon audits do not require MCP.
+- If you intentionally use the adapter, check: `cat ~/.claude/settings.json | python3 -m json.tool | grep firecrawl`
 - Manual config: See [FIRECRAWL-SETUP.md](docs/FIRECRAWL-SETUP.md)
 
 **Credits exhausted?**
@@ -79,4 +90,4 @@ When installed, other Claude SEO skills automatically leverage Firecrawl:
 
 - [Firecrawl Documentation](https://docs.firecrawl.dev/)
 - [Firecrawl MCP Server](https://www.npmjs.com/package/firecrawl-mcp)
-- [Claude SEO](https://github.com/AgriciDaniel/claude-seo)
+- [SEO Dungeon](https://github.com/avalonreset/seo-dungeon)

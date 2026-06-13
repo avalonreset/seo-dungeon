@@ -1,8 +1,11 @@
-# MCP Integration
+# Optional MCP Integration
 
 ## Overview
 
-SEO Dungeon can integrate with Model Context Protocol (MCP) servers to access external APIs and enhance analysis capabilities.
+SEO Dungeon does not require Model Context Protocol (MCP) servers for normal
+audits. DataForSEO, Firecrawl, and Google workflows should use project `.env`
+credentials and direct API/scripts first. MCP servers remain optional adapters
+for users who already run them and want reusable tool-style access.
 
 ## Available Integrations
 
@@ -23,7 +26,10 @@ curl -H "X-Goog-Api-Key: $GOOGLE_API_KEY" \
 
 ### Google Search Console
 
-For organic search data, use the `mcp-server-gsc` MCP server by [ahonn](https://github.com/ahonn/mcp-server-gsc). Provides search performance data, URL inspection, and sitemap management.
+For organic search data, SEO Dungeon can use Google credentials directly through
+the Google SEO scripts. If you already prefer MCP, the `mcp-server-gsc` server by
+[ahonn](https://github.com/ahonn/mcp-server-gsc) can provide search performance
+data, URL inspection, and sitemap management.
 
 **Configuration:**
 
@@ -71,7 +77,7 @@ The MCP ecosystem for SEO has matured significantly. These are production-ready 
 | **Semrush** | `https://mcp.semrush.com/v1/mcp` | Official (remote) | Full API access via remote MCP endpoint. Domain analytics, keyword research, backlink data. |
 | **Google Search Console** | `mcp-server-gsc` | Community | By ahonn. Search performance, URL inspection, sitemaps. |
 | **PageSpeed Insights** | `mcp-server-pagespeed` | Community | By enemyrr. Lighthouse audits, CWV metrics, performance scoring. |
-| **DataForSEO** | `dataforseo-mcp-server` | Official extension | 9 modules, 79 tools, 22 commands. Install: `./extensions/dataforseo/install.sh`. See [extension docs](../extensions/dataforseo/README.md). |
+| **DataForSEO** | Project `.env` first; optional `dataforseo-mcp-server` | Official extension | 9 modules, 79 tools, 22 commands. See [extension docs](../extensions/dataforseo/README.md). |
 | **kwrds.ai** | kwrds MCP server | Community | Keyword research, search volume, difficulty scoring. |
 | **SEO Review Tools** | SEO Review Tools MCP | Community | Site auditing and on-page analysis API. |
 

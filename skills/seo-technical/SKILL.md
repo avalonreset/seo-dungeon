@@ -10,7 +10,7 @@ argument-hint: "[url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
@@ -186,7 +186,7 @@ agent UX heuristics) are early — don't gate audits on a sub-100 score.
 
 ## DataForSEO Integration (Optional)
 
-If DataForSEO MCP tools are available, use `on_page_instant_pages` for real page analysis (status codes, page timing, broken links, on-page checks), `on_page_lighthouse` for Lighthouse audits (performance, accessibility, SEO scores), and `domain_analytics_technologies_domain_technologies` for technology stack detection.
+If DataForSEO credentials or optional tools are available, use direct DataForSEO calls for real page analysis (status codes, page timing, broken links, on-page checks), Lighthouse audits, and technology stack detection.
 
 ## Google API Integration (Optional)
 

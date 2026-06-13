@@ -1,6 +1,6 @@
 # DataForSEO Account Setup
 
-Step-by-step guide to getting DataForSEO API credentials for the Claude SEO extension.
+Step-by-step guide to getting DataForSEO API credentials for SEO Dungeon.
 
 ## 1. Create Account
 
@@ -18,7 +18,16 @@ New accounts include a free trial balance for testing.
    - **Username**: Your registered email address
    - **Password**: Your API password (set during registration)
 
-These are the values you'll enter when running the extension installer.
+These are the values to place in the selected project `.env`:
+
+```bash
+DATAFORSEO_USERNAME=your-email@example.com
+DATAFORSEO_PASSWORD=your-api-password
+```
+
+`DATAFORSEO_LOGIN` is also accepted as an alias for `DATAFORSEO_USERNAME`.
+SEO Dungeon forwards these credentials to the selected local CLI for direct API
+calls. No MCP setup is required for normal audits.
 
 ## 3. Understanding Credits
 
@@ -40,9 +49,10 @@ DataForSEO uses a credit-based system:
 | On-page crawl (per page) | $0.01-0.05 |
 | AI optimization (per call) | $0.01 |
 
-## 4. Manual MCP Configuration
+## 4. Optional MCP Configuration
 
-If the installer's auto-configuration fails, add this to `~/.claude/settings.json`:
+If you intentionally want a reusable MCP adapter, add this to
+`~/.claude/settings.json`:
 
 ```json
 {
@@ -63,12 +73,12 @@ If the installer's auto-configuration fails, add this to `~/.claude/settings.jso
 
 Replace the username, password, and FIELD_CONFIG_PATH with your actual values.
 
-## 5. Verify Installation
+## 5. Verify Credentials
 
-After installing, start Claude Code and run:
+After saving `.env`, start SEO Dungeon and run:
 
 ```
 /seo dataforseo serp test query
 ```
 
-If you see search results, the extension is working correctly.
+If you see search results, the credentials are working correctly.

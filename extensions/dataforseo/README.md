@@ -1,12 +1,24 @@
-# DataForSEO Extension for Claude SEO
+# DataForSEO Extension for SEO Dungeon
 
-Live SEO data via the [DataForSEO MCP server](https://github.com/dataforseo/mcp-server-typescript). Adds 22 commands across 9 API modules: SERP analysis, keyword research, backlinks, on-page analysis, competitor analysis, content analysis, business listings, AI visibility checking, and LLM mention tracking.
+Live SEO data via DataForSEO API credentials. Adds 22 commands across 9 API
+modules: SERP analysis, keyword research, backlinks, on-page analysis,
+competitor analysis, content analysis, business listings, AI visibility
+checking, and LLM mention tracking.
+
+SEO Dungeon should use project `.env` credentials and direct API scripts first.
+The DataForSEO MCP server is an optional adapter for users who already prefer
+MCP.
 
 ## Prerequisites
 
-- [Claude SEO](https://github.com/AgriciDaniel/claude-seo) installed
-- Node.js 20+
 - [DataForSEO account](https://app.dataforseo.com/register) with API credentials
+
+Add credentials to the selected project `.env`:
+
+```bash
+DATAFORSEO_USERNAME=your-login
+DATAFORSEO_PASSWORD=your-password
+```
 
 ## Installation
 
@@ -26,10 +38,10 @@ cd claude-seo
 .\extensions\dataforseo\install.ps1
 ```
 
-The installer will:
+The optional extension installer will:
 1. Prompt for your DataForSEO username and password
 2. Install the skill and agent files
-3. Configure the MCP server in `~/.claude/settings.json`
+3. Configure the optional MCP adapter in `~/.claude/settings.json`
 4. Pre-download the `dataforseo-mcp-server` npm package
 
 ## Commands
@@ -118,9 +130,10 @@ New accounts include a free trial balance. See [DataForSEO pricing](https://data
 
 The extension includes a custom `field-config.json` that reduces API response sizes by ~75%, keeping only SEO-relevant fields. This saves tokens and speeds up analysis.
 
-## Integration with Claude SEO
+## Integration with SEO Dungeon
 
-When installed, other Claude SEO skills automatically detect DataForSEO availability and use live data:
+When project `.env` credentials are present, SEO Dungeon skills can use live
+DataForSEO data directly:
 
 - **`/seo audit`**:Uses real SERP, backlink, and on-page data
 - **`/seo technical`**:Uses on-page analysis for real technical data
@@ -130,15 +143,15 @@ When installed, other Claude SEO skills automatically detect DataForSEO availabi
 
 ## Troubleshooting
 
-### MCP server not connecting
+### Optional MCP adapter not connecting
 
-1. Check credentials: `cat ~/.claude/settings.json | grep DATAFORSEO`
-2. Test manually: `npx -y dataforseo-mcp-server`
-3. Re-run installer: `./extensions/dataforseo/install.sh`
+Normal SEO Dungeon audits do not require MCP. If you intentionally use the MCP
+adapter, check credentials in the adapter config and test manually with
+`npx -y dataforseo-mcp-server`.
 
 ### API errors
 
-- **401 Unauthorized**: Check username/password in settings.json
+- **401 Unauthorized**: Check username/password in the selected project `.env`
 - **402 Payment Required**: Add credits at [app.dataforseo.com](https://app.dataforseo.com)
 - **429 Rate Limited**: Wait and retry (DataForSEO has per-second limits)
 
@@ -160,10 +173,10 @@ If a specific command fails, check that the module is in `ENABLED_MODULES` in yo
 .\extensions\dataforseo\uninstall.ps1
 ```
 
-This removes the skill, agent, field config, and MCP server entry from settings.json.
+This removes the skill, agent, field config, and optional MCP server entry from settings.json.
 
 ## Links
 
 - [DataForSEO API Docs](https://docs.dataforseo.com/)
 - [DataForSEO MCP Server](https://github.com/dataforseo/mcp-server-typescript)
-- [Claude SEO](https://github.com/AgriciDaniel/claude-seo)
+- [SEO Dungeon](https://github.com/avalonreset/seo-dungeon)

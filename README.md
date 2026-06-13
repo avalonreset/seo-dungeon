@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2.5-blue)](CHANGELOG.md)
 [![Runtime](https://img.shields.io/badge/runtime-Codex%20%7C%20Claude%20%7C%20Gemini-2ea44f)](dungeon/)
 
 SEO Dungeon turns SEO audits into a 16-bit dungeon crawler. Enter a domain,
@@ -135,6 +135,28 @@ Runtime environment:
 
 Set a model variable to `default`, `auto`, or `none` to let that CLI use its own
 configured default model.
+
+### Project API Credentials
+
+SEO Dungeon treats the selected project folder as the credential source for
+audit integrations. Add a `.env` or `.env.local` file at that project root when
+you want live data:
+
+```bash
+DATAFORSEO_USERNAME=your-login
+DATAFORSEO_PASSWORD=your-password
+FIRECRAWL_API_KEY=fc-your-api-key
+GOOGLE_API_KEY=your-google-api-key
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account.json
+GSC_SITE_URL=https://example.com/
+GA4_PROPERTY_ID=123456789
+```
+
+The bridge forwards known SEO-related keys from the project `.env` into the
+selected local CLI. DataForSEO, Firecrawl, and Google workflows should use those
+credentials directly first. MCP servers are optional adapters: if you already
+have one configured, an agent may use it quietly, but SEO Dungeon does not
+require MCP setup for audits.
 
 First audits can take 5-10 minutes because `/seo audit` fans out many tool
 calls. Cached audits are much faster.

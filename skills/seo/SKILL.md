@@ -6,7 +6,7 @@ argument-hint: "[command] [url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
@@ -60,9 +60,9 @@ When the user invokes `/seo audit`, delegate to subagents in parallel:
 2. Spawn subagents: seo-technical, seo-content, seo-schema, seo-sitemap, seo-performance, seo-visual, seo-geo
 3. If Google API credentials detected (`python3 scripts/google_auth.py --check`), also spawn seo-google agent
 4. If local business detected, also spawn seo-local agent
-5. If local business detected AND DataForSEO MCP available, also spawn seo-maps agent
+5. If local business detected AND DataForSEO credentials or optional tools are available, also spawn seo-maps agent
 6. If backlink APIs detected (`python3 scripts/backlinks_auth.py --check`), also spawn seo-backlinks agent
-7. If Firecrawl MCP available, use `firecrawl_map` to discover all site URLs before analysis
+7. If `FIRECRAWL_API_KEY` or an optional Firecrawl adapter is available, use Firecrawl to discover site URLs before analysis; otherwise fall back to sitemap and page-discovery scripts
 8. If content strategy signals detected (blog, pillar pages, topic clusters), also spawn seo-cluster agent
 9. If e-commerce detected, also spawn seo-ecommerce agent
 10. If drift baseline exists for this URL (`python3 scripts/drift_history.py <url>`), also spawn seo-drift agent
@@ -221,23 +221,24 @@ orchestrate itself, so it is not enumerated below.
 19. **seo-sxo** -- Search Experience Optimization (contributed by Florian Schmitz)
 20. **seo-drift** -- SEO drift monitoring (contributed by Dan Colta)
 21. **seo-ecommerce** -- E-commerce SEO intelligence (contributed by Matej Marjanovic)
-22. **seo-dataforseo** -- Live SEO data via DataForSEO MCP (extension mirror)
+22. **seo-dataforseo** -- Live SEO data via DataForSEO credentials (extension mirror)
 23. **seo-image-gen** -- AI image generation for SEO assets via Gemini (extension mirror)
 24. **seo-flow** -- FLOW framework integration (Find -> Leverage -> Optimize -> Win, 41 AI prompts, CC BY 4.0)
 
 ### Optional Extensions
 
-The following ship in `extensions/` rather than `skills/` and require a separate
-installer to activate (see each extension's `install.sh`/`install.ps1`):
+The following ship in `extensions/` rather than `skills/`. DataForSEO and
+Firecrawl should use selected-project `.env` credentials by default; their
+installers are optional for users who want adapter setup:
 
 Of the optional extensions, firecrawl, dataforseo, and image-gen are reachable
 through `/seo` subcommands. Ahrefs, Bing, Profound, SE Ranking, and Unlighthouse
 install as standalone skills invoked by their own descriptions. The model
 auto-routes to those triggers, not through `/seo <name>`.
 
-- **seo-firecrawl** -- Full-site crawling and site mapping via Firecrawl MCP. Install
-  via `extensions/firecrawl/install.sh` (Unix) or `extensions/firecrawl/install.ps1`
-  (Windows). Once installed, invoke via `/seo firecrawl <command>`.
+- **seo-firecrawl** -- Full-site crawling and site mapping via Firecrawl
+  credentials. Add `FIRECRAWL_API_KEY` to the selected project `.env`; install
+  the optional adapter only if desired. Invoke via `/seo firecrawl <command>`.
 
 ## Subagents
 
@@ -250,7 +251,7 @@ For parallel analysis during audits:
 - `seo-visual` -- Screenshots, mobile testing, above-fold
 - `seo-geo` -- AI crawler access, llms.txt, citability, brand mention signals
 - `seo-local` -- GBP signals, NAP consistency, reviews, local schema, industry-specific local factors (conditional: spawned when Local Service detected)
-- `seo-maps` -- Geo-grid rank tracking, GBP audit, review intelligence, competitor radius mapping (conditional: spawned when Local Service detected AND DataForSEO MCP available)
+- `seo-maps` -- Geo-grid rank tracking, GBP audit, review intelligence, competitor radius mapping (conditional: spawned when Local Service detected AND DataForSEO credentials/tools are available)
 - `seo-google` -- CWV field data, URL indexation status, organic traffic trends (conditional: spawned when Google API credentials detected)
 - `seo-backlinks` -- Backlink profile data: DA/PA, referring domains, anchor text, toxic links (conditional: spawned when Moz/Bing API keys detected or always for CC domain-level metrics)
 - `seo-cluster` -- Semantic clustering analysis (conditional: content strategy detected)

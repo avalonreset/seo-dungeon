@@ -13,7 +13,7 @@ argument-hint: "[url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
@@ -270,7 +270,7 @@ Generate `GEO-ANALYSIS.md` with:
 
 ## DataForSEO Integration (Optional)
 
-If DataForSEO MCP tools are available, use `ai_optimization_chat_gpt_scraper` to check what ChatGPT web search returns for target queries (real GEO visibility check) and `ai_opt_llm_ment_search` with `ai_opt_llm_ment_top_domains` for LLM mention tracking across AI platforms.
+If DataForSEO credentials or optional tools are available, use direct DataForSEO calls to check what ChatGPT web search returns for target queries (real GEO visibility check) and to run LLM mention tracking across AI platforms.
 
 ## Error Handling
 

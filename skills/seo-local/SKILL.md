@@ -15,7 +15,7 @@ argument-hint: "[url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
@@ -298,7 +298,7 @@ Generate `LOCAL-SEO-ANALYSIS-{domain}.md` with:
 
 ## DataForSEO Integration (Optional)
 
-If DataForSEO MCP tools are available, use `local_business_data` for live GBP data extraction, `google_local_pack_serp` for real-time local pack positions, and `business_listings` for automated citation auditing across directories.
+If DataForSEO credentials or optional tools are available, use direct DataForSEO calls for live GBP data extraction, real-time local pack positions, and automated citation auditing across directories.
 
 ---
 

@@ -13,7 +13,7 @@ license: MIT
 metadata:
   author: AgriciDaniel
   original_author: "Florian Schmitz (Pro Hub Challenge)"
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
@@ -167,7 +167,7 @@ Read `references/wireframe-templates.md` for templates.
 
 ## DataForSEO Integration
 
-If DataForSEO MCP tools are available:
+If DataForSEO credentials or optional tools are available:
 
 1. **Before any API call**, run cost estimate and confirm with user
 2. Use `google_organic_serp` for precise SERP data (positions, features, snippets)

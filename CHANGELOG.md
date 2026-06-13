@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.5] - 2026-06-13
+
+### Added
+- **Project `.env` integration path**: the dungeon bridge now forwards known
+  SEO-related keys from the selected project `.env` and `.env.local` into the
+  selected local CLI, including DataForSEO, Firecrawl, Google, GA4, GSC, and
+  Railway variables.
+- **Direct API helpers**: added lightweight DataForSEO and Firecrawl scripts so
+  live SEO data and crawl workflows can run from project credentials without
+  requiring MCP setup.
+
+### Changed
+- **Env-first audit policy**: audit and chat prompts now instruct Codex, Claude,
+  and Gemini to prefer direct API/script access from project credentials, using
+  MCP servers only as quiet optional adapters when already available.
+- **Integration docs**: DataForSEO, Firecrawl, Google, and extension docs now
+  frame MCP as optional instead of required for normal SEO Dungeon audits.
+
 ## [2.2.4] - 2026-06-13
 
 ### Changed

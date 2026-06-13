@@ -317,6 +317,75 @@ function splitArgs(value) {
   });
 }
 
+const PROJECT_ENV_EXACT_KEYS = new Set([
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'GEMINI_API_KEY',
+  'PAGESPEED_API_KEY',
+  'CLAUDE_CONFIG_DIR',
+  'GEMINI_CONFIG_DIR',
+  'GOOGLE_APPLICATION_CREDENTIALS',
+  'GSC_PROPERTY',
+  'GSC_SITE_URL',
+  'GA4_PROPERTY_ID',
+]);
+
+const PROJECT_ENV_PREFIXES = [
+  'DATAFORSEO_',
+  'FIRECRAWL_',
+  'GOOGLE_',
+  'RAILWAY_',
+  'SEO_DUNGEON_',
+];
+
+function shouldForwardProjectEnv(key) {
+  return PROJECT_ENV_EXACT_KEYS.has(key) ||
+    PROJECT_ENV_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+function unquoteEnvValue(value) {
+  const trimmed = String(value || '').trim();
+  if (trimmed.length >= 2) {
+    const quote = trimmed[0];
+    if ((quote === '"' || quote === "'") && trimmed.endsWith(quote)) {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
+}
+
+function readDotEnvFile(filePath) {
+  const values = {};
+  try {
+    if (!fs.existsSync(filePath)) return values;
+    const source = fs.readFileSync(filePath, 'utf8');
+    for (const line of source.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const index = trimmed.indexOf('=');
+      if (index <= 0) continue;
+      const key = trimmed.slice(0, index).trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+      if (!shouldForwardProjectEnv(key)) continue;
+      values[key] = unquoteEnvValue(trimmed.slice(index + 1));
+    }
+  } catch (err) {
+    console.warn(`  [env] Could not read ${filePath}: ${err.message}`);
+  }
+  return values;
+}
+
+function projectEnv(cwd) {
+  const values = {};
+  if (!cwd) return values;
+  for (const name of ['.env', '.env.local']) {
+    Object.assign(values, readDotEnvFile(path.join(cwd, name)));
+  }
+  return values;
+}
+
 function getPathEnv() {
   return process.env.PATH || process.env.Path || process.env.path || '';
 }
@@ -461,7 +530,7 @@ function resolveCliLaunch(execPath) {
 /**
  * Build a minimal environment for child processes.
  */
-function safeEnv() {
+function safeEnv(cwd) {
   const pathEnv = getPathEnv();
   const env = { HOME: process.env.HOME };
   if (pathEnv) {
@@ -487,6 +556,10 @@ function safeEnv() {
   if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
   if (process.env.TEMP) env.TEMP = process.env.TEMP;
   if (process.env.TMP) env.TMP = process.env.TMP;
+  for (const [key, value] of Object.entries(process.env)) {
+    if (shouldForwardProjectEnv(key) && value) env[key] = value;
+  }
+  Object.assign(env, projectEnv(cwd));
   return env;
 }
 
@@ -619,7 +692,7 @@ wss.on('connection', (ws) => {
         }
         const result = await runAudit(domain, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
-        }, undefined, id, agentOptions);
+        }, fixCwd, id, agentOptions);
         activeProcesses.delete(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Audit done: ${result.issues.length} issues, score ${result.score}`);
@@ -758,7 +831,7 @@ Format as a single JSON object. Return ONLY valid JSON at the very end (no markd
 
 Quality over quantity. Each issue should be a real battle worth fighting, not busywork.`;
 
-  const raw = await runAgent(prompt, onStream, undefined, requestId, agentOptions);
+  const raw = await runAgent(prompt, onStream, cwd, requestId, agentOptions);
 
   // Try to extract structured audit data from the agent response.
   const parsed = _tryParseAudit(raw, domain);
@@ -976,10 +1049,18 @@ function normalizeProfile(profile) {
 function runAgent(prompt, onStream, cwd, requestId, options = {}) {
   const runtime = normalizeRuntime(options.runtime);
   const profile = normalizeProfile(options.profile);
+  const policy = [
+    'SEO Dungeon runtime policy:',
+    '- Treat credentials in the selected project .env as the primary integration path.',
+    '- Prefer direct scripts/APIs for DataForSEO, Firecrawl, Google Search Console, GA4, CrUX, and PageSpeed when credentials are present.',
+    '- MCP servers are optional adapters. Use them quietly if already available, but do not require them, inventory them, or tell the user they are needed unless the user explicitly asks about MCP setup.',
+    '- If an optional integration is unavailable, continue with available sources and mention the skipped data briefly only when it affects the result.'
+  ].join('\n');
+  const effectivePrompt = `${policy}\n\n${prompt}`;
   if (runtime === 'claude' || runtime === 'gemini') {
-    return runTextCli(runtime, prompt, onStream, cwd, requestId, profile);
+    return runTextCli(runtime, effectivePrompt, onStream, cwd, requestId, profile);
   }
-  return runCodex(prompt, onStream, cwd, requestId, profile);
+  return runCodex(effectivePrompt, onStream, cwd, requestId, profile);
 }
 
 function getCodexProfileConfig(profile) {
@@ -1063,7 +1144,7 @@ function runTextCli(runtime, prompt, onStream, cwd, requestId, profile) {
     console.log(`  CWD: ${workDir}`);
     const proc = spawn(launch.command, launchArgs, {
       cwd: workDir,
-      env: safeEnv(),
+      env: safeEnv(workDir),
       shell: launch.shell,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
@@ -1159,7 +1240,7 @@ function runCodex(prompt, onStream, cwd, requestId, profile) {
     console.log(`  CWD: ${workDir}`);
     const proc = spawn(launch.command, launchArgs, {
       cwd: workDir,
-      env: safeEnv(),
+      env: safeEnv(workDir),
       shell: launch.shell,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true

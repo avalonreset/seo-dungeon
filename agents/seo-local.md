@@ -60,7 +60,7 @@ Load `skills/seo/references/local-schema-types.md` for:
 
 ## DataForSEO Integration (Optional)
 
-If DataForSEO MCP tools are available, use `local_business_data` for live GBP data and `google_local_pack_serp` for real-time local pack positions.
+If DataForSEO credentials or optional tools are available, use direct DataForSEO calls for live GBP data and real-time local pack positions.
 
 ## Output Format
 

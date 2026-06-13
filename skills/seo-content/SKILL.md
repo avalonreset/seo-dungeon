@@ -9,7 +9,7 @@ argument-hint: "[url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
@@ -183,7 +183,7 @@ Per Google's AI optimization guide, "AEO" and "GEO" are rebranded labels for SEO
 
 ## DataForSEO Integration (Optional)
 
-If DataForSEO MCP tools are available, use `kw_data_google_ads_search_volume` for real keyword volume data, `dataforseo_labs_bulk_keyword_difficulty` for difficulty scores, `dataforseo_labs_search_intent` for intent classification, and `content_analysis_summary` for content quality analysis.
+If DataForSEO credentials or optional tools are available, use direct DataForSEO calls for real keyword volume data, difficulty scores, intent classification, and content quality analysis.
 
 ## Error Handling
 

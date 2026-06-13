@@ -12,7 +12,7 @@ argument-hint: "[url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
@@ -406,4 +406,4 @@ For maximum image SEO, run this pipeline on each image:
 | Images behind CDN or authentication | Note that image files could not be directly accessed for size analysis. Report available metadata (alt text, dimensions, format from markup) and flag inaccessible resources. |
 | exiftool not installed | Fall back to ImageMagick for metadata. Recommend: `sudo apt install libimage-exiftool-perl` |
 | cwebp not installed | Fall back to ImageMagick or FFmpeg for WebP conversion. Recommend: `sudo apt install webp` |
-| DataForSEO MCP not available | Skip Image SERP Analysis section. Note extension is not installed. |
+| DataForSEO credentials/tools unavailable | Skip Image SERP Analysis section and continue with on-page image checks. |

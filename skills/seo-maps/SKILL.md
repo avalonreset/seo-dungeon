@@ -16,7 +16,7 @@ license: MIT
 compatibility: "DataForSEO MCP for Tier 1+, Google Maps API for Tier 2"
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
@@ -51,12 +51,12 @@ website-level checks.
 Before any analysis, detect the available capability tier:
 
 ### Tier 0 (Free)
-**Detection:** DataForSEO MCP tools NOT available.
+**Detection:** DataForSEO credentials/tools not available.
 **Capabilities:** Overpass API competitor discovery, Geoapify POI search, Nominatim geocoding, static GBP checklist, schema generation, cross-platform NAP guidance.
 **Load:** `../seo/references/maps-free-apis.md`
 
 ### Tier 1 (DataForSEO)
-**Detection:** `business_data_business_listings_search` MCP tool IS available.
+**Detection:** DataForSEO credentials are present in the selected project environment, or an optional DataForSEO adapter is already available.
 **Capabilities:** Everything in Tier 0 PLUS geo-grid rank tracking, live GBP profile audit, review intelligence (velocity, sentiment, distribution), GBP post activity, Q&A data, Tripadvisor/Trustpilot reviews.
 **Load:** `../seo/references/maps-api-endpoints.md`
 

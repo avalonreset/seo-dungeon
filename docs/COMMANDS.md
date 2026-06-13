@@ -477,9 +477,10 @@ AI image generation for SEO assets (extension). Powered by Gemini via nanobanana
 
 ### `/seo firecrawl [command] <url>`
 
-Full-site crawling and URL discovery via Firecrawl MCP (extension).
+Full-site crawling and URL discovery via Firecrawl credentials.
 
-**Prerequisites:** Firecrawl extension installed (`./extensions/firecrawl/install.sh`)
+**Prerequisites:** `FIRECRAWL_API_KEY` in the selected project `.env` or an
+already-configured optional Firecrawl adapter.
 
 **Examples:**
 ```
@@ -497,9 +498,11 @@ Full-site crawling and URL discovery via Firecrawl MCP (extension).
 
 ### `/seo dataforseo [command]`
 
-Live SEO data via DataForSEO MCP server (extension). 22 commands across 9 API modules.
+Live SEO data via DataForSEO credentials. 22 commands across 9 API modules.
 
-**Prerequisites:** DataForSEO extension installed (`./extensions/dataforseo/install.sh`)
+**Prerequisites:** `DATAFORSEO_USERNAME` or `DATAFORSEO_LOGIN` plus
+`DATAFORSEO_PASSWORD` in the selected project `.env`, or an already-configured
+optional DataForSEO adapter.
 
 **SERP Analysis:**
 ```

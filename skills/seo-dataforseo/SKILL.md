@@ -1,42 +1,44 @@
 ---
 name: seo-dataforseo
 description: >
-  Live SEO data via DataForSEO MCP server. SERP analysis (Google, Bing, Yahoo,
+  Live SEO data via DataForSEO API credentials. SERP analysis (Google, Bing, Yahoo,
   YouTube, Google Images), keyword research (volume, difficulty, intent, trends),
   backlink profiles, on-page analysis (Lighthouse, content parsing), competitor
   analysis, content analysis, business listings, AI visibility (ChatGPT scraper,
-  LLM mention tracking), and domain analytics. Requires DataForSEO extension
-  installed. Use when user says "dataforseo", "live SERP", "keyword volume",
+  LLM mention tracking), and domain analytics. Uses DataForSEO credentials from the selected project `.env`; MCP tools are optional adapters when already available. Use when user says "dataforseo", "live SERP", "keyword volume",
   "backlink data", "competitor data", "AI visibility check", "LLM mentions",
   "image SERP", "google images", "image rankings", or "real search data".
 user-invocable: true
 argument-hint: "[command] [query]"
 license: MIT
-compatibility: "Requires DataForSEO MCP server"
+compatibility: "Uses DATAFORSEO_USERNAME or DATAFORSEO_LOGIN plus DATAFORSEO_PASSWORD from project .env; MCP optional"
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
 # DataForSEO: Live SEO Data (Extension)
 
-Live search data via the DataForSEO MCP server. Provides real-time SERP results
+Live search data via DataForSEO API credentials. Provides real-time SERP results
 (organic + images), keyword metrics, backlink profiles, on-page analysis, content
 analysis, business listings, AI visibility checking, and LLM mention tracking
-across 10 API modules with 79+ MCP tools.
+across 10 API modules. MCP tools may be used when already configured, but are not required.
 
 ## Prerequisites
 
-This skill requires the DataForSEO extension to be installed:
+Set credentials in the selected project `.env`:
+
 ```bash
-./extensions/dataforseo/install.sh
+DATAFORSEO_USERNAME=your-login
+DATAFORSEO_PASSWORD=your-password
 ```
 
-**Check availability:** Before using any DataForSEO tool, verify the MCP server
-is connected by checking if `serp_organic_live_advanced` or any DataForSEO tool
-is available. If tools are not available, inform the user the extension is not
-installed and provide install instructions.
+`DATAFORSEO_LOGIN` is also accepted as an alias for `DATAFORSEO_USERNAME`.
+The extension installer and MCP server are optional for users who already
+prefer MCP.
+
+**Check availability:** First check for `DATAFORSEO_USERNAME` or `DATAFORSEO_LOGIN` plus `DATAFORSEO_PASSWORD` in the selected project environment. Use `python scripts/dataforseo_api.py ...` or specialized scripts for direct API calls. If an optional DataForSEO adapter is already available, you may use it quietly, but do not require MCP setup or spend context inventorying MCP servers unless the user asks.
 
 ## API Credit Awareness
 
@@ -48,7 +50,7 @@ DataForSEO charges per API call. Be efficient:
 
 ## Cost Guardrails
 
-**Before every DataForSEO MCP call**, run cost estimation:
+**Before every DataForSEO API call**, run cost estimation:
 ```
 python3 scripts/dataforseo_costs.py check <endpoint> [--count N]
 ```
@@ -105,7 +107,7 @@ Load `references/cost-tiers.md` for the full pricing table, budget presets, and 
 
 Fetch live Google organic search results.
 
-**MCP tools:** `serp_organic_live_advanced`
+**Direct API operation:** `serp_organic_live_advanced`
 
 **Default parameters:** location_code=2840 (US), language_code=en, device=desktop, depth=100
 
@@ -117,7 +119,7 @@ Fetch live Google organic search results.
 
 Fetch YouTube search results. Valuable for GEO. YouTube mentions correlate most strongly with AI citations.
 
-**MCP tools:** `serp_youtube_organic_live_advanced`
+**Direct API operation:** `serp_youtube_organic_live_advanced`
 
 **Output:** Video title, channel, views, upload date, description, URL.
 
@@ -125,7 +127,7 @@ Fetch YouTube search results. Valuable for GEO. YouTube mentions correlate most 
 
 Deep analysis of a specific YouTube video: info, comments, and subtitles. YouTube mentions have the strongest correlation (0.737) with AI visibility, making this critical for GEO analysis.
 
-**MCP tools:** `serp_youtube_video_info_live_advanced`, `serp_youtube_video_comments_live_advanced`, `serp_youtube_video_subtitles_live_advanced`
+**Direct API operation:** `serp_youtube_video_info_live_advanced`, `serp_youtube_video_comments_live_advanced`, `serp_youtube_video_subtitles_live_advanced`
 
 **Parameters:** video_id (the YouTube video ID, e.g., "dQw4w9WgXcQ")
 
@@ -136,7 +138,7 @@ Deep analysis of a specific YouTube video: info, comments, and subtitles. YouTub
 Fetch live Google Images search results. See which images rank for a keyword,
 which domains dominate image results, and identify visual content opportunities.
 
-**MCP tools:** `serp_google_images_live_advanced`
+**Direct API operation:** `serp_google_images_live_advanced`
 
 **Default parameters:** location_code=2840 (US), language_code=en, device=desktop, depth=100
 
@@ -160,7 +162,7 @@ which domains dominate image results, and identify visual content opportunities.
 
 Generate keyword ideas, suggestions, and related terms from a seed keyword.
 
-**MCP tools:** `dataforseo_labs_google_keyword_ideas`, `dataforseo_labs_google_keyword_suggestions`, `dataforseo_labs_google_related_keywords`
+**Direct API operation:** `dataforseo_labs_google_keyword_ideas`, `dataforseo_labs_google_keyword_suggestions`, `dataforseo_labs_google_related_keywords`
 
 **Default parameters:** location_code=2840 (US), language_code=en, limit=50
 
@@ -170,7 +172,7 @@ Generate keyword ideas, suggestions, and related terms from a seed keyword.
 
 Get search volume and metrics for a list of keywords.
 
-**MCP tools:** `kw_data_google_ads_search_volume`
+**Direct API operation:** `kw_data_google_ads_search_volume`
 
 **Parameters:** keywords (array, comma-separated), location_code, language_code
 
@@ -180,7 +182,7 @@ Get search volume and metrics for a list of keywords.
 
 Calculate keyword difficulty scores for ranking competitiveness.
 
-**MCP tools:** `dataforseo_labs_bulk_keyword_difficulty`
+**Direct API operation:** `dataforseo_labs_bulk_keyword_difficulty`
 
 **Parameters:** keywords (array), location_code, language_code
 
@@ -190,7 +192,7 @@ Calculate keyword difficulty scores for ranking competitiveness.
 
 Classify keywords by user search intent.
 
-**MCP tools:** `dataforseo_labs_search_intent`
+**Direct API operation:** `dataforseo_labs_search_intent`
 
 **Parameters:** keywords (array), location_code, language_code
 
@@ -200,7 +202,7 @@ Classify keywords by user search intent.
 
 Analyze keyword trends over time using Google Trends data.
 
-**MCP tools:** `kw_data_google_trends_explore`
+**Direct API operation:** `kw_data_google_trends_explore`
 
 **Parameters:** keywords (array), location_code, date_from, date_to, language_code
 
@@ -214,7 +216,7 @@ Analyze keyword trends over time using Google Trends data.
 
 Comprehensive backlink profile analysis.
 
-**MCP tools:** `backlinks_summary`, `backlinks_backlinks`, `backlinks_anchors`, `backlinks_referring_domains`, `backlinks_bulk_spam_score`, `backlinks_timeseries_summary`
+**Direct API operation:** `backlinks_summary`, `backlinks_backlinks`, `backlinks_anchors`, `backlinks_referring_domains`, `backlinks_bulk_spam_score`, `backlinks_timeseries_summary`
 
 **Default parameters:** limit=100 per sub-call
 
@@ -224,7 +226,7 @@ Comprehensive backlink profile analysis.
 
 Identify competing domains and estimate traffic.
 
-**MCP tools:** `dataforseo_labs_google_competitors_domain`, `dataforseo_labs_google_domain_rank_overview`, `dataforseo_labs_bulk_traffic_estimation`
+**Direct API operation:** `dataforseo_labs_google_competitors_domain`, `dataforseo_labs_google_domain_rank_overview`, `dataforseo_labs_bulk_traffic_estimation`
 
 **Output:** Competitor domains, keyword overlap %, estimated traffic, domain rank, common keywords.
 
@@ -232,7 +234,7 @@ Identify competing domains and estimate traffic.
 
 List keywords a domain ranks for with positions and page data.
 
-**MCP tools:** `dataforseo_labs_google_ranked_keywords`, `dataforseo_labs_google_relevant_pages`
+**Direct API operation:** `dataforseo_labs_google_ranked_keywords`, `dataforseo_labs_google_relevant_pages`
 
 **Default parameters:** limit=100, location_code=2840
 
@@ -242,7 +244,7 @@ List keywords a domain ranks for with positions and page data.
 
 Find shared keywords and backlink sources across 2-20 domains.
 
-**MCP tools:** `dataforseo_labs_google_domain_intersection`, `backlinks_domain_intersection`
+**Direct API operation:** `dataforseo_labs_google_domain_intersection`, `backlinks_domain_intersection`
 
 **Parameters:** domains (2-20 array)
 
@@ -252,7 +254,7 @@ Find shared keywords and backlink sources across 2-20 domains.
 
 Estimate organic search traffic for one or more domains.
 
-**MCP tools:** `dataforseo_labs_bulk_traffic_estimation`
+**Direct API operation:** `dataforseo_labs_bulk_traffic_estimation`
 
 **Parameters:** domains (array)
 
@@ -262,7 +264,7 @@ Estimate organic search traffic for one or more domains.
 
 Enumerate subdomains with their ranking data and traffic estimates.
 
-**MCP tools:** `dataforseo_labs_google_subdomains`
+**Direct API operation:** `dataforseo_labs_google_subdomains`
 
 **Parameters:** target (domain), location_code, language_code
 
@@ -272,7 +274,7 @@ Enumerate subdomains with their ranking data and traffic estimates.
 
 Find the most popular search queries that mention a specific domain in results.
 
-**MCP tools:** `dataforseo_labs_google_top_searches`
+**Direct API operation:** `dataforseo_labs_google_top_searches`
 
 **Parameters:** target (domain), location_code, language_code
 
@@ -286,7 +288,7 @@ Find the most popular search queries that mention a specific domain in results.
 
 Run on-page analysis including Lighthouse audit and content parsing.
 
-**MCP tools:** `on_page_instant_pages`, `on_page_content_parsing`, `on_page_lighthouse`
+**Direct API operation:** `on_page_instant_pages`, `on_page_content_parsing`, `on_page_lighthouse`
 
 **Usage:**
 - `on_page_instant_pages`:Quick page analysis (status codes, meta tags, content size, page timing, broken links, on-page checks)
@@ -299,7 +301,7 @@ Run on-page analysis including Lighthouse audit and content parsing.
 
 Detect technologies used on a domain.
 
-**MCP tools:** `domain_analytics_technologies_domain_technologies`
+**Direct API operation:** `domain_analytics_technologies_domain_technologies`
 
 **Output:** Technology name, version, category (CMS, analytics, CDN, framework, etc.).
 
@@ -307,7 +309,7 @@ Detect technologies used on a domain.
 
 Retrieve WHOIS registration data.
 
-**MCP tools:** `domain_analytics_whois_overview`
+**Direct API operation:** `domain_analytics_whois_overview`
 
 **Output:** Registrar, creation date, expiration date, nameservers, registrant info (if public).
 
@@ -319,7 +321,7 @@ Retrieve WHOIS registration data.
 
 Analyze content quality, search for content by topic, and track phrase trends.
 
-**MCP tools:** `content_analysis_search`, `content_analysis_summary`, `content_analysis_phrase_trends`
+**Direct API operation:** `content_analysis_search`, `content_analysis_summary`, `content_analysis_phrase_trends`
 
 **Parameters:** keyword (for search/trends) or URL (for summary)
 
@@ -329,7 +331,7 @@ Analyze content quality, search for content by topic, and track phrase trends.
 
 Search business listings for local SEO competitive analysis.
 
-**MCP tools:** `business_data_business_listings_search`
+**Direct API operation:** `business_data_business_listings_search`
 
 **Parameters:** keyword, location (optional)
 
@@ -343,7 +345,7 @@ Search business listings for local SEO competitive analysis.
 
 Scrape what ChatGPT web search returns for a query. Real GEO visibility check: see which sources ChatGPT cites for your target keywords.
 
-**MCP tools:** `ai_optimization_chat_gpt_scraper`
+**Direct API operation:** `ai_optimization_chat_gpt_scraper`
 
 **Parameters:** query, location_code (optional), language_code (optional). Use `ai_optimization_chat_gpt_scraper_locations` to look up available locations.
 
@@ -353,7 +355,7 @@ Scrape what ChatGPT web search returns for a query. Real GEO visibility check: s
 
 Track how LLMs mention brands, domains, and topics. Critical for GEO. Measures actual AI visibility across multiple LLM platforms.
 
-**MCP tools:** `ai_opt_llm_ment_search`, `ai_opt_llm_ment_top_domains`, `ai_opt_llm_ment_top_pages`, `ai_opt_llm_ment_agg_metrics`
+**Direct API operation:** `ai_opt_llm_ment_search`, `ai_opt_llm_ment_top_domains`, `ai_opt_llm_ment_top_pages`, `ai_opt_llm_ment_agg_metrics`
 
 **Parameters:** keyword, location_code (optional), language_code (optional). Use `ai_opt_llm_ment_loc_and_lang` for available locations/languages and `ai_optimization_llm_models` for supported LLM models.
 
@@ -371,11 +373,11 @@ Track how LLMs mention brands, domains, and topics. Critical for GEO. Measures a
 
 ## Available Utility Tools
 
-Additional DataForSEO MCP tools are available for internal use but do not have dedicated commands. Load `references/tool-catalog.md` when you need to find a specific utility tool (location lookups, bulk operations, historical data, filter options).
+Additional DataForSEO API operations are available for internal use but do not have dedicated commands. Load `references/tool-catalog.md` when you need to find a specific utility tool (location lookups, bulk operations, historical data, filter options).
 
 ## Cross-Skill Integration
 
-When DataForSEO MCP tools are available, other claude-seo skills can leverage live data:
+When DataForSEO credentials are available, other SEO Dungeon skills can leverage live data. Optional MCP tools can be used when already configured:
 
 - **seo-audit**:Spawn `seo-dataforseo` agent for real SERP, backlink, on-page, and listings data
 - **seo-technical**:Use `on_page_instant_pages` / `on_page_lighthouse` for real crawl data, `domain_analytics_technologies_domain_technologies` for stack detection
@@ -387,8 +389,8 @@ When DataForSEO MCP tools are available, other claude-seo skills can leverage li
 
 ## Error Handling
 
-- **MCP server not connected**: Report that DataForSEO extension is not installed or MCP server is unreachable. Suggest running `./extensions/dataforseo/install.sh`
-- **API authentication failed**: Report invalid credentials. Suggest checking DataForSEO API login/password in MCP config
+- **Credentials not found**: Ask the user to add `DATAFORSEO_USERNAME` or `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` to the selected project `.env`. Do not block on MCP setup.
+- **API authentication failed**: Report invalid credentials. Suggest checking DataForSEO login/password in the selected project `.env`.
 - **Rate limit exceeded**: Report the limit hit and suggest waiting before retrying
 - **No results returned**: Report "no data found" for the query rather than guessing. Suggest broadening the query or checking location/language codes
 - **Invalid location code**: Report the error and suggest using the locations lookup tool to find the correct code

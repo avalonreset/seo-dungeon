@@ -1,31 +1,32 @@
 ---
 name: seo-firecrawl
 description: >
-  Full-site crawling, scraping, and site mapping via Firecrawl MCP.
+  Full-site crawling, scraping, and site mapping via Firecrawl API credentials.
   Use when user says "crawl site", "map site", "full crawl",
   "find all pages", "broken links", "site structure",
   "discover pages", "JS rendering", or needs site-wide analysis.
 user-invocable: true
 argument-hint: "[command] <url>"
 license: MIT
-compatibility: "Requires Firecrawl MCP server"
+compatibility: "Uses FIRECRAWL_API_KEY from project .env; MCP optional"
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
-# Firecrawl Extension for Claude SEO
+# Firecrawl Extension for SEO Dungeon
 
-This skill requires the Firecrawl extension to be installed:
+Set credentials in the selected project `.env`:
+
 ```bash
-./extensions/firecrawl/install.sh
+FIRECRAWL_API_KEY=fc-your-api-key
 ```
 
-**Check availability:** Before using any Firecrawl tool, verify the MCP server
-is connected by checking if `firecrawl_scrape` or any Firecrawl tool
-is available. If tools are not available, inform the user the extension is not
-installed and provide install instructions.
+The extension installer and MCP server are optional for users who already
+prefer MCP.
+
+**Check availability:** First check for `FIRECRAWL_API_KEY` in the selected project environment. Use `python scripts/firecrawl_api.py ...` for direct API calls. If an optional Firecrawl adapter is already available, you may use it quietly, but do not require MCP setup or spend context inventorying MCP servers unless the user asks.
 
 ## Quick Reference
 
@@ -43,7 +44,7 @@ installed and provide install instructions.
 Crawl an entire website starting from the given URL. Returns page content,
 metadata, and links for all discovered pages.
 
-**MCP Tool:** `firecrawl_crawl`
+**Direct API helper / optional MCP operation:** `python scripts/firecrawl_api.py crawl ...` or `firecrawl_crawl`
 
 **Parameters:**
 - `url` (required): Starting URL to crawl
@@ -78,7 +79,7 @@ metadata, and links for all discovered pages.
 
 Discover all URLs on a website without fetching content. Fast and credit-efficient.
 
-**MCP Tool:** `firecrawl_map`
+**Direct API operation:** `firecrawl_map`
 
 **Parameters:**
 - `url` (required): Website URL to map
@@ -110,7 +111,7 @@ URL Pattern Breakdown:
 Scrape a single page with full JavaScript rendering. More thorough than
 `fetch_page.py` because it executes JS and waits for dynamic content.
 
-**MCP Tool:** `firecrawl_scrape`
+**Direct API operation:** `firecrawl_scrape`
 
 **Parameters:**
 - `url` (required): Page URL to scrape
@@ -141,7 +142,7 @@ Scrape a single page with full JavaScript rendering. More thorough than
 Search within a website for specific content. Useful for finding pages
 related to a topic without crawling everything.
 
-**MCP Tool:** `firecrawl_search`
+**Direct API operation:** `firecrawl_search`
 
 **Parameters:**
 - `query` (required): Search query
@@ -190,7 +191,7 @@ When Firecrawl is available during `/seo audit`:
 
 | Error | Cause | Resolution |
 |-------|-------|-----------|
-| `FIRECRAWL_API_KEY not set` | MCP not configured | Run `./extensions/firecrawl/install.sh` |
+| `FIRECRAWL_API_KEY not set` | Missing project env credential | Add `FIRECRAWL_API_KEY` to the selected project `.env` |
 | `402 Payment Required` | Credits exhausted | Check usage at firecrawl.dev/app, upgrade plan |
 | `429 Too Many Requests` | Rate limited | Wait 60s, reduce crawl concurrency |
 | `408 Timeout` | Page too slow to render | Increase `timeout`, try without JS rendering |
@@ -199,4 +200,4 @@ When Firecrawl is available during `/seo audit`:
 **Graceful fallback:** If Firecrawl is unavailable, inform the user and suggest:
 1. Use `fetch_page.py` for single-page analysis (no API cost)
 2. Use `WebFetch` tool for basic HTML retrieval
-3. Install Firecrawl: `./extensions/firecrawl/install.sh`
+3. Add `FIRECRAWL_API_KEY` to the selected project `.env`; install the MCP adapter only if desired

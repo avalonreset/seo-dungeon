@@ -7,9 +7,20 @@
 3. Navigate to **API Keys** in the dashboard
 4. Copy your API key (starts with `fc-`)
 
-## 2. Run the Installer
+## 2. Add Project Credentials
 
-The installer handles everything automatically:
+For SEO Dungeon, the normal path is a `.env` file at the selected project root:
+
+```bash
+FIRECRAWL_API_KEY=fc-your-api-key-here
+```
+
+The app bridge forwards this key to the selected local CLI for direct API calls.
+No MCP setup is required for normal audits.
+
+## 3. Optional MCP Installer
+
+If you intentionally want the optional MCP adapter, run the installer:
 
 ```bash
 ./extensions/firecrawl/install.sh
@@ -17,7 +28,7 @@ The installer handles everything automatically:
 
 It will prompt for your API key and configure the MCP server.
 
-## 3. Manual MCP Configuration
+## 4. Manual MCP Configuration
 
 If the installer fails, add this to `~/.claude/settings.json` manually:
 
@@ -35,17 +46,18 @@ If the installer fails, add this to `~/.claude/settings.json` manually:
 }
 ```
 
-## 4. Verify Installation
+## 5. Verify Credentials
 
-Start Claude Code and try:
+Start SEO Dungeon and try:
 
 ```
 /seo firecrawl map https://example.com
 ```
 
-You should see a list of discovered URLs. If you get a "tool not available" error, restart Claude Code to reload MCP servers.
+You should see a list of discovered URLs. If you intentionally use MCP and get a
+"tool not available" error, restart your CLI to reload MCP servers.
 
-## 5. Understanding Credits
+## 6. Understanding Credits
 
 | Operation | Credits Used |
 |-----------|-------------|

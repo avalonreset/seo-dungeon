@@ -10,7 +10,7 @@ argument-hint: "[url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.2.4"
+  version: "2.2.5"
   category: seo
 ---
 
@@ -83,7 +83,7 @@ Ready-to-use JSON-LD code for detected opportunities
 
 ## DataForSEO Integration (Optional)
 
-If DataForSEO MCP tools are available, use `serp_organic_live_advanced` for real SERP positions and `backlinks_summary` for backlink data and spam scores.
+If DataForSEO credentials or optional tools are available, use direct DataForSEO calls for real SERP positions and backlink data with spam scores.
 
 ## Error Handling
 

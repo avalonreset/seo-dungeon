@@ -225,11 +225,14 @@ User Request (e.g., /seo page)
 
 ## Extensions
 
-Extensions are opt-in add-ons that integrate external data sources via MCP servers. They live in `extensions/<name>/` and ship their own install / uninstall scripts.
+Extensions are opt-in add-ons that integrate external data sources through
+project `.env` credentials and direct scripts first. MCP servers are optional
+adapters for users who already run them. Extension mirrors live in
+`extensions/<name>/` and ship their own install / uninstall scripts.
 
 ```
 extensions/
-├── dataforseo/               # DataForSEO MCP integration
+├── dataforseo/               # DataForSEO direct API + optional MCP adapter
 │   ├── README.md
 │   ├── install.sh
 │   ├── install.ps1
@@ -250,7 +253,7 @@ extensions/
 │   ├── references/           # 7 reference files (prompt engineering, models, presets)
 │   └── docs/BANANA-SETUP.md
 │
-└── firecrawl/                # Firecrawl MCP for full-site crawling
+└── firecrawl/                # Firecrawl direct API + optional MCP adapter
     ├── README.md
     ├── install.sh
     ├── install.ps1
@@ -263,16 +266,16 @@ extensions/
 
 | Extension | Package (pinned) | What it adds |
 |-----------|------------------|--------------|
-| **DataForSEO** | `dataforseo-mcp-server@2.8.10` | Live SERP data, keyword research, backlinks, on-page analysis, business listings, AI visibility, LLM mention tracking |
+| **DataForSEO** | Project `.env` credentials; optional `dataforseo-mcp-server@2.8.10` | Live SERP data, keyword research, backlinks, on-page analysis, business listings, AI visibility, LLM mention tracking |
 | **Banana Image Gen** | `@ycse/nanobanana-mcp@1.1.1` | AI image generation for SEO assets via Gemini (OG images, hero images, product photos, infographics, batch) |
-| **Firecrawl** | `firecrawl-mcp@3.11.0` | Full-site crawling and URL discovery for audits |
+| **Firecrawl** | Project `.env` credentials; optional `firecrawl-mcp@3.11.0` | Full-site crawling and URL discovery for audits |
 
 ### Extension Convention
 
 1. Self-contained in `extensions/<name>/`
-2. Own `install.sh` and `install.ps1` that copy files and configure MCP (where applicable)
+2. Own `install.sh` and `install.ps1` that copy files and may configure optional MCP adapters where applicable
 3. Own `uninstall.sh` and `uninstall.ps1` that reverse installation
 4. Installs the sub-skill mirror to the plugin's skill directory
 5. Installs the sub-agent mirror to the plugin's agent directory
-6. Merges MCP config into the selected local CLI's settings non-destructively
-7. MCP server versions are pinned (`@<version>`) for supply-chain stability
+6. Prefer project `.env` credentials and direct scripts for normal SEO Dungeon audits
+7. If an optional MCP adapter is installed, merge config into the selected local CLI's settings non-destructively and pin versions (`@<version>`) for supply-chain stability
