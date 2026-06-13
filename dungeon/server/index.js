@@ -17,6 +17,34 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 // the fact instead of lost. One file per failure, timestamped.
 const LOG_DIR = path.resolve(__dirname, '..', '.logs');
 try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch (_) {}
+const BRIDGE_LOG_FILE = process.env.SEO_DUNGEON_BRIDGE_LOG || path.join(LOG_DIR, 'bridge.log');
+let consoleFileLoggerInstalled = false;
+
+function serializeLogPart(part) {
+  if (typeof part === 'string') return part;
+  if (part instanceof Error) return part.stack || part.message;
+  try { return JSON.stringify(part); } catch (_) { return String(part); }
+}
+
+function appendBridgeLog(level, args) {
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    const line = `[${new Date().toISOString()}] [${level}] ${args.map(serializeLogPart).join(' ')}\n`;
+    fs.appendFileSync(BRIDGE_LOG_FILE, line);
+  } catch (_) {}
+}
+
+function installConsoleFileLogger() {
+  if (consoleFileLoggerInstalled || process.env.SEO_DUNGEON_BRIDGE_LOG === '0') return;
+  consoleFileLoggerInstalled = true;
+  for (const level of ['log', 'warn', 'error']) {
+    const original = console[level].bind(console);
+    console[level] = (...args) => {
+      original(...args);
+      appendBridgeLog(level, args);
+    };
+  }
+}
 
 function logFailedAudit(domain, raw, note) {
   try {
@@ -208,6 +236,31 @@ function selectWindowsCliCandidate(command) {
   return candidates[0] || command;
 }
 
+function resolveNpmPowerShellShim(ps1Path) {
+  try {
+    const source = fs.readFileSync(ps1Path, 'utf8');
+    const match = source.match(/node\$exe"\s+([^"\r\n]*?)"\$basedir[\\/](.*?\.js)"\s+\$args/);
+    if (!match) return null;
+
+    const basedir = path.dirname(ps1Path);
+    const nodeExe = fs.existsSync(path.join(basedir, 'node.exe'))
+      ? path.join(basedir, 'node.exe')
+      : 'node.exe';
+    const nodeArgs = splitArgs(match[1] || '');
+    const scriptPath = path.join(basedir, ...match[2].split(/[\\/]/));
+    if (!fs.existsSync(scriptPath)) return null;
+
+    return {
+      command: nodeExe,
+      argsPrefix: [...nodeArgs, scriptPath],
+      shell: false,
+      display: `${ps1Path} -> ${scriptPath}`
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 function resolveCliLaunch(execPath) {
   const raw = String(execPath || '').trim();
   if (!raw) throw new Error('CLI executable path is empty.');
@@ -223,6 +276,9 @@ function resolveCliLaunch(execPath) {
   }
 
   if (ext === '.ps1') {
+    const npmShim = resolveNpmPowerShellShim(selected);
+    if (npmShim) return npmShim;
+
     const powershell = process.env.SystemRoot
       ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
       : 'powershell.exe';
@@ -288,6 +344,13 @@ function createSpawnError(runtime, err, launch) {
     ? ' On Windows this usually means the command resolved to a blocked script shim; set the matching SEO_DUNGEON_*_CLI variable to a .cmd, .bat, or .exe path.'
     : '';
   return new Error(`Failed to spawn ${runtime} CLI (${display}): ${err.message}.${hint} Is ${runtime} installed and authenticated?`);
+}
+
+function summarizeCliFailure(runtime, code, stderr, stdout) {
+  const text = String(stderr || stdout || '').trim();
+  if (!text) return `${runtime} CLI exited with code ${code}`;
+  const firstLine = text.split(/\r?\n/).find((line) => line.trim())?.trim() || text;
+  return `${runtime} CLI exited with code ${code}: ${firstLine}`;
 }
 
 wss.on('connection', (ws) => {
@@ -872,7 +935,8 @@ function runTextCli(runtime, prompt, onStream, cwd, requestId, profile) {
       if (lineBuffer.trim()) onStream(lineBuffer.trim());
       console.log(`  ${normalizedRuntime} CLI finished (exit ${code}), ${fullText.length} chars`);
       if (code !== 0) {
-        settle(reject, new Error(`${normalizedRuntime} CLI exited with code ${code}: ${stderr || fullText}`));
+        console.error(`  ${normalizedRuntime} CLI stderr: ${stderr || fullText}`);
+        settle(reject, new Error(summarizeCliFailure(normalizedRuntime, code, stderr, fullText)));
         return;
       }
       try {
@@ -989,7 +1053,8 @@ function runCodex(prompt, onStream, cwd, requestId, profile) {
 
       console.log(`  Codex finished (exit ${code}), ${fullText.length} chars`);
       if (code !== 0) {
-        settle(reject, new Error(`Codex exited with code ${code}: ${stderr}`));
+        console.error(`  Codex stderr: ${stderr}`);
+        settle(reject, new Error(summarizeCliFailure('Codex', code, stderr, fullText)));
         return;
       }
       try {
@@ -1012,6 +1077,7 @@ function runCodex(prompt, onStream, cwd, requestId, profile) {
 }
 
 function startBridge() {
+  installConsoleFileLogger();
   // Catch crashes only in the live bridge. Tests import this module and should
   // fail normally instead of being swallowed by global handlers.
   process.on('uncaughtException', (err) => {
@@ -1023,6 +1089,7 @@ function startBridge() {
 
   console.log('SEO Dungeon - Bridge Server');
   console.log('─'.repeat(40));
+  console.log(`Bridge log: ${BRIDGE_LOG_FILE}`);
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`Bridge listening on ws://127.0.0.1:${PORT} (localhost only)`);
     console.log(`Agent provider: ${resolveAgentProvider()}`);

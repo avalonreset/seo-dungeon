@@ -92,6 +92,12 @@ Confirm Gemini CLI is available on `PATH`:
 gemini --version
 ```
 
+If Gemini reports `GEMINI_API_KEY` is required, configure Gemini CLI auth or set:
+
+```powershell
+$env:GEMINI_API_KEY='your-key'
+```
+
 The bridge default is:
 
 ```text
@@ -172,6 +178,19 @@ Then compare later:
 ```
 
 ## Debug Artifacts
+
+Live bridge logs are mirrored to:
+
+```text
+dungeon/.logs/bridge.log
+```
+
+Watch them while testing the app:
+
+```bash
+cd dungeon
+npm run logs
+```
 
 Failed audit parsing writes evidence files under:
 

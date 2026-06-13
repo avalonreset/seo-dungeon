@@ -11,7 +11,7 @@ argument-hint: "[url or plan]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.2.1"
+  version: "2.2.2"
   category: seo
 ---
 

@@ -1,6 +1,6 @@
 {
   "name": "seo-dungeon",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "A 16-bit dungeon crawler interface for local AI SEO audits",
   "scripts": {
     "start": "node launch.js",
@@ -9,6 +9,7 @@
     "game": "vite",
     "build": "vite build",
     "test:cli": "node tests/cli-launcher.mjs",
+    "logs": "node scripts/watch-logs.mjs",
     "serve": "npx serve dist -l 3000 -s"
   },
   "dependencies": {

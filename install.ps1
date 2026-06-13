@@ -37,7 +37,7 @@ function Get-SourceDir {
     }
 
     $repo = if ($env:SEO_DUNGEON_REPO) { $env:SEO_DUNGEON_REPO } else { "https://github.com/avalonreset/seo-dungeon" }
-    $ref = if ($env:SEO_DUNGEON_REF) { $env:SEO_DUNGEON_REF } else { "v2.2.1" }
+    $ref = if ($env:SEO_DUNGEON_REF) { $env:SEO_DUNGEON_REF } else { "v2.2.2" }
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
     New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
     $checkout = Join-Path $tempDir "seo-dungeon"

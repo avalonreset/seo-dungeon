@@ -1,6 +1,6 @@
 [project]
 name = "seo-dungeon"
-version = "2.2.1"
+version = "2.2.2"
 description = "Gamified SEO Dungeon skill suite with local AI CLI compatibility"
 requires-python = ">=3.10"
 license = "MIT"

@@ -41,9 +41,21 @@ try {
   const fakeBase = path.join(tmp, 'fakeagent');
   const fakeCmd = `${fakeBase}.cmd`;
   const fakePs1 = `${fakeBase}.ps1`;
+  const fakeJs = path.join(tmp, 'node_modules', 'fakeagent', 'bin', 'fakeagent.js');
   fs.writeFileSync(fakeBase, 'extensionless shim\n', 'utf8');
   fs.writeFileSync(fakeCmd, '@echo off\r\necho fakeagent\r\n', 'utf8');
-  fs.writeFileSync(fakePs1, 'Write-Output fakeagent\r\n', 'utf8');
+  fs.mkdirSync(path.dirname(fakeJs), { recursive: true });
+  fs.writeFileSync(fakeJs, 'console.log("fakeagent")\n', 'utf8');
+  fs.writeFileSync(fakePs1, `#!/usr/bin/env pwsh
+$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent
+$exe=".exe"
+if (Test-Path "$basedir/node$exe") {
+  & "$basedir/node$exe" --no-warnings=DEP0040 "$basedir/node_modules/fakeagent/bin/fakeagent.js" $args
+} else {
+  & "node$exe" --no-warnings=DEP0040 "$basedir/node_modules/fakeagent/bin/fakeagent.js" $args
+}
+exit $LASTEXITCODE
+`, 'utf8');
 
   const testPath = `${tmp}${path.delimiter}${savedEnv.PATH || savedEnv.Path || savedEnv.path || ''}`;
   process.env.PATH = testPath;
@@ -52,10 +64,10 @@ try {
 
   const fakeLaunch = bridge.resolveCliLaunch('fakeagent');
   if (process.platform === 'win32') {
-    assert.equal(fakeLaunch.display.toLowerCase(), fakePs1.toLowerCase());
-    assert.match(fakeLaunch.command, /powershell\.exe$/i);
+    assert.equal(fakeLaunch.command, 'node.exe');
     assert.equal(fakeLaunch.shell, false);
-    assert.deepEqual(fakeLaunch.argsPrefix.slice(-2), ['-File', fakePs1]);
+    assert.deepEqual(fakeLaunch.argsPrefix, ['--no-warnings=DEP0040', fakeJs]);
+    assert.match(fakeLaunch.display, /fakeagent\.ps1 -> .*fakeagent\.js$/i);
   } else {
     assert.equal(fakeLaunch.command, 'fakeagent');
     assert.equal(fakeLaunch.shell, false);
@@ -63,9 +75,9 @@ try {
 
   const ps1Launch = bridge.resolveCliLaunch(fakePs1);
   if (process.platform === 'win32') {
-    assert.match(ps1Launch.command, /powershell\.exe$/i);
-    assert.equal(ps1Launch.display.toLowerCase(), fakePs1.toLowerCase());
-    assert.deepEqual(ps1Launch.argsPrefix.slice(-2), ['-File', fakePs1]);
+    assert.equal(ps1Launch.command, 'node.exe');
+    assert.match(ps1Launch.display, /fakeagent\.ps1 -> .*fakeagent\.js$/i);
+    assert.deepEqual(ps1Launch.argsPrefix, ['--no-warnings=DEP0040', fakeJs]);
     assert.equal(ps1Launch.shell, false);
   } else {
     assert.equal(ps1Launch.command, fakePs1);
@@ -108,6 +120,10 @@ try {
   assert.deepEqual(
     bridge.insertPromptArg(['--prompt', '{{prompt}}', '--model', 'flash'], 'hello'),
     ['--prompt', 'hello', '--model', 'flash']
+  );
+  assert.deepEqual(
+    bridge.insertPromptArg(['exec', '--json'], 'multi word prompt stays together'),
+    ['exec', '--json', 'multi word prompt stays together']
   );
 
   console.log('CLI launcher tests passed');

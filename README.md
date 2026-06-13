@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2.2-blue)](CHANGELOG.md)
 [![Runtime](https://img.shields.io/badge/runtime-Codex%20%7C%20Claude%20%7C%20Gemini-2ea44f)](dungeon/)
 
 SEO Dungeon turns SEO audits into a 16-bit dungeon crawler. Enter a domain,
@@ -98,6 +98,16 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000). The bridge server starts on
 port `3001`.
 
+For live development visibility, keep a second terminal open:
+
+```bash
+cd dungeon
+npm run logs
+```
+
+The bridge mirrors startup, runtime selection, CLI executable paths, child
+exits, and errors to `dungeon/.logs/bridge.log`.
+
 Runtime environment:
 
 | Variable | Default | Purpose |
@@ -116,6 +126,7 @@ Runtime environment:
 | `SEO_DUNGEON_GEMINI_MODEL_DEEP` | `pro` | Gemini Warrior model alias |
 | `SEO_DUNGEON_GEMINI_MODEL_BALANCED` | `flash` | Gemini Samurai model alias |
 | `SEO_DUNGEON_GEMINI_MODEL_FAST` | `flash-lite` | Gemini Knight model alias |
+| `GEMINI_API_KEY` | unset | Required by Gemini CLI when it is not authenticated through another supported Gemini CLI auth path |
 | `SEO_DUNGEON_CLAUDE_ARGS` | `--print --output-format text --permission-mode acceptEdits` | Claude CLI argument template |
 | `SEO_DUNGEON_GEMINI_ARGS` | `--prompt {{prompt}} --output-format text --approval-mode auto_edit` | Gemini CLI argument template |
 
