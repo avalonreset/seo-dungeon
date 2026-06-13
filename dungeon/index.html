@@ -114,6 +114,115 @@
       background: #d4af37;
     }
 
+    #danger-mode-toggle {
+      display: inline-grid;
+      grid-template-columns: auto 1fr auto;
+      grid-template-rows: auto auto;
+      column-gap: calc(10px * var(--title-scale));
+      row-gap: calc(2px * var(--title-scale));
+      align-items: center;
+      justify-content: center;
+      width: min(100%, calc(318px * var(--title-scale)));
+      margin: 0 0 calc(8px * var(--title-scale));
+      padding: calc(8px * var(--title-scale)) calc(14px * var(--title-scale));
+      border: 1px solid rgba(126, 28, 28, 0.72);
+      border-radius: calc(6px * var(--title-scale));
+      background:
+        radial-gradient(circle at 50% 0%, rgba(155, 26, 26, 0.18), transparent 62%),
+        rgba(12, 6, 8, 0.92);
+      color: #8c6f6f;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      text-transform: uppercase;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.45);
+      transition: border-color 0.15s, color 0.15s, background 0.15s, box-shadow 0.15s;
+    }
+
+    #danger-mode-toggle .danger-sigil {
+      color: #b63b3b;
+      font-size: clamp(15px, calc(18px * var(--title-scale)), 19px);
+      line-height: 1;
+    }
+
+    #danger-mode-toggle .danger-title {
+      grid-column: 2;
+      color: #ad8b8b;
+      font-size: clamp(9px, calc(11px * var(--title-scale)), 12px);
+      font-weight: 800;
+      letter-spacing: calc(2px * var(--title-scale));
+      line-height: 1.1;
+    }
+
+    #danger-mode-toggle .danger-copy {
+      grid-column: 1 / -1;
+      color: #604c4c;
+      font-size: clamp(8px, calc(9px * var(--title-scale)), 10px);
+      font-weight: 700;
+      letter-spacing: calc(1px * var(--title-scale));
+      line-height: 1.2;
+    }
+
+    #danger-mode-toggle:hover {
+      color: #e5b0b0;
+      border-color: rgba(194, 42, 42, 0.86);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(194, 42, 42, 0.24), transparent 62%),
+        rgba(18, 7, 9, 0.98);
+    }
+
+    #danger-mode-toggle.active {
+      border-color: rgba(255, 50, 50, 0.88);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255, 0, 0, 0.28), transparent 64%),
+        linear-gradient(180deg, rgba(70, 8, 8, 0.94), rgba(16, 3, 5, 0.98));
+      box-shadow:
+        0 0 22px rgba(180, 0, 0, 0.18),
+        inset 0 0 22px rgba(0, 0, 0, 0.58);
+    }
+
+    #danger-mode-toggle.active .danger-sigil,
+    #danger-mode-toggle.active .danger-title {
+      color: #ff4a4a;
+    }
+
+    #danger-mode-toggle.active .danger-copy {
+      color: #d49898;
+    }
+
+    .launch-divider {
+      width: min(100%, calc(360px * var(--title-scale)));
+      display: flex;
+      align-items: center;
+      gap: calc(10px * var(--title-scale));
+      margin: calc(2px * var(--title-scale)) 0 calc(12px * var(--title-scale));
+      opacity: 0.82;
+    }
+
+    .launch-divider::before,
+    .launch-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.42));
+    }
+
+    .launch-divider::after {
+      background: linear-gradient(90deg, rgba(212, 175, 55, 0.42), transparent);
+    }
+
+    .launch-divider span {
+      width: calc(6px * var(--title-scale));
+      height: calc(6px * var(--title-scale));
+      min-width: 5px;
+      min-height: 5px;
+      transform: rotate(45deg);
+      background: #d4af37;
+      box-shadow:
+        0 0 12px rgba(212, 175, 55, 0.36),
+        16px -16px 0 -2px rgba(132, 29, 29, 0.7),
+        -16px 16px 0 -2px rgba(132, 29, 29, 0.7);
+    }
+
     #char-select {
       display: flex;
       align-items: center;
@@ -297,6 +406,7 @@
 
     #descend-btn {
       margin-top: calc(12px * var(--title-scale));
+      width: min(100%, calc(318px * var(--title-scale)));
       padding: calc(14px * var(--title-scale)) calc(44px * var(--title-scale));
       font-family: 'JetBrains Mono', monospace;
       font-size: clamp(11px, calc(13px * var(--title-scale)), 14px);
@@ -984,9 +1094,17 @@
 
       #descend-btn {
         width: 100%;
-        max-width: 360px;
+        max-width: 318px;
         min-height: 46px;
         white-space: normal;
+      }
+
+      #danger-mode-toggle {
+        width: 100%;
+        max-width: 318px;
+        min-width: 0;
+        margin-top: 0;
+        margin-bottom: 8px;
       }
 
       #log-panel {
@@ -1075,6 +1193,15 @@
           <button id="open-folder-btn" class="input-action-button" type="button" title="Open project folder" aria-label="Open project folder">📁</button>
         </div>
       </div>
+
+      <div class="launch-divider" aria-hidden="true"><span></span></div>
+
+      <button id="danger-mode-toggle" type="button" aria-pressed="false">
+        <span class="danger-sigil" aria-hidden="true">!</span>
+        <span class="danger-title">Arm YOLO Mode</span>
+        <span class="danger-sigil" aria-hidden="true">!</span>
+        <span class="danger-copy">required to enter</span>
+      </button>
 
       <button id="descend-btn" disabled>SEAL YOUR FATE</button>
       <div id="validation-errors"></div>

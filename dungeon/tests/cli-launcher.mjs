@@ -13,6 +13,8 @@ const envKeys = [
   'path',
   'SEO_DUNGEON_CODEX_CLI',
   'SEO_DUNGEON_CODEX_ARGS',
+  'SEO_DUNGEON_CODEX_BYPASS',
+  'SEO_DUNGEON_CODEX_DANGEROUS_BYPASS',
   'SEO_DUNGEON_CLAUDE_ARGS',
   'SEO_DUNGEON_GEMINI_ARGS',
   'SEO_DUNGEON_CODEX_EFFORT_DEEP',
@@ -108,6 +110,37 @@ exit $LASTEXITCODE
   assert.equal(bridge.getCodexProfileConfig('deep').effort, 'xhigh');
   assert.equal(bridge.getCodexProfileConfig('balanced').effort, 'high');
   assert.equal(bridge.getCodexProfileConfig('fast').effort, 'medium');
+  delete process.env.SEO_DUNGEON_CODEX_BYPASS;
+  delete process.env.SEO_DUNGEON_CODEX_DANGEROUS_BYPASS;
+  assert.equal(bridge.normalizeDangerousBypass(undefined), false);
+  process.env.SEO_DUNGEON_CODEX_DANGEROUS_BYPASS = '1';
+  assert.equal(bridge.normalizeDangerousBypass(undefined), true);
+  assert.equal(bridge.normalizeDangerousBypass(false), false);
+  delete process.env.SEO_DUNGEON_CODEX_DANGEROUS_BYPASS;
+
+  const validProjectDir = fs.mkdtempSync(path.join(tmp, 'project-'));
+  assert.throws(
+    () => bridge.buildCodexExecArgs({
+      cliArgs: ['--agent-flag'],
+      prompt: 'audit seodungeon.com',
+      workDir: validProjectDir,
+      profile: 'deep',
+      dangerousBypass: false
+    }),
+    /YOLO Mode must be armed/
+  );
+
+  const bypassCodex = bridge.buildCodexExecArgs({
+    cliArgs: [],
+    prompt: 'git push dry run',
+    workDir: validProjectDir,
+    profile: 'balanced',
+    dangerousBypass: true
+  }).args;
+  assert(bypassCodex.includes('--dangerously-bypass-approvals-and-sandbox'), 'YOLO Codex args should include dangerous bypass');
+  assert(!bypassCodex.includes('workspace-write'), 'YOLO Codex args should not also request workspace-write');
+  assert(!bypassCodex.includes('-s'), 'YOLO Codex args should not include sandbox selection');
+
   assert.equal(bridge.getTextCliProfileConfig('claude', 'deep').model, 'opus');
   assert.equal(bridge.getTextCliProfileConfig('claude', 'balanced').model, 'sonnet');
   assert.equal(bridge.getTextCliProfileConfig('claude', 'fast').model, 'haiku');
@@ -145,7 +178,6 @@ exit $LASTEXITCODE
   assert(!redacted.includes('1234567890ABCDEF'), 'AWS key body should be redacted');
   assert(redacted.includes('api_key=sk-1****'), 'generic key assignment should be redacted');
 
-  const validProjectDir = fs.mkdtempSync(path.join(tmp, 'project-'));
   const missingProjectDir = path.join(tmp, 'missing-project');
   assert.equal(bridge.validateProjectPath(validProjectDir), path.resolve(validProjectDir));
   assert.equal(bridge.validateProjectPath(missingProjectDir), null);

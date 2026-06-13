@@ -102,6 +102,10 @@ export class BridgeClient {
     return runtime || window.selectedCharacter?.runtime || window.selectedRuntime || 'codex';
   }
 
+  _dangerousBypassFallback() {
+    return Boolean(window.selectedCharacter?.dangerousBypass ?? window.seoDungeonDangerousBypass);
+  }
+
   /**
    * Neutral "talk to Codex" - used outside of battle (Demon Lodge /
    * Dungeon Hall / between fights). No demon context, no framing. The
@@ -125,6 +129,7 @@ export class BridgeClient {
         profile,
         model: profile,
         runtime: this._runtimeFallback(runtime),
+        dangerousBypass: this._dangerousBypassFallback(),
       }));
     });
   }
@@ -146,6 +151,7 @@ export class BridgeClient {
         profile,
         model: profile,
         runtime: this._runtimeFallback(runtime),
+        dangerousBypass: this._dangerousBypassFallback(),
       }));
     });
   }
@@ -180,6 +186,7 @@ export class BridgeClient {
         profile,
         model: profile,
         runtime: this._runtimeFallback(runtime),
+        dangerousBypass: this._dangerousBypassFallback(),
       }));
     });
   }
@@ -200,6 +207,7 @@ export class BridgeClient {
         profile,
         model: profile,
         runtime: this._runtimeFallback(runtime),
+        dangerousBypass: this._dangerousBypassFallback(),
       }));
     });
   }
@@ -219,6 +227,7 @@ export class BridgeClient {
         profile: 'fast',
         model: 'fast',
         runtime: this._runtimeFallback(),
+        dangerousBypass: this._dangerousBypassFallback(),
       }));
     });
   }

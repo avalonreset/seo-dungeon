@@ -9,7 +9,7 @@ import { bridge } from './utils/ws.js';
 import { initKnightSprite } from './knight-sprite.js';
 import { initActivityLog, addLog, showLoadingIndicator, hideLoadingIndicator } from './activity-log.js';
 import { SFX } from './utils/sound-manager.js';
-import { getProfileKey, getSelectedRuntime } from './profile-config.js';
+import { getDangerousBypassEnabled, getProfileKey, getSelectedRuntime } from './profile-config.js';
 
 // Minimum 3x render scale ensures crisp text on 4K monitors.
 // On a 4K display with 150% scaling (DPR 1.5), the base 800x600 canvas
@@ -310,6 +310,7 @@ function _sealTransition(onComplete) {
   // 1. Stagger-fade all title screen elements
   const elements = [
     titleScreen.querySelector('.tagline'),
+    titleScreen.querySelector('#danger-mode-toggle'),
     titleScreen.querySelector('#descend-btn'),
     titleScreen.querySelector('#bridge-status'),
     ...titleScreen.querySelectorAll('.form-group'),
@@ -346,6 +347,9 @@ function launchGame(domain, projectPath) {
   addLog(`Hunting: ${domain}`);
   addLog(`Source: ${projectPath}`);
   addLog(`CLI: ${getSelectedRuntime().toUpperCase()}`);
+  if (getSelectedRuntime() === 'codex') {
+    addLog(`Codex mode: ${getDangerousBypassEnabled() ? 'YOLO bypass' : 'standard sandbox'}`);
+  }
 
   const dpr = window.GAME_DPR;
   const config = {
@@ -368,7 +372,7 @@ function launchGame(domain, projectPath) {
   game.domain = domain;
   game.projectPath = projectPath;
   game.characterConfig = window.selectedCharacter
-    ? { ...window.selectedCharacter, runtime: getSelectedRuntime() }
+    ? { ...window.selectedCharacter, runtime: getSelectedRuntime(), dangerousBypass: getDangerousBypassEnabled() }
     : null;
   game.addLog = addLog;
   game.showLoading = showLoadingIndicator;
@@ -546,7 +550,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateButtonState() {
     const domainOk = isDomainValid(domainInput.value);
     const pathOk = isPathValid(pathInput.value);
-    btn.disabled = !(domainOk && pathOk && bridge.connected);
+    const yoloOk = getDangerousBypassEnabled();
+    btn.disabled = !(domainOk && pathOk && yoloOk && bridge.connected);
     if (openDomainBtn) {
       setAnchorButtonDisabled(openDomainBtn, !domainOk);
       if (domainOk) {
@@ -556,14 +561,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     if (openFolderBtn) openFolderBtn.disabled = !bridge.connected;
-    // Clear error area when both valid
     if (domainOk && pathOk) {
-      errorArea.textContent = bridge.connected ? '' : 'Bridge server not connected';
+      errorArea.textContent = yoloOk && !bridge.connected ? 'Bridge server not connected' : '';
     }
   }
 
   // Re-check button state when bridge connection changes
   bridge.onStatusChange(() => updateButtonState());
+  window.addEventListener('seo-dungeon-dangerous-bypass-change', () => updateButtonState());
 
   // ── Live validation on input ────────────────
   domainInput.addEventListener('input', () => {
@@ -673,6 +678,9 @@ document.addEventListener('DOMContentLoaded', () => {
       errors.push('Project folder is required');
       pathInput.classList.add('invalid');
       pathInput.classList.remove('valid');
+    }
+    if (!getDangerousBypassEnabled()) {
+      errors.push('Arm YOLO Mode');
     }
     if (errors.length > 0) {
       errorArea.textContent = errors.join(' · ');
@@ -898,7 +906,8 @@ document.addEventListener('DOMContentLoaded', () => {
         game.characterConfig = window.selectedCharacter || {
           profile: getProfileKey(cached.profile || cached.model),
           model: getProfileKey(cached.profile || cached.model),
-          runtime: cached.runtime || getSelectedRuntime()
+          runtime: cached.runtime || getSelectedRuntime(),
+          dangerousBypass: getDangerousBypassEnabled()
         };
         game.addLog = addLog;
         game.showLoading = showLoadingIndicator;

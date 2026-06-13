@@ -295,6 +295,24 @@ function normalizeRuntime(runtime) {
   return ['codex', 'claude', 'gemini'].includes(key) ? key : 'codex';
 }
 
+function normalizeBoolean(value, fallback = false) {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  if (value == null || value === '') return Boolean(fallback);
+  const key = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on', 'yolo', 'danger'].includes(key)) return true;
+  if (['0', 'false', 'no', 'off'].includes(key)) return false;
+  return Boolean(fallback);
+}
+
+function normalizeDangerousBypass(value) {
+  const envFallback = normalizeBoolean(
+    process.env.SEO_DUNGEON_CODEX_DANGEROUS_BYPASS ?? process.env.SEO_DUNGEON_CODEX_BYPASS,
+    false
+  );
+  return normalizeBoolean(value, envFallback);
+}
+
 function resolveAgentProvider(runtime) {
   return normalizeRuntime(runtime);
 }
@@ -625,10 +643,11 @@ wss.on('connection', (ws) => {
       safeSend(JSON.stringify({ id: 0, type: 'error', message: 'Invalid message format' }));
       return;
     }
-    const { id, command, type, projectPath, issue, userMessage, model, profile, runtime } = msg;
+    const { id, command, type, projectPath, issue, userMessage, model, profile, runtime, dangerousBypass } = msg;
     const agentOptions = {
       runtime: normalizeRuntime(runtime),
-      profile: normalizeProfile(profile || model)
+      profile: normalizeProfile(profile || model),
+      dangerousBypass: normalizeDangerousBypass(dangerousBypass)
     };
 
     // Validate message type against allowlist
@@ -653,6 +672,7 @@ wss.on('connection', (ws) => {
 
     console.log(`Command #${id} [${type}]: ${command || '(no command)'}`);
     if (type !== 'cancel') console.log(`  Runtime: ${agentOptions.runtime}, profile: ${agentOptions.profile}`);
+    if (type !== 'cancel' && agentOptions.runtime === 'codex') console.log(`  Codex dangerous bypass: ${agentOptions.dangerousBypass ? 'on' : 'off'}`);
     if (validatedPath && validatedPath !== PROJECT_ROOT) console.log(`  Project: ${validatedPath}`);
 
     // Cancel - kill the child process for a given request
@@ -1049,6 +1069,7 @@ function normalizeProfile(profile) {
 function runAgent(prompt, onStream, cwd, requestId, options = {}) {
   const runtime = normalizeRuntime(options.runtime);
   const profile = normalizeProfile(options.profile);
+  const dangerousBypass = normalizeDangerousBypass(options.dangerousBypass);
   const policy = [
     'SEO Dungeon runtime policy:',
     '- Treat credentials in the selected project .env as the primary integration path.',
@@ -1060,7 +1081,7 @@ function runAgent(prompt, onStream, cwd, requestId, options = {}) {
   if (runtime === 'claude' || runtime === 'gemini') {
     return runTextCli(runtime, effectivePrompt, onStream, cwd, requestId, profile);
   }
-  return runCodex(effectivePrompt, onStream, cwd, requestId, profile);
+  return runCodex(effectivePrompt, onStream, cwd, requestId, profile, { dangerousBypass });
 }
 
 function getCodexProfileConfig(profile) {
@@ -1072,6 +1093,31 @@ function getCodexProfileConfig(profile) {
     model: process.env[`SEO_DUNGEON_CODEX_MODEL_${envSuffix}`] || process.env.SEO_DUNGEON_CODEX_MODEL || '',
     effort: process.env[`SEO_DUNGEON_CODEX_EFFORT_${envSuffix}`] || defaultEffort,
   };
+}
+
+function buildCodexExecArgs({ cliArgs = [], prompt, workDir, profile, dangerousBypass }) {
+  const codexProfile = getCodexProfileConfig(profile);
+  if (!normalizeDangerousBypass(dangerousBypass)) {
+    throw new Error('YOLO Mode must be armed before SEO Dungeon can launch Codex.');
+  }
+  const args = [
+    ...cliArgs,
+    'exec',
+    '--json',
+    '--skip-git-repo-check',
+    '--dangerously-bypass-approvals-and-sandbox'
+  ];
+
+  args.push(
+    '-c',
+    `model_reasoning_effort="${codexProfile.effort}"`,
+    '-C',
+    workDir
+  );
+  if (codexProfile.model) args.push('-m', codexProfile.model);
+  args.push(prompt);
+
+  return { args, codexProfile };
 }
 
 const DEFAULT_TEXT_CLI_MODELS = {
@@ -1211,31 +1257,22 @@ function runTextCli(runtime, prompt, onStream, cwd, requestId, profile) {
   });
 }
 
-function runCodex(prompt, onStream, cwd, requestId, profile) {
+function runCodex(prompt, onStream, cwd, requestId, profile, options = {}) {
   const workDir = cwd || PROJECT_ROOT;
   return new Promise((resolve, reject) => {
     const { execPath: cliExec, args: cliArgs } = resolveCodexCli();
     const launch = resolveCliLaunch(cliExec);
-    const codexProfile = getCodexProfileConfig(profile);
-    const args = [
-      ...cliArgs,
-      'exec',
-      '--json',
-      '--skip-git-repo-check',
-      '-s',
-      'workspace-write',
-      '-c',
-      'approval_policy="never"',
-      '-c',
-      `model_reasoning_effort="${codexProfile.effort}"`,
-      '-C',
-      workDir
-    ];
-    if (codexProfile.model) args.push('-m', codexProfile.model);
-    args.push(prompt);
+    const dangerousBypass = normalizeDangerousBypass(options.dangerousBypass);
+    const { args, codexProfile } = buildCodexExecArgs({
+      cliArgs,
+      prompt,
+      workDir,
+      profile,
+      dangerousBypass
+    });
     const launchArgs = [...launch.argsPrefix, ...args];
 
-    console.log(`  Running with codex exec (profile: ${codexProfile.key}, effort: ${codexProfile.effort}${codexProfile.model ? `, model: ${codexProfile.model}` : ''})`);
+    console.log(`  Running with codex exec (profile: ${codexProfile.key}, effort: ${codexProfile.effort}${codexProfile.model ? `, model: ${codexProfile.model}` : ''}, bypass: ${dangerousBypass ? 'on' : 'off'})`);
     console.log(`  Executable: ${launch.display}`);
     console.log(`  CWD: ${workDir}`);
     const proc = spawn(launch.command, launchArgs, {
@@ -1356,10 +1393,12 @@ if (require.main === module) startBridge();
 module.exports = {
   normalizeRuntime,
   normalizeProfile,
+  normalizeDangerousBypass,
   splitArgs,
   resolveCliLaunch,
   resolveCodexCli,
   resolveTextCli,
+  buildCodexExecArgs,
   getCodexProfileConfig,
   getTextCliProfileConfig,
   insertPromptArg,

@@ -3,7 +3,14 @@
  * Crops out transparent padding and displays characters at proper size.
  */
 import { SFX } from './utils/sound-manager.js';
-import { RUNTIME_LABELS, getProfileLabel, getSelectedRuntime, setSelectedRuntime } from './profile-config.js';
+import {
+  RUNTIME_LABELS,
+  getDangerousBypassEnabled,
+  getProfileLabel,
+  getSelectedRuntime,
+  setDangerousBypassEnabled,
+  setSelectedRuntime
+} from './profile-config.js';
 
 export const CHARACTERS = {
   warrior: {
@@ -74,12 +81,38 @@ const animState = {};
 function setSelected(charKey) {
   window.selectedCharacter = { ...CHARACTERS[charKey] };
   window.selectedCharacter.runtime = getSelectedRuntime();
+  window.selectedCharacter.dangerousBypass = getDangerousBypassEnabled();
   SFX.play('menuConfirm');
   document.querySelectorAll('.char-option').forEach(el => {
     const isTarget = el.dataset.char === charKey;
     el.classList.toggle('selected', isTarget);
     if (isTarget) _selectionBurst(el);
   });
+}
+
+function initDangerousModeToggle() {
+  const button = document.getElementById('danger-mode-toggle');
+  if (!button) return;
+
+  let active = getDangerousBypassEnabled();
+  const applyMode = (enabled, playSound = false) => {
+    active = setDangerousBypassEnabled(enabled);
+    const title = button.querySelector('.danger-title');
+    const copy = button.querySelector('.danger-copy');
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    button.title = active
+      ? 'Codex launches with --dangerously-bypass-approvals-and-sandbox'
+      : 'Codex launches with the standard SEO Dungeon sandbox';
+    if (title) title.textContent = active ? 'YOLO Mode Armed' : 'Arm YOLO Mode';
+    if (copy) copy.textContent = active ? 'dangerous bypass active' : 'required to enter';
+    if (window.selectedCharacter) window.selectedCharacter.dangerousBypass = active;
+    if (playSound) SFX.play('menuConfirm');
+  };
+
+  applyMode(active, false);
+  button.addEventListener('click', () => applyMode(!active, true));
+  button.addEventListener('mouseenter', () => SFX.play('menuHover'));
 }
 
 function initRuntimePicker() {
@@ -361,6 +394,7 @@ function animateAll() {
 
 export function initKnightSprite() {
   initRuntimePicker();
+  initDangerousModeToggle();
   refreshProfileLabels();
   setSelected('warrior');
 

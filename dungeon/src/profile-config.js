@@ -1,4 +1,6 @@
 export const PROFILE_KEYS = ['deep', 'balanced', 'fast'];
+const DANGEROUS_BYPASS_KEY = 'seo_dungeon_yolo_mode';
+let consumedDangerousBypassUrl = false;
 
 export const RUNTIME_LABELS = {
   codex: {
@@ -50,6 +52,38 @@ export function getSelectedRuntime() {
     return setSelectedRuntime(localStorage.getItem('seo_dungeon_runtime'));
   } catch (_) {
     return setSelectedRuntime('codex');
+  }
+}
+
+function normalizeBoolean(value) {
+  if (value === true || value === 1) return true;
+  const key = String(value || '').trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on', 'yolo', 'danger'].includes(key);
+}
+
+export function setDangerousBypassEnabled(value) {
+  const enabled = normalizeBoolean(value);
+  try { localStorage.setItem(DANGEROUS_BYPASS_KEY, enabled ? '1' : '0'); } catch (_) {}
+  window.seoDungeonDangerousBypass = enabled;
+  if (window.selectedCharacter) window.selectedCharacter.dangerousBypass = enabled;
+  try {
+    window.dispatchEvent(new CustomEvent('seo-dungeon-dangerous-bypass-change', { detail: { enabled } }));
+  } catch (_) {}
+  return enabled;
+}
+
+export function getDangerousBypassEnabled() {
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = params.get('yolo') ?? params.get('dangerousBypass') ?? params.get('danger');
+  if (!consumedDangerousBypassUrl && fromUrl != null) {
+    consumedDangerousBypassUrl = true;
+    return setDangerousBypassEnabled(fromUrl);
+  }
+
+  try {
+    return setDangerousBypassEnabled(localStorage.getItem(DANGEROUS_BYPASS_KEY));
+  } catch (_) {
+    return setDangerousBypassEnabled(false);
   }
 }
 

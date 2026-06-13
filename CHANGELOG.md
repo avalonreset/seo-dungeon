@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.6] - 2026-06-13
+
+### Added
+- **Mandatory YOLO Mode arming**: the title screen now requires users to arm
+  YOLO Mode before entering the dungeon, with a compact red launch control and
+  setup/launch divider.
+- **Codex dangerous bypass launch path**: Codex runs now pass
+  `--dangerously-bypass-approvals-and-sandbox` when launched through SEO
+  Dungeon, avoiding the workspace sandbox/network restrictions that blocked
+  GitHub push workflows.
+
+### Fixed
+- **Bypass state persistence**: the YOLO Mode choice persists across launches,
+  and URL query parameters seed the state once without overriding later clicks.
+- **Bridge launch coverage**: CLI launcher tests now assert that unarmed Codex
+  launch attempts fail and armed Codex launches include the dangerous bypass
+  flag without also requesting `workspace-write`.
+
 ## [2.2.5] - 2026-06-13
 
 ### Added

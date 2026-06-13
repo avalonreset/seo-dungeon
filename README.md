@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2.6-blue)](CHANGELOG.md)
 [![Runtime](https://img.shields.io/badge/runtime-Codex%20%7C%20Claude%20%7C%20Gemini-2ea44f)](dungeon/)
 
 SEO Dungeon turns SEO audits into a 16-bit dungeon crawler. Enter a domain,
@@ -36,10 +36,11 @@ supports Claude Code and Gemini CLI when those local tools are installed.
    - Samurai: balanced profile. Codex uses `high`; Claude uses `sonnet`; Gemini uses `flash`.
    - Knight: fast profile. Codex uses `medium`; Claude uses `haiku`; Gemini uses `flash-lite`.
 3. Enter a domain and local project path.
-4. Run a full `/seo audit` through the selected local CLI.
-5. Review SEO issues as dungeon demons sorted by severity.
-6. Use **Attack** to send a scoped agent turn for the selected issue.
-7. Use **Vanquish** when you decide the issue is handled.
+4. Arm YOLO Mode so Codex runs with `--dangerously-bypass-approvals-and-sandbox`.
+5. Run a full `/seo audit` through the selected local CLI.
+6. Review SEO issues as dungeon demons sorted by severity.
+7. Use **Attack** to send a scoped agent turn for the selected issue.
+8. Use **Vanquish** when you decide the issue is handled.
 
 The Guild Ledger sidebar can be resized or hidden while you work, and the title
 screen remembers your last domain and project folder.
@@ -117,6 +118,8 @@ Runtime environment:
 |----------|---------|---------|
 | `SEO_DUNGEON_RUNTIME` | `codex` | Bridge fallback runtime when the UI does not send one |
 | `SEO_DUNGEON_CODEX_CLI` | `codex` | Codex executable override |
+| `SEO_DUNGEON_CODEX_DANGEROUS_BYPASS` | unset | Set to `1` to force Codex YOLO mode from the bridge when no UI setting is provided |
+| `SEO_DUNGEON_CODEX_BYPASS` | unset | Short alias for `SEO_DUNGEON_CODEX_DANGEROUS_BYPASS` |
 | `SEO_DUNGEON_CLAUDE_CLI` | `claude` | Claude Code executable override |
 | `SEO_DUNGEON_GEMINI_CLI` | `gemini` | Gemini CLI executable override |
 | `SEO_DUNGEON_CODEX_MODEL` | Codex default | Optional Codex model override |
