@@ -242,7 +242,7 @@ function httpCode(url) {
 
 function testBridgeType(type, expectHandlerLog, msg) {
   return new Promise((resolve) => {
-    const ws = new WebSocket('ws://127.0.0.1:3001');
+    const ws = new WebSocket('ws://127.0.0.1:3001', { origin: 'http://localhost:3000' });
     let gotReply = false;
     const timeout = setTimeout(() => {
       if (!gotReply) { assert(false, `${msg} - timeout waiting for reply`); }
@@ -275,7 +275,7 @@ function testBridgeType(type, expectHandlerLog, msg) {
 
 function testBridgeRejects(type, msg) {
   return new Promise((resolve) => {
-    const ws = new WebSocket('ws://127.0.0.1:3001');
+    const ws = new WebSocket('ws://127.0.0.1:3001', { origin: 'http://localhost:3000' });
     const timeout = setTimeout(() => {
       assert(false, `${msg} - timeout`);
       try { ws.terminate(); } catch {}

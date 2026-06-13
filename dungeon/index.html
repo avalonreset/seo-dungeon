@@ -193,17 +193,6 @@
     .char-model.blue { color: #88bbff; }
     .char-model.green { color: #66ddaa; }
 
-    .char-profile-detail {
-      font-size: clamp(7px, calc(8px * var(--title-scale)), 9px);
-      letter-spacing: calc(1px * var(--title-scale));
-      opacity: 0.45;
-      margin-top: calc(-10px * var(--title-scale));
-    }
-
-    .char-option.selected .char-profile-detail {
-      opacity: 0.75;
-    }
-
     #title-screen .tagline {
       font-size: clamp(12px, calc(15px * var(--title-scale)), 16px);
       color: #a0a0b8;
@@ -275,6 +264,7 @@
       align-items: center;
       justify-content: center;
       padding: 0 0 1px;
+      text-decoration: none;
     }
 
     .input-action-button:hover {
@@ -283,9 +273,11 @@
       border-color: rgba(212, 175, 55, 0.55);
     }
 
-    .input-action-button:disabled {
+    .input-action-button:disabled,
+    .input-action-button[aria-disabled="true"] {
       opacity: 0.35;
       cursor: not-allowed;
+      pointer-events: none;
     }
 
     .form-group input:focus {
@@ -976,12 +968,6 @@
         transform: translateY(-8px);
       }
 
-      .char-profile-detail {
-        font-size: 7px;
-        letter-spacing: 0;
-        margin-top: -7px;
-      }
-
       #title-screen .tagline {
         font-size: 13px;
         margin-bottom: 20px;
@@ -1059,19 +1045,16 @@
           <canvas id="char-warrior"></canvas>
           <span>WARRIOR</span>
           <span class="char-model gold">XHIGH</span>
-          <span class="char-profile-detail">deep audit</span>
         </div>
         <div class="char-option" data-char="samurai">
           <canvas id="char-samurai"></canvas>
           <span>SAMURAI</span>
           <span class="char-model blue">HIGH</span>
-          <span class="char-profile-detail">balanced</span>
         </div>
         <div class="char-option" data-char="knight">
           <canvas id="char-knight"></canvas>
           <span>KNIGHT</span>
           <span class="char-model green">MEDIUM</span>
-          <span class="char-profile-detail">quick pass</span>
         </div>
       </div>
 
@@ -1081,7 +1064,7 @@
         <label>Domain</label>
         <div class="input-action-row">
           <input type="text" id="domain-input" value="seodungeon.com" placeholder="example.com" autocomplete="off" spellcheck="false">
-          <button id="open-domain-btn" class="input-action-button" type="button" title="Open website" aria-label="Open website">🌐</button>
+          <a id="open-domain-btn" class="input-action-button" href="https://seodungeon.com/" target="_blank" rel="noopener noreferrer" title="Open website" aria-label="Open website">🌐</a>
         </div>
       </div>
 

@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   navigation instead of popup-window routing, avoiding `about:blank` fallbacks.
 - **SEO Dungeon alias support**: typing `SEO Dungeon` in the domain field now
   resolves to `seodungeon.com` for both quick-open and audit launch.
+- **Bridge command safety**: Git branch setup now uses argument-based process
+  calls instead of shell-interpolated command strings.
+- **Bridge origin policy**: WebSocket clients without an Origin header are now
+  rejected unless `SEO_DUNGEON_ALLOW_NO_ORIGIN=1` is set for local development.
+- **Audit log redaction**: failed-audit evidence logs now mask common
+  secret-looking tokens before writing raw agent output.
+- **Bridge QC coverage**: CLI launcher tests now cover origin validation and
+  failed-audit redaction behavior.
 
 ## [2.2.3] - 2026-06-13
 

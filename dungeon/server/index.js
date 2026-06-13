@@ -1,5 +1,5 @@
 const { WebSocketServer } = require('ws');
-const { spawn, execSync, execFileSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -34,6 +34,18 @@ function appendBridgeLog(level, args) {
   } catch (_) {}
 }
 
+function redactSensitiveText(value) {
+  return String(value || '')
+    .replace(/\b(AKIA)[0-9A-Z]{12}([0-9A-Z]{4})\b/g, '$1****$2')
+    .replace(/\b(sk-[A-Za-z0-9_-]{8})[A-Za-z0-9_-]{12,}\b/g, '$1****')
+    .replace(/\b(gh[pousr]_[A-Za-z0-9_]{4})[A-Za-z0-9_]{20,}\b/g, '$1****')
+    .replace(/\b(xox[baprs]-[A-Za-z0-9-]{8})[A-Za-z0-9-]{12,}\b/g, '$1****')
+    .replace(
+      /((?:api[_-]?key|token|secret|password|passwd|pwd)\s*[:=]\s*["']?)([^"'\s]{8,})/gi,
+      (_, prefix, secret) => `${prefix}${secret.slice(0, 4)}****${secret.slice(-4)}`
+    );
+}
+
 function installConsoleFileLogger() {
   if (consoleFileLoggerInstalled || process.env.SEO_DUNGEON_BRIDGE_LOG === '0') return;
   consoleFileLoggerInstalled = true;
@@ -52,7 +64,8 @@ function logFailedAudit(domain, raw, note) {
     const safeDomain = (domain || 'unknown').replace(/[^a-z0-9.-]/gi, '_');
     const file = path.join(LOG_DIR, `failed-audit-${safeDomain}-${stamp}.txt`);
     const text = typeof raw === 'string' ? raw : (raw && raw.raw ? raw.raw : JSON.stringify(raw, null, 2));
-    fs.writeFileSync(file, `=== ${note || 'failed audit'} ===\ndomain: ${domain}\nwhen: ${new Date().toISOString()}\n\n----- RAW AGENT OUTPUT -----\n${text}\n`);
+    const redacted = redactSensitiveText(text);
+    fs.writeFileSync(file, `=== ${note || 'failed audit'} ===\ndomain: ${domain}\nwhen: ${new Date().toISOString()}\n\n----- RAW AGENT OUTPUT -----\n${redacted}\n`);
     console.log(`  [evidence] wrote failed audit to ${path.relative(PROJECT_ROOT, file)}`);
   } catch (e) {
     console.error('  [evidence] could not write failure log:', e.message);
@@ -77,13 +90,16 @@ const ALLOWED_ORIGINS = [
   ...EXTRA_ALLOWED_ORIGINS
 ];
 
+function isAllowedOrigin(origin) {
+  if (!origin) return process.env.SEO_DUNGEON_ALLOW_NO_ORIGIN === '1';
+  return ALLOWED_ORIGINS.includes(origin);
+}
+
 const wss = new WebSocketServer({
   server,
   perMessageDeflate: false,
   verifyClient: ({ origin, req }) => {
-    // Allow connections with no origin (non-browser clients like dev tools)
-    if (!origin) return true;
-    if (ALLOWED_ORIGINS.includes(origin)) return true;
+    if (isAllowedOrigin(origin)) return true;
     console.warn(`Rejected WebSocket connection from origin: ${origin}`);
     return false;
   }
@@ -547,7 +563,7 @@ wss.on('connection', (ws) => {
  */
 function isGitRepo(cwd) {
   try {
-    execSync('git rev-parse --git-dir', { cwd, stdio: 'pipe' });
+    execFileSync('git', ['rev-parse', '--git-dir'], { cwd, stdio: 'pipe' });
     return true;
   } catch {
     return false;
@@ -570,7 +586,7 @@ function ensureFixBranch(projectCwd) {
     const branchName = `seo-dungeon-fixes-${today}`;
 
     // Check current branch
-    const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
+    const currentBranch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
       cwd: projectCwd,
       stdio: 'pipe'
     }).toString().trim();
@@ -582,19 +598,19 @@ function ensureFixBranch(projectCwd) {
 
     // Check if the branch already exists locally
     try {
-      execSync(`git rev-parse --verify ${branchName}`, {
+      execFileSync('git', ['rev-parse', '--verify', branchName], {
         cwd: projectCwd,
         stdio: 'pipe'
       });
       // Branch exists - switch to it
-      execSync(`git checkout ${branchName}`, {
+      execFileSync('git', ['checkout', branchName], {
         cwd: projectCwd,
         stdio: 'pipe'
       });
       console.log(`  [branch] Switched to existing ${branchName}`);
     } catch {
       // Branch doesn't exist - create it
-      execSync(`git checkout -b ${branchName}`, {
+      execFileSync('git', ['checkout', '-b', branchName], {
         cwd: projectCwd,
         stdio: 'pipe'
       });
@@ -1147,5 +1163,7 @@ module.exports = {
   getTextCliProfileConfig,
   insertPromptArg,
   safeEnv,
+  isAllowedOrigin,
+  redactSensitiveText,
   startBridge
 };

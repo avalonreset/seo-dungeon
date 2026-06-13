@@ -520,21 +520,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function openWebsiteUrl(url) {
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.target = '_blank';
-    anchor.rel = 'noopener noreferrer';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    if (!openDomainBtn) return false;
+    openDomainBtn.href = url;
     return true;
+  }
+
+  function setAnchorButtonDisabled(anchor, disabled) {
+    if (!anchor) return;
+    anchor.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    anchor.tabIndex = disabled ? -1 : 0;
   }
 
   function updateButtonState() {
     const domainOk = isDomainValid(domainInput.value);
     const pathOk = isPathValid(pathInput.value);
     btn.disabled = !(domainOk && pathOk && bridge.connected);
-    if (openDomainBtn) openDomainBtn.disabled = !domainOk;
+    if (openDomainBtn) {
+      setAnchorButtonDisabled(openDomainBtn, !domainOk);
+      if (domainOk) {
+        try { openDomainBtn.href = normalizeWebsiteUrl(domainInput.value); } catch (_) {}
+      } else {
+        openDomainBtn.removeAttribute('href');
+      }
+    }
     if (openFolderBtn) openFolderBtn.disabled = !(pathOk && bridge.connected);
     // Clear error area when both valid
     if (domainOk && pathOk) {
@@ -573,13 +581,17 @@ document.addEventListener('DOMContentLoaded', () => {
     updateButtonState();
   });
 
-  openDomainBtn?.addEventListener('click', () => {
+  openDomainBtn?.addEventListener('click', (event) => {
     const raw = domainInput.value.trim();
-    if (!isDomainValid(raw)) return;
+    if (!isDomainValid(raw)) {
+      event.preventDefault();
+      return;
+    }
     let url;
     try {
       url = normalizeWebsiteUrl(raw);
     } catch (_) {
+      event.preventDefault();
       addLog('Invalid website URL.');
       return;
     }

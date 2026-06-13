@@ -25,7 +25,8 @@ const envKeys = [
   'SEO_DUNGEON_GEMINI_MODEL',
   'SEO_DUNGEON_GEMINI_MODEL_DEEP',
   'SEO_DUNGEON_GEMINI_MODEL_BALANCED',
-  'SEO_DUNGEON_GEMINI_MODEL_FAST'
+  'SEO_DUNGEON_GEMINI_MODEL_FAST',
+  'SEO_DUNGEON_ALLOW_NO_ORIGIN'
 ];
 const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-dungeon-cli-'));
@@ -125,6 +126,20 @@ exit $LASTEXITCODE
     bridge.insertPromptArg(['exec', '--json'], 'multi word prompt stays together'),
     ['exec', '--json', 'multi word prompt stays together']
   );
+
+  delete process.env.SEO_DUNGEON_ALLOW_NO_ORIGIN;
+  assert.equal(bridge.isAllowedOrigin('http://localhost:3000'), true);
+  assert.equal(bridge.isAllowedOrigin('http://evil.test:3000'), false);
+  assert.equal(bridge.isAllowedOrigin(undefined), false);
+  process.env.SEO_DUNGEON_ALLOW_NO_ORIGIN = '1';
+  assert.equal(bridge.isAllowedOrigin(undefined), true);
+
+  const redacted = bridge.redactSensitiveText(
+    'api_key=sk-1234567890abcdefghijklmnopqrstuvwxyz token=ghp_1234567890abcdefghijklmnopqrstuvwxyz123456 AKIA1234567890ABCDEF'
+  );
+  assert(!redacted.includes('abcdefghijklmnopqrstuvwxyz123456'), 'GitHub token should be redacted');
+  assert(!redacted.includes('1234567890ABCDEF'), 'AWS key body should be redacted');
+  assert(redacted.includes('api_key=sk-1****'), 'generic key assignment should be redacted');
 
   console.log('CLI launcher tests passed');
 } finally {
