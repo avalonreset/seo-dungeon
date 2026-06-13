@@ -134,8 +134,11 @@ exit $LASTEXITCODE
   process.env.SEO_DUNGEON_ALLOW_NO_ORIGIN = '1';
   assert.equal(bridge.isAllowedOrigin(undefined), true);
 
+  const fakeOpenAiKey = 'sk-' + '1234567890abcdefghijklmnopqrstuvwxyz';
+  const fakeGithubToken = 'ghp_' + '1234567890abcdefghijklmnopqrstuvwxyz123456';
+  const fakeAwsKey = 'AKIA' + '1234567890ABCDEF';
   const redacted = bridge.redactSensitiveText(
-    'api_key=sk-1234567890abcdefghijklmnopqrstuvwxyz token=ghp_1234567890abcdefghijklmnopqrstuvwxyz123456 AKIA1234567890ABCDEF'
+    `api_key=${fakeOpenAiKey} token=${fakeGithubToken} ${fakeAwsKey}`
   );
   assert(!redacted.includes('abcdefghijklmnopqrstuvwxyz123456'), 'GitHub token should be redacted');
   assert(!redacted.includes('1234567890ABCDEF'), 'AWS key body should be redacted');
