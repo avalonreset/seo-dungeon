@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.7] - 2026-06-13
+
+### Added
+- **Guild Ledger prompt queue**: ledger input now supports queued prompts, a
+  visible queue panel, queue clearing, and clicking queued rows to run them or
+  promote them to the next turn while an agent is busy.
+- **Steer-next behavior**: sending a prompt while an audit, fix, commit, or
+  battle turn is active now queues that prompt at the front instead of starting
+  a competing CLI process.
+
+### Changed
+- **Session-only YOLO arming**: YOLO Mode now starts disarmed on every fresh app
+  load and must be clicked each time before entering the dungeon; stale browser
+  storage and URL parameters no longer arm it automatically.
+
+### Fixed
+- **Agent settle tracking**: fix, commit, audit, narration, cancellation, and
+  battle turn completion now emit a shared settle signal so queued prompts wait
+  until the current turn is actually safe to advance.
+
 ## [2.2.6] - 2026-06-13
 
 ### Added

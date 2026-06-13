@@ -720,8 +720,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const logInput = document.getElementById('log-input');
   const logInputBar = document.getElementById('log-input-bar');
   const logCancel = document.getElementById('log-cancel');
+  const logQueue = document.getElementById('log-queue');
+  const logSend = document.getElementById('log-send');
+  const promptQueuePanel = document.getElementById('prompt-queue-panel');
+  const promptQueueList = document.getElementById('prompt-queue-list');
+  const promptQueueRun = document.getElementById('prompt-queue-run');
+  const promptQueueClear = document.getElementById('prompt-queue-clear');
   let lastEscTime = 0;
   let ledgerRunning = false;
+  let promptQueueId = 0;
+  let queueDrainTimer = null;
+  const promptQueue = [];
 
   let interactiveTimeout = null;
   let lastStreamTime = 0;
@@ -731,6 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
     logInputBar.classList.remove('running');
     hideLoadingIndicator();
     if (interactiveTimeout) { clearTimeout(interactiveTimeout); interactiveTimeout = null; }
+    updatePromptControls();
   };
 
   // Watchdog: if no stream data arrives for 30s, assume it's done/dead
@@ -739,24 +749,159 @@ document.addEventListener('DOMContentLoaded', () => {
     interactiveTimeout = setTimeout(() => {
       if (ledgerRunning) {
         resetLoadingState();
+        scheduleQueueDrain();
       }
     }, 30000);
   };
 
-  const sendLedgerCommand = (text) => {
-    if (!text.trim()) return;
-    if (!bridge.connected) { addLog('Bridge not connected.'); return; }
+  const truncatePrompt = (text, max = 120) => {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    return clean.length > max ? `${clean.slice(0, max - 1)}...` : clean;
+  };
+
+  const getBattleScene = () => {
+    if (!game) return null;
+    const battleScene = game.scene.getScene('Battle');
+    if (!battleScene || !battleScene.scene?.isActive()) return null;
+    return battleScene;
+  };
+
+  const isBattleBusy = () => {
+    const battleScene = getBattleScene();
+    return Boolean(
+      battleScene &&
+      !battleScene.battleOver &&
+      (!battleScene.isPlayerTurn || battleScene._activeRequestId)
+    );
+  };
+
+  const isAgentBusy = () => Boolean(
+    ledgerRunning ||
+    bridge.activeAuditId ||
+    bridge.activeFixId ||
+    bridge.activeCommitId ||
+    bridge.activeNarrationId ||
+    isBattleBusy()
+  );
+
+  function renderPromptQueue() {
+    const hasQueue = promptQueue.length > 0;
+    promptQueuePanel?.classList.toggle('open', hasQueue);
+    if (!promptQueueList) return;
+    promptQueueList.innerHTML = '';
+
+    promptQueue.forEach((item, index) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = `prompt-queue-item${index === 0 ? ' next' : ''}`;
+      row.title = isAgentBusy() ? 'Make this the next prompt' : 'Run this prompt';
+      row.dataset.id = String(item.id);
+
+      const rank = document.createElement('span');
+      rank.className = 'prompt-queue-rank';
+      rank.textContent = index === 0 ? 'NEXT' : String(index + 1).padStart(2, '0');
+
+      const text = document.createElement('span');
+      text.className = 'prompt-queue-text';
+      text.textContent = truncatePrompt(item.text, 180);
+
+      const remove = document.createElement('span');
+      remove.className = 'prompt-queue-remove';
+      remove.textContent = 'x';
+      remove.title = 'Remove';
+      remove.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const idx = promptQueue.findIndex((entry) => entry.id === item.id);
+        if (idx >= 0) promptQueue.splice(idx, 1);
+        renderPromptQueue();
+        updatePromptControls();
+      });
+
+      row.append(rank, text, remove);
+      row.addEventListener('click', () => {
+        const idx = promptQueue.findIndex((entry) => entry.id === item.id);
+        if (idx < 0) return;
+        const [selected] = promptQueue.splice(idx, 1);
+        if (isAgentBusy()) {
+          promptQueue.unshift(selected);
+          addLog(`Next: ${truncatePrompt(selected.text)}`);
+          renderPromptQueue();
+          updatePromptControls();
+          return;
+        }
+        renderPromptQueue();
+        executeLedgerCommand(selected.text, { fromQueue: true });
+      });
+
+      promptQueueList.appendChild(row);
+    });
+  }
+
+  function updatePromptControls() {
+    const hasText = Boolean(logInput?.value?.trim());
+    const busy = isAgentBusy();
+    if (logSend) {
+      logSend.disabled = !hasText;
+      logSend.textContent = busy ? 'Steer' : 'Send';
+      logSend.classList.toggle('steer', busy);
+    }
+    if (logQueue) logQueue.disabled = !hasText;
+    if (promptQueueRun) promptQueueRun.disabled = busy || promptQueue.length === 0;
+    if (promptQueueClear) promptQueueClear.disabled = promptQueue.length === 0;
+  }
+
+  function enqueuePrompt(text, { front = false } = {}) {
+    const clean = String(text || '').trim();
+    if (!clean) return;
+    const item = { id: ++promptQueueId, text: clean, createdAt: Date.now() };
+    if (front) promptQueue.unshift(item);
+    else promptQueue.push(item);
+    addLog(`${front ? 'Steer next' : 'Queued'}: ${truncatePrompt(clean)}`);
+    renderPromptQueue();
+    updatePromptControls();
+  }
+
+  function scheduleQueueDrain() {
+    if (queueDrainTimer) clearTimeout(queueDrainTimer);
+    queueDrainTimer = setTimeout(() => {
+      queueDrainTimer = null;
+      drainPromptQueue();
+    }, 250);
+  }
+
+  function drainPromptQueue() {
+    updatePromptControls();
+    if (!promptQueue.length || isAgentBusy() || !bridge.connected) return;
+    const item = promptQueue.shift();
+    renderPromptQueue();
+    executeLedgerCommand(item.text, { fromQueue: true });
+  }
+
+  function clearInput() {
     logInput.value = '';
     logInput.style.height = 'auto';
     logInput.style.overflowY = 'hidden';
+    autoResize();
+    updatePromptControls();
+  }
+
+  const executeLedgerCommand = (text, { fromQueue = false } = {}) => {
+    if (!text.trim()) return;
+    if (!bridge.connected) {
+      addLog('Bridge not connected.');
+      if (fromQueue) enqueuePrompt(text, { front: true });
+      return;
+    }
 
     // If we're in a battle, route through doAttack so everything is synchronized
-    if (game) {
-      const battleScene = game.scene.getScene('Battle');
-      if (battleScene && battleScene.scene.isActive() && battleScene.isPlayerTurn && !battleScene.battleOver) {
-        battleScene.doAttack(text);
-        return;
-      }
+    const battleScene = getBattleScene();
+    if (battleScene && battleScene.isPlayerTurn && !battleScene.battleOver) {
+      Promise.resolve(battleScene.doAttack(text)).finally(() => {
+        updatePromptControls();
+        scheduleQueueDrain();
+      });
+      return;
     }
 
     // Outside battle - neutral chat. Pass-through to Codex in the user's
@@ -788,8 +933,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } finally {
         resetLoadingState();
+        scheduleQueueDrain();
       }
     })();
+  };
+
+  const submitLedgerInput = ({ queueOnly = false, frontWhenBusy = false } = {}) => {
+    const text = logInput.value.trim();
+    if (!text) return;
+    clearInput();
+    if (queueOnly) {
+      enqueuePrompt(text);
+      return;
+    }
+    if (isAgentBusy()) {
+      enqueuePrompt(text, { front: frontWhenBusy });
+      return;
+    }
+    executeLedgerCommand(text);
   };
 
   // Auto-resize textarea as user types - push log content up
@@ -804,14 +965,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logContent) logContent.scrollTop = logContent.scrollHeight;
   };
   logInput.addEventListener('input', autoResize);
+  logInput.addEventListener('input', updatePromptControls);
   window.addEventListener('resize', autoResize);
   autoResize();
+  renderPromptQueue();
+  updatePromptControls();
 
   logInput.addEventListener('keydown', (e) => {
     // Enter submits, Shift+Enter adds newline
     if (e.key === 'Enter' && !e.shiftKey && logInput.value.trim()) {
       e.preventDefault();
-      sendLedgerCommand(logInput.value);
+      submitLedgerInput({ frontWhenBusy: false });
       autoResize();
     }
     if (e.key === 'Escape') {
@@ -825,6 +989,21 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       lastEscTime = now;
     }
+  });
+
+  logQueue?.addEventListener('click', () => submitLedgerInput({ queueOnly: true }));
+  logSend?.addEventListener('click', () => submitLedgerInput({ frontWhenBusy: true }));
+  promptQueueRun?.addEventListener('click', () => drainPromptQueue());
+  promptQueueClear?.addEventListener('click', () => {
+    if (!promptQueue.length) return;
+    promptQueue.splice(0, promptQueue.length);
+    addLog('Queue cleared.');
+    renderPromptQueue();
+    updatePromptControls();
+  });
+  window.addEventListener('seo-dungeon-agent-settled', () => {
+    updatePromptControls();
+    scheduleQueueDrain();
   });
 
   // Global Escape handler - double-tap cancels any active agent operation

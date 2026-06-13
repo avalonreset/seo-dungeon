@@ -38,7 +38,7 @@ bash install.sh
 Remote installs default to the current release tag:
 
 ```powershell
-$env:SEO_DUNGEON_REF='v2.2.6'
+$env:SEO_DUNGEON_REF='v2.2.7'
 .\install.ps1
 ```
 
@@ -56,6 +56,11 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). The bridge listens on
 `ws://127.0.0.1:3001`.
+
+The title screen requires YOLO Mode to be armed on every fresh app launch. The
+choice is intentionally not persisted. Once the dungeon is running, the Guild
+Ledger can queue follow-up prompts or promote one to run next after the active
+agent turn settles.
 
 ## Runtime Selection
 

@@ -1707,6 +1707,9 @@ export class BattleScene extends Phaser.Scene {
     this._hasAttacked = true;
     this.isPlayerTurn = true;
     this._enableMenu();
+    try {
+      window.dispatchEvent(new CustomEvent('seo-dungeon-agent-settled', { detail: { source: 'battle' } }));
+    } catch (_) {}
   }
 
   _narrateAttack(rawLines, fallbackSummary) {

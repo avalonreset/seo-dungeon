@@ -28,6 +28,17 @@ export class BridgeClient {
     }
   }
 
+  _clearActiveId(id) {
+    if (this.activeLedgerId === id) this.activeLedgerId = null;
+    if (this.activeAuditId === id) this.activeAuditId = null;
+    if (this.activeFixId === id) this.activeFixId = null;
+    if (this.activeCommitId === id) this.activeCommitId = null;
+    if (this.activeNarrationId === id) this.activeNarrationId = null;
+    try {
+      window.dispatchEvent(new CustomEvent('seo-dungeon-agent-settled', { detail: { id } }));
+    } catch (_) {}
+  }
+
   connect(url) {
     if (url) this._url = url;
     return new Promise((resolve, reject) => {
@@ -63,11 +74,11 @@ export class BridgeClient {
           } else if (data.type === 'result') {
             handler.resolve(data);
             this.handlers.delete(data.id);
-            if (this.activeLedgerId === data.id) this.activeLedgerId = null;
+            this._clearActiveId(data.id);
           } else if (data.type === 'error') {
             handler.reject(new Error(data.message));
             this.handlers.delete(data.id);
-            if (this.activeLedgerId === data.id) this.activeLedgerId = null;
+            this._clearActiveId(data.id);
           }
         }
       };
@@ -173,6 +184,7 @@ export class BridgeClient {
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const id = ++this.requestId;
+      this.activeFixId = id;
       this.handlers.set(id, { resolve, reject, onStream });
       const issue = payload && payload.issue ? payload.issue : {};
       this.ws.send(JSON.stringify({
@@ -198,6 +210,7 @@ export class BridgeClient {
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const id = ++this.requestId;
+      this.activeCommitId = id;
       this.handlers.set(id, { resolve, reject, onStream });
       this.ws.send(JSON.stringify({
         id,
@@ -219,6 +232,7 @@ export class BridgeClient {
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const id = ++this.requestId;
+      this.activeNarrationId = id;
       this.handlers.set(id, { resolve, reject });
       this.ws.send(JSON.stringify({
         id,
@@ -264,6 +278,7 @@ export class BridgeClient {
     if (handler) {
       handler.reject(new Error('Cancelled by user'));
       this.handlers.delete(id);
+      this._clearActiveId(id);
     }
   }
 

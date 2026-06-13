@@ -850,6 +850,147 @@
       animation: promptPulse 1.5s ease-in-out infinite;
     }
 
+    #prompt-queue-panel {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px 12px;
+      border-top: 1px solid rgba(212, 175, 55, 0.16);
+      background:
+        linear-gradient(180deg, rgba(212, 175, 55, 0.045), transparent),
+        #050507;
+      flex-shrink: 0;
+      max-height: min(30vh, 220px);
+      overflow: hidden;
+      position: relative;
+      z-index: 3;
+    }
+
+    #prompt-queue-panel.open {
+      display: flex;
+    }
+
+    #prompt-queue-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 22px;
+    }
+
+    #prompt-queue-title {
+      flex: 1;
+      color: #d4af37;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 8px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    #prompt-queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+      padding-right: 2px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(212, 175, 55, 0.35) rgba(10, 10, 14, 0.5);
+    }
+
+    .prompt-queue-item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      border: 1px solid rgba(92, 184, 200, 0.28);
+      border-radius: 4px;
+      background: rgba(12, 12, 28, 0.86);
+      color: #b8bdd8;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.35;
+      padding: 7px 8px;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .prompt-queue-item:hover,
+    .prompt-queue-item.next {
+      border-color: rgba(212, 175, 55, 0.55);
+      background: rgba(30, 24, 18, 0.92);
+    }
+
+    .prompt-queue-rank {
+      color: #d4af37;
+      font-weight: 700;
+      min-width: 22px;
+    }
+
+    .prompt-queue-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .prompt-queue-remove,
+    .prompt-queue-action,
+    .log-action-btn {
+      border: 1px solid rgba(212, 175, 55, 0.28);
+      border-radius: 3px;
+      background: rgba(5, 5, 7, 0.82);
+      color: #d4af37;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+
+    .prompt-queue-remove {
+      width: 24px;
+      height: 24px;
+      line-height: 1;
+    }
+
+    .prompt-queue-action {
+      padding: 4px 7px;
+      color: #8ec9ff;
+      border-color: rgba(92, 184, 200, 0.28);
+    }
+
+    .prompt-queue-remove:hover,
+    .prompt-queue-action:hover,
+    .log-action-btn:hover:not(:disabled) {
+      color: #f0cc50;
+      border-color: rgba(212, 175, 55, 0.55);
+      background: rgba(18, 18, 28, 0.95);
+    }
+
+    .log-action-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    #log-input-actions {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    #log-send,
+    #log-queue {
+      min-height: 24px;
+      padding: 3px 8px;
+    }
+
+    #log-send.steer {
+      color: #8ec9ff;
+      border-color: rgba(92, 184, 200, 0.36);
+    }
+
     @keyframes promptPulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.4; }
@@ -1228,10 +1369,22 @@
     <div id="log-content">
       <div class="log-line system">System ready</div>
     </div>
+    <div id="prompt-queue-panel" aria-live="polite">
+      <div id="prompt-queue-head">
+        <span id="prompt-queue-title">Queued</span>
+        <button id="prompt-queue-run" class="prompt-queue-action" type="button">Next</button>
+        <button id="prompt-queue-clear" class="prompt-queue-action" type="button">Clear</button>
+      </div>
+      <div id="prompt-queue-list"></div>
+    </div>
     <div id="log-input-bar">
       <span id="log-input-prompt">&gt;</span>
       <textarea id="log-input" placeholder="Talk to the Demon Lord..." autocomplete="off" spellcheck="false" rows="1"></textarea>
-      <button id="log-cancel" title="Cancel (Esc x2)">&#x25A0;</button>
+      <div id="log-input-actions">
+        <button id="log-queue" class="log-action-btn" type="button">Queue</button>
+        <button id="log-send" class="log-action-btn" type="button">Send</button>
+        <button id="log-cancel" class="log-action-btn" type="button" title="Cancel (Esc x2)">&#x25A0;</button>
+      </div>
     </div>
   </div>
   <button id="ledger-open-toggle" type="button" title="Show Guild Ledger" aria-label="Show Guild Ledger">‹</button>

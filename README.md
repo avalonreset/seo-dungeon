@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.6-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2.7-blue)](CHANGELOG.md)
 [![Runtime](https://img.shields.io/badge/runtime-Codex%20%7C%20Claude%20%7C%20Gemini-2ea44f)](dungeon/)
 
 SEO Dungeon turns SEO audits into a 16-bit dungeon crawler. Enter a domain,
@@ -40,10 +40,13 @@ supports Claude Code and Gemini CLI when those local tools are installed.
 5. Run a full `/seo audit` through the selected local CLI.
 6. Review SEO issues as dungeon demons sorted by severity.
 7. Use **Attack** to send a scoped agent turn for the selected issue.
-8. Use **Vanquish** when you decide the issue is handled.
+8. Queue or steer follow-up prompts through the Guild Ledger while work is
+   running; queued prompts release when the active turn settles.
+9. Use **Vanquish** when you decide the issue is handled.
 
 The Guild Ledger sidebar can be resized or hidden while you work, and the title
-screen remembers your last domain and project folder.
+screen remembers your last domain and project folder. YOLO Mode is deliberately
+not remembered; it must be armed on each fresh app launch.
 
 The dungeon bridge starts local CLI processes only. It does not proxy model
 access and does not route through browser automation or consumer-app wrappers.
