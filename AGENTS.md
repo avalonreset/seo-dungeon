@@ -44,26 +44,31 @@
 
 --- project-doc ---
 
-# SEO Dungeon: Codex-Only Agent Instructions
+# SEO Dungeon: Multi-Agent Instructions
 
-SEO Dungeon is a Codex-first SEO audit application. It does not support Claude
-Code, Gemini CLI, or Gemini/Claude API-backed runtime paths.
+SEO Dungeon is a Codex-default SEO audit application. The browser game bridge
+defaults to Codex CLI, while the bundled SEO engine can also be used by
+compatible local terminal agents such as Claude Code, Gemini CLI, Cursor, Cline,
+Aider, and Antigravity.
 
 ## Overview
 
 The project combines a 16-bit dungeon crawler UI with a Codex-compatible SEO
-skill suite. The current bundle has 24 sub-skills (21 core + 1 orchestrator + 1
-framework integration + 1 extension mirror), 23 Codex sub-agents, and Python execution scripts for
-fetching, parsing, reporting, and SEO data integrations.
+skill suite. The current bundle has 25 sub-skills (21 core + 1 orchestrator + 1
+framework integration + 2 extension mirrors), 18 portable Markdown sub-agents,
+23 Codex TOML profiles, and 50 Python execution scripts for fetching, parsing,
+reporting, and SEO data integrations.
 
 ## Runtime Policy
 
-- Supported runtime: Codex CLI through `codex exec --json`.
-- Unsupported runtimes: Claude Code, Gemini CLI, Claude API harnesses, Gemini API
-  harnesses, and desktop/browser automation wrappers around consumer AI apps.
-- Do not add installer branches, bridge code, docs, or examples for non-Codex
-  agent runtimes.
-- If a feature would require Claude or Gemini to operate, leave it out.
+- Default dungeon runtime: Codex CLI through `codex exec --json`.
+- Optional dungeon runtimes: local Claude Code CLI through `claude --print` and
+  local Gemini CLI through `gemini --prompt`.
+- The bridge must only spawn local terminal CLIs. Do not add consumer-app browser
+  wrappers or remote proxy services.
+- Codex installs use the root installer and `agents-codex/` TOML profiles.
+- Non-Codex usage should stay grounded in the same `skills/`, `agents/`, and
+  `scripts/` files instead of inventing runtime-specific forks.
 
 ## Quick Reference
 
@@ -78,6 +83,7 @@ fetching, parsing, reporting, and SEO data integrations.
 | `/seo images <url>` | Image SEO: on-page audit, SERP analysis, file optimization |
 | `/seo geo <url>` | AI Overviews / Generative Engine Optimization |
 | `/seo plan <type>` | Strategic SEO planning |
+| `/seo flow [stage] [url\|topic]` | FLOW framework prompts |
 | `/seo cluster <keyword>` | SERP-based semantic clustering and content architecture |
 | `/seo sxo <url>` | Search Experience Optimization: page-type analysis, personas |
 | `/seo drift baseline <url>` | Capture SEO baseline for change monitoring |
@@ -92,22 +98,42 @@ fetching, parsing, reporting, and SEO data integrations.
 | `/seo backlinks <url>` | Backlink profile analysis |
 | `/seo dataforseo [cmd]` | Live SEO data via DataForSEO (extension) |
 | `/seo firecrawl [cmd] <url>` | Full-site crawling and site mapping (extension) |
+| `/seo image-gen [use-case]` | SEO image generation planning (extension) |
 
 ## Architecture
 
 ```
-skills/                    # 24 sub-skills
+skills/                    # 25 sub-skills
   seo/SKILL.md             # Main orchestrator + routing
-agents-codex/              # 23 Codex TOML agent profiles
-scripts/                   # Python execution scripts
+agents/                    # 18 portable Markdown agent prompts
+agents-codex/              # 23 Codex TOML profiles
+scripts/                   # 50 Python execution scripts
 schema/                    # JSON-LD templates
-extensions/                # Optional add-ons, excluding Claude/Gemini runtimes
-dungeon/                   # Phaser UI + local Codex bridge
+extensions/                # Optional SEO data, crawl, and asset add-ons
+dungeon/                   # Phaser UI + local CLI bridge
 ```
+
+## Portability Notes
+
+Codex is the default runtime for SEO Dungeon. Compatible terminal-agent
+workflows can read the same `skills/`, `agents/`, and `scripts/` files directly
+when a user chooses to adapt the package outside the dungeon UI.
+
+Run `python scripts/portability_check.py --strict` before shipping changes that
+touch skill frontmatter, agent prompts, or extension mirrors.
+
+| Tool name | Codex | Cline | Aider | Portable note |
+|-----------|-------|-------|-------|---------------|
+| Read | read files directly | read files directly | read files directly | Use repo-relative paths. |
+| Write | edit files directly | edit files directly | edit files directly | Keep generated files in the repo or explicit output folders. |
+| Edit | patch files directly | patch files directly | patch files directly | Prefer small, reviewable edits. |
+| Bash | shell command | shell command | shell command | Preserve URL-safety and credential rules. |
+| WebFetch | browser or fetch script | browser or fetch script | browser or fetch script | Use `scripts/url_safety.py` guarded fetch paths for live URLs. |
 
 ## Key Principles
 
-1. Keep Codex the only supported agent runtime.
+1. Keep the dungeon UI Codex-default and local-CLI only.
 2. Prefer existing skill and script patterns over new abstractions.
 3. Preserve SSRF protections in scripts that fetch URLs.
-4. Keep user-facing copy clear that SEO Dungeon is independent and Codex-only.
+4. Keep user-facing copy clear that SEO Dungeon is independent, public, and
+   Codex-default.

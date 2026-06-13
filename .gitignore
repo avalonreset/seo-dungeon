@@ -23,6 +23,7 @@ Thumbs.db
 .idea/
 *.sublime-*
 .codex/
+.codex-work/
 
 # Python
 __pycache__/

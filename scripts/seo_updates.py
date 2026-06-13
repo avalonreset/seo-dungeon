@@ -31,17 +31,9 @@ from typing import Iterable
 
 
 _DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "google-updates.json"
-_EMPTY_DATA = {
-    "source_of_truth": "https://status.search.google.com/products/rGHU1u87FJnkP6W2GwMi/history",
-    "last_verified": None,
-    "updates": [],
-    "unverified": [],
-}
 
 
 def _load() -> dict:
-    if not _DATA_FILE.is_file():
-        return dict(_EMPTY_DATA)
     with _DATA_FILE.open() as fh:
         return json.load(fh)
 

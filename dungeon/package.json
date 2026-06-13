@@ -1,7 +1,7 @@
 {
   "name": "seo-dungeon",
-  "version": "2.0.0",
-  "description": "A Codex-only 16-bit dungeon crawler interface for SEO audits",
+  "version": "2.2.0",
+  "description": "A Codex-default 16-bit dungeon crawler interface for SEO audits",
   "scripts": {
     "start": "node launch.js",
     "dev": "concurrently \"npm run server\" \"npm run game\"",
@@ -11,13 +11,13 @@
     "serve": "npx serve dist -l 3000 -s"
   },
   "dependencies": {
-    "concurrently": "^9.1.2",
-    "express": "^4.21.2",
+    "concurrently": "^10.0.3",
+    "express": "^5.2.1",
     "phaser": "^3.87.0",
     "playwright": "^1.58.2",
-    "ws": "^8.18.0"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
-    "vite": "^6.3.0"
+    "vite": "^8.0.16"
   }
 }

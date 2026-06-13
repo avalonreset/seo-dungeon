@@ -16,11 +16,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_JSON = REPO_ROOT / ".codex-plugin" / "plugin.json"
+CLAUDE_PLUGIN_JSON = REPO_ROOT / ".claude-plugin" / "plugin.json"
+MARKETPLACE_JSON = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 CITATION_CFF = REPO_ROOT / "CITATION.cff"
 
 
 def _read_text(path: Path) -> str:
-    """Read repo text files as UTF-8 so tests behave the same on Windows and CI."""
     return path.read_text(encoding="utf-8")
 
 
@@ -38,7 +39,16 @@ def _count_skill_dirs() -> int:
 
 
 def _count_agent_files() -> int:
-    """Count Codex agent profile files."""
+    """Count agents/seo-*.md files."""
+    agents_dir = REPO_ROOT / "agents"
+    return sum(
+        1 for f in agents_dir.iterdir()
+        if f.is_file() and f.suffix == ".md" and f.name.startswith("seo-")
+    )
+
+
+def _count_codex_profile_files() -> int:
+    """Count Codex TOML agent profiles."""
     agents_dir = REPO_ROOT / "agents-codex"
     return sum(
         1 for f in agents_dir.iterdir()
@@ -66,6 +76,12 @@ def test_plugin_json_skill_count_matches_disk():
     )
 
 
+def test_plugin_json_description_fits_registry_limit():
+    """plugin.json description must stay below the Claude plugin registry limit."""
+    plugin = _read_json(PLUGIN_JSON)
+    assert len(plugin["description"]) < 500
+
+
 def test_plugin_json_subagent_count_matches_disk():
     """plugin.json description's 'N sub-agents' claim must equal agents/ count."""
     plugin = _read_json(PLUGIN_JSON)
@@ -75,6 +91,47 @@ def test_plugin_json_subagent_count_matches_disk():
         f"plugin.json description claims {claimed} sub-agents "
         f"but disk has {actual}. "
         f"Update the description to match the new count."
+    )
+
+
+def test_plugin_json_codex_profile_count_matches_disk():
+    """plugin.json description's 'N Codex agent profiles' claim must equal agents-codex/ count."""
+    plugin = _read_json(PLUGIN_JSON)
+    claimed = _extract_count(plugin["description"], "Codex agent profiles")
+    actual = _count_codex_profile_files()
+    assert claimed == actual, (
+        f"plugin.json description claims {claimed} Codex agent profiles "
+        f"but disk has {actual}."
+    )
+
+
+def test_marketplace_json_skill_count_matches_claude_plugin_json():
+    """Claude marketplace entry must claim the same skill count as Claude plugin.json."""
+    plugin = _read_json(CLAUDE_PLUGIN_JSON)
+    marketplace = _read_json(MARKETPLACE_JSON)
+    plugin_count = _extract_count(plugin["description"], "sub-skills")
+    market_count = _extract_count(
+        marketplace["plugins"][0]["description"], "sub-skills"
+    )
+    assert plugin_count == market_count, (
+        f"plugin.json claims {plugin_count} sub-skills, "
+        f"marketplace.json plugin entry claims {market_count}. "
+        f"They must agree."
+    )
+
+
+def test_marketplace_json_subagent_count_matches_claude_plugin_json():
+    """Claude marketplace entry must claim the same sub-agent count as Claude plugin.json."""
+    plugin = _read_json(CLAUDE_PLUGIN_JSON)
+    marketplace = _read_json(MARKETPLACE_JSON)
+    plugin_count = _extract_count(plugin["description"], "sub-agents")
+    market_count = _extract_count(
+        marketplace["plugins"][0]["description"], "sub-agents"
+    )
+    assert plugin_count == market_count, (
+        f"plugin.json claims {plugin_count} sub-agents, "
+        f"marketplace.json plugin entry claims {market_count}. "
+        f"They must agree."
     )
 
 
@@ -127,20 +184,19 @@ def test_pyproject_version_matches_plugin_json():
     )
 
 
-def test_install_scripts_default_ref_matches_plugin_version():
+def test_install_scripts_default_tag_matches_plugin_version():
     """install.sh and install.ps1 default SEO_DUNGEON_REF must equal v{plugin version}.
 
-    Background: upstream v1.9.9 added a guard because install.sh and install.ps1
-    had drifted to an old default tag. SEO Dungeon uses SEO_DUNGEON_REF and keeps
-    the same release invariant.
+    Background: install.sh and install.ps1 default tag was v1.9.0 while
+    plugin.json shipped at 1.9.8 (4 missed bumps across v1.9.5/.6/.7/.8).
+    Manual-install users via curl | bash got 8 versions stale. This guard
+    forces the default tag to track plugin.json on every release.
     """
     plugin = _read_json(PLUGIN_JSON)
     expected_tag = f"v{plugin['version']}"
 
     sh_text = _read_text(REPO_ROOT / "install.sh")
-    sh_match = re.search(
-        r'local ref="\$\{SEO_DUNGEON_REF:-([^}]+)\}"', sh_text
-    )
+    sh_match = re.search(r'local ref="\$\{SEO_DUNGEON_REF:-([^}]+)\}"', sh_text)
     assert sh_match, "install.sh has no recognizable SEO_DUNGEON_REF default"
     sh_tag = sh_match.group(1)
     assert sh_tag == expected_tag, (
@@ -173,7 +229,7 @@ def _extract_section(text: str, heading: str) -> str:
 def test_orchestrator_sub_skills_list_matches_disk():
     """skills/seo/SKILL.md Sub-Skills numbered list must equal set(skills/*) minus orchestrator itself.
 
-    Background: v1.9.8 CI guard checked user-facing docs but not the orchestrator's
+    Background: v1.9.8 CI guard checks README/CLAUDE/AGENTS but not the orchestrator's
     own canonical-phrasing source. PR #92 surfaced that the orchestrator had stale "21
     specialized" claims and the list included seo-firecrawl (extension-only). This
     guard closes that gap.
@@ -202,7 +258,7 @@ def test_orchestrator_sub_skills_list_matches_disk():
 
 
 def test_orchestrator_subagents_list_matches_disk():
-    """skills/seo/SKILL.md Subagents bullet list must equal set(agents-codex/seo-*.toml), no duplicates.
+    """skills/seo/SKILL.md Subagents bullet list must equal set(agents/seo-*.md), no duplicates.
 
     Background: same drift pattern as Sub-Skills. Codex round 3 review surfaced that
     the Subagents list was missing seo-flow (file on disk) and included seo-firecrawl
@@ -217,11 +273,11 @@ def test_orchestrator_subagents_list_matches_disk():
     )
     listed = set(listed_list)
     on_disk = {
-        p.stem for p in (REPO_ROOT / "agents-codex").iterdir()
-        if p.is_file() and p.suffix == ".toml" and p.name.startswith("seo-")
+        p.stem for p in (REPO_ROOT / "agents").iterdir()
+        if p.is_file() and p.suffix == ".md" and p.name.startswith("seo-")
     }
     assert listed == on_disk, (
-        f"Subagents list != agents-codex/ dir. "
+        f"Subagents list != agents/ dir. "
         f"Missing from list: {sorted(on_disk - listed)}. "
         f"Extra in list: {sorted(listed - on_disk)}."
     )
@@ -283,6 +339,60 @@ def test_skill_metadata_versions_match_plugin_json():
     assert not errors, "Skill metadata.version drift:\n  " + "\n  ".join(errors)
 
 
+def test_marketplace_metadata_and_author_parity():
+    """marketplace.json metadata.description includes both counts; plugin entry author parities plugin.json.
+
+    Background: v1.9.8 release notes claimed `author.email` was added in commit 8514999
+    but verification showed only owner.name existed. v1.9.9 corrects this and adds a
+    guard so marketplace.json metadata.description + plugin entry author stay in sync
+    with plugin.json.
+    """
+    plugin = _read_json(CLAUDE_PLUGIN_JSON)
+    mp = _read_json(MARKETPLACE_JSON)
+
+    desc = mp["metadata"]["description"]
+    desc_sub_skills = re.search(r"(\d+)\s+sub-skills", desc)
+    desc_sub_agents = re.search(r"(\d+)\s+sub-agents", desc)
+    assert desc_sub_skills, (
+        f"marketplace.json metadata.description missing sub-skills count: {desc!r}"
+    )
+    assert desc_sub_agents, (
+        f"marketplace.json metadata.description missing sub-agents count: {desc!r}"
+    )
+
+    plugin_desc = plugin["description"]
+    plugin_sub_skills_match = re.search(r"(\d+)\s+sub-skills", plugin_desc)
+    plugin_sub_agents_match = re.search(r"(\d+)\s+sub-agents", plugin_desc)
+    assert plugin_sub_skills_match, "plugin.json description has no sub-skills count"
+    assert plugin_sub_agents_match, "plugin.json description has no sub-agents count"
+
+    assert desc_sub_skills.group(1) == plugin_sub_skills_match.group(1), (
+        f"marketplace.json metadata.description claims {desc_sub_skills.group(1)} "
+        f"sub-skills but plugin.json claims {plugin_sub_skills_match.group(1)}"
+    )
+    assert desc_sub_agents.group(1) == plugin_sub_agents_match.group(1), (
+        f"marketplace.json metadata.description claims {desc_sub_agents.group(1)} "
+        f"sub-agents but plugin.json claims {plugin_sub_agents_match.group(1)}"
+    )
+
+    plugin_entry = mp["plugins"][0]
+    assert "author" in plugin_entry, (
+        "marketplace.json plugin entry must have an author object"
+    )
+    p_author = plugin["author"]
+    m_author = plugin_entry["author"]
+    # Exact parity for all 3 fields (name, email, url) — drift in any field
+    # signals a metadata sync miss
+    for field in ("name", "email", "url"):
+        p_val = p_author.get(field)
+        m_val = m_author.get(field)
+        assert p_val, f"plugin.json author.{field} must be non-empty (was: {p_val!r})"
+        assert m_val == p_val, (
+            f"marketplace plugin entry author.{field} {m_val!r} != "
+            f"plugin.json author.{field} {p_val!r}"
+        )
+
+
 def test_canonical_math_adds_up():
     """The canonical phrasing's parenthetical breakdown must sum to the headline count."""
     plugin = _read_json(PLUGIN_JSON)
@@ -298,4 +408,63 @@ def test_canonical_math_adds_up():
     assert sum(parts) == headline, (
         f"plugin.json canonical phrasing breakdown {breakdown!r} sums to "
         f"{sum(parts)} but headline claims {headline}. Math must add up."
+    )
+
+
+def test_reference_files_have_at_least_one_link():
+    """Every skills/*/references/*.md file must be cited somewhere in the repo.
+
+    Guards against orphan reference files — docs on disk that no SKILL.md,
+    agent, top-level doc, or other reference file actually links to. Catches
+    drift like the v2.0.0-era incident where llmstxt-evidence.md landed in
+    references/ but was reachable only through a sibling cross-link, not
+    through its parent SKILL.md.
+
+    Cross-skill references are legitimate (e.g. skills/seo/references/
+    backlink-quality.md is cited from seo-backlinks/SKILL.md) so the search
+    is repo-wide rather than per-parent-skill.
+
+    Searches the full filename (`name.md`) and the Obsidian-style wikilink
+    form (`[[name]]`) across: every SKILL.md, every agent .md, every doc/*.md,
+    top-level README/CHANGELOG/CLAUDE/AGENTS/CONTRIBUTING, and every other
+    reference file. Each reference is excluded from its own search.
+    """
+    ref_files = list((REPO_ROOT / "skills").glob("*/references/*.md"))
+    if not ref_files:
+        return  # no references at all — nothing to check
+
+    search_paths: list[Path] = []
+    search_paths += list((REPO_ROOT / "skills").glob("*/SKILL.md"))
+    search_paths += list((REPO_ROOT / "agents").glob("*.md"))
+    search_paths += list((REPO_ROOT / "docs").glob("*.md"))
+    for doc in ("README.md", "CHANGELOG.md", "CLAUDE.md",
+                "AGENTS.md", "CONTRIBUTING.md"):
+        candidate = REPO_ROOT / doc
+        if candidate.exists():
+            search_paths.append(candidate)
+    # Reference files can cite each other (e.g. via [[wikilink]]).
+    search_paths += ref_files
+
+    text_by_path = {p: _read_text(p) for p in search_paths}
+
+    orphans = []
+    for ref in ref_files:
+        slug = ref.stem  # 'llmstxt-evidence'
+        filename = ref.name  # 'llmstxt-evidence.md'
+        wikilink = f"[[{slug}]]"
+        found = False
+        for other_path, text in text_by_path.items():
+            if other_path == ref:
+                continue
+            if filename in text or wikilink in text:
+                found = True
+                break
+        if not found:
+            orphans.append(str(ref.relative_to(REPO_ROOT)))
+
+    assert not orphans, (
+        "Orphan reference files (on disk, not cited anywhere repo-wide):\n  "
+        + "\n  ".join(orphans)
+        + "\n\nFix: link the file from its parent SKILL.md, a related "
+          "reference doc, or a top-level doc — or delete if obsolete."
     )

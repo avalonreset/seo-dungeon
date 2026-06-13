@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-06-13
+
+### Added
+- **Public v2.2 SEO engine refresh**: synchronized the bundled SEO engine with
+  Daniel Agrici's public `AgriciDaniel/claude-seo` v2.2.0 tag, including the
+  25 sub-skills, 18 portable sub-agents, 50 Python scripts, extension mirrors,
+  security fixes, and knowledge-currency updates from upstream.
+- **Runtime picker**: added a title-screen CLI selector for Codex, Claude, and
+  Gemini. Codex remains the default runtime.
+- **Dynamic character profiles**: replaced Claude-specific character internals
+  with neutral `deep`, `balanced`, and `fast` profiles. Codex maps those to
+  `xhigh`, `high`, and `medium`; Claude maps to `opus`, `sonnet`, and `haiku`;
+  Gemini maps to Pro, Flash, and fast Flash model families.
+- **Portable agent prompts**: restored the public `agents/` Markdown prompts
+  alongside SEO Dungeon's Codex TOML profiles.
+
+### Changed
+- **Codex-default packaging**: documentation, installer output, app metadata,
+  and runtime copy now describe SEO Dungeon as Codex-default rather than
+  Codex-only.
+- **Dependency hardening**: updated the dungeon app dependency set to clear
+  `npm audit` and added a CI app build/audit job on Node 22.
+- **Version triangulation**: bumped plugin, Python metadata, citation metadata,
+  installer defaults, and dungeon package metadata to `2.2.0`.
+
+### Fixed
+- **Runtime cache isolation**: cached audits now include both runtime and
+  profile in their keys so switching between Codex, Claude, and Gemini cannot
+  reuse the wrong cached run.
+- **Bridge dispatch**: the local bridge now forwards runtime and profile
+  explicitly and supports Codex JSON streaming plus text-output Claude/Gemini
+  CLI runs.
+
 ## [2.0.0] - 2026-05-25
 
 ### Changed

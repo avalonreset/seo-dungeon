@@ -18,6 +18,7 @@ import json
 import os
 import sys
 from datetime import datetime
+from html import escape
 from pathlib import Path
 from typing import Optional
 
@@ -33,9 +34,10 @@ except ImportError:
 
 try:
     from weasyprint import HTML
-except ImportError:
-    print("Error: weasyprint required. Install with: pip install weasyprint", file=sys.stderr)
-    sys.exit(1)
+    WEASYPRINT_IMPORT_ERROR = None
+except (ImportError, OSError) as exc:
+    HTML = None
+    WEASYPRINT_IMPORT_ERROR = exc
 
 
 # ─── Brand Colors ────────────────────────────────────────────────────────────
@@ -1018,6 +1020,136 @@ def _build_toc(sections_info):
     )
 
 
+def _coerce_items(value):
+    """Return a list for scalar-or-list audit fields."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _finding_title(item):
+    if isinstance(item, dict):
+        return item.get("title") or item.get("issue") or item.get("name") or "Finding"
+    return str(item)
+
+
+def _finding_severity(item):
+    if isinstance(item, dict):
+        return str(item.get("severity", "Info"))
+    return "Info"
+
+
+def _finding_description(item):
+    if isinstance(item, dict):
+        return item.get("description") or item.get("details") or item.get("evidence") or ""
+    return ""
+
+
+def _build_full_audit_categories(data, section_num=2):
+    """Build category sections for audit-data.json style reports."""
+    categories = _coerce_items(data.get("categories"))
+    if not categories:
+        return ""
+
+    lines = []
+    lines.append(f'\n<!-- {"=" * 55} {section_num}. AUDIT CATEGORIES {"=" * 3} -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append(f'    <h2>{section_num}. Audit Categories</h2>')
+    lines.append('  </div>')
+    lines.append('')
+
+    for idx, category in enumerate(categories, 1):
+        if not isinstance(category, dict):
+            continue
+        name = escape(str(category.get("name", f"Category {idx}")))
+        score = category.get("score")
+        lines.append(f'  <h3>{section_num}.{idx} {name}</h3>')
+        if score is not None:
+            try:
+                score_val = float(score)
+                cls = "status-pass" if score_val >= 80 else ("status-warn" if score_val >= 50 else "status-fail")
+                lines.append(f'  <p><strong>Score:</strong> <span class="{cls}">{score_val:g}/100</span></p>')
+            except (TypeError, ValueError):
+                lines.append(f'  <p><strong>Score:</strong> {escape(str(score))}</p>')
+
+        what_works = _coerce_items(category.get("what_works"))
+        if what_works:
+            lines.append('  <h4>What Works</h4>')
+            lines.append('  <ul>')
+            for item in what_works:
+                lines.append(f'    <li>{escape(str(item))}</li>')
+            lines.append('  </ul>')
+
+        findings = _coerce_items(category.get("findings"))
+        if findings:
+            lines.append('  <h4>Findings</h4>')
+            for finding in findings:
+                title = escape(_finding_title(finding))
+                severity = escape(_finding_severity(finding))
+                desc = escape(_finding_description(finding))
+                recommendation = ""
+                if isinstance(finding, dict) and finding.get("recommendation"):
+                    recommendation = escape(str(finding["recommendation"]))
+                severity_class = _rating_css_class(severity)
+                lines.append('  <div class="action-item medium">')
+                lines.append(f'    <h4>{title} <span class="{severity_class}">{severity}</span></h4>')
+                if desc:
+                    lines.append(f'    <p>{desc}</p>')
+                if recommendation:
+                    lines.append(f'    <p><strong>Recommendation:</strong> {recommendation}</p>')
+                lines.append('  </div>')
+        lines.append('  <hr class="divider">')
+
+    lines.append('</div>')
+    return "\n".join(lines)
+
+
+def _build_audit_action_plan(data, section_num=5):
+    """Build a four-phase or custom action-plan section."""
+    action_plan = data.get("action_plan", {})
+    phases = []
+    if isinstance(action_plan, dict):
+        phases = _coerce_items(action_plan.get("phases") or action_plan.get("roadmap"))
+    elif isinstance(action_plan, list):
+        phases = action_plan
+    if not phases:
+        return ""
+
+    lines = []
+    lines.append(f'\n<!-- {"=" * 55} {section_num}. ACTION PLAN {"=" * 3} -->')
+    lines.append('<div class="section">')
+    lines.append('  <div class="section-header">')
+    lines.append(f'    <h2>{section_num}. Action Plan</h2>')
+    lines.append('  </div>')
+    lines.append('')
+
+    for idx, phase in enumerate(phases, 1):
+        if isinstance(phase, dict):
+            name = phase.get("name") or phase.get("phase") or f"Phase {idx}"
+            timeframe = phase.get("timeframe") or phase.get("timeline") or ""
+            items = _coerce_items(phase.get("items") or phase.get("actions"))
+        else:
+            name = f"Phase {idx}"
+            timeframe = ""
+            items = [phase]
+        lines.append('  <div class="roadmap-phase">')
+        heading = escape(str(name))
+        if timeframe:
+            heading = f'{heading} <span class="effort">{escape(str(timeframe))}</span>'
+        lines.append(f'    <h4>{heading}</h4>')
+        lines.append('    <ul>')
+        for item in items:
+            lines.append(f'      <li>{escape(str(item))}</li>')
+        lines.append('    </ul>')
+        lines.append('  </div>')
+
+    lines.append('</div>')
+    return "\n".join(lines)
+
+
 def _build_executive_summary(domain, timestamp, data, report_type):
     """Build the Executive Summary section with metric cards, issues, and wins."""
     lines = []
@@ -1028,15 +1160,29 @@ def _build_executive_summary(domain, timestamp, data, report_type):
     lines.append('  </div>')
     lines.append('')
 
+    summary = data.get("summary", {}) if isinstance(data.get("summary"), dict) else {}
+
     # Context paragraph
-    lines.append(f'  <p>This report presents a comprehensive Google SEO analysis of '
-                 f'<strong>{domain}</strong>, generated on {timestamp}. '
-                 f'Data was collected from Google PageSpeed Insights, Chrome User Experience '
-                 f'Report (CrUX), Google Search Console, and the URL Inspection API as available.</p>')
+    if summary:
+        business_type = summary.get("business_type")
+        type_text = f' for a <strong>{escape(str(business_type))}</strong> site' if business_type else ""
+        lines.append(f'  <p>This report presents a comprehensive SEO audit of '
+                     f'<strong>{domain}</strong>{type_text}, generated on {timestamp}. '
+                     f'Findings combine technical, content, schema, performance, visual, '
+                     f'and search-readiness evidence as available.</p>')
+    else:
+        lines.append(f'  <p>This report presents a comprehensive Google SEO analysis of '
+                     f'<strong>{domain}</strong>, generated on {timestamp}. '
+                     f'Data was collected from Google PageSpeed Insights, Chrome User Experience '
+                     f'Report (CrUX), Google Search Console, and the URL Inspection API as available.</p>')
     lines.append('')
 
     # Metric cards row
     cards = []
+
+    health_score = summary.get("health_score")
+    if health_score is not None:
+        cards.append(("health", f"{health_score}/100", "SEO Health Score", _score_color(float(health_score))))
 
     # PSI performance score
     psi = data.get("psi", {})
@@ -1080,6 +1226,11 @@ def _build_executive_summary(domain, timestamp, data, report_type):
 
     # Critical issues box
     issues = []
+    for item in _coerce_items(summary.get("top_findings")):
+        severity = _finding_severity(item)
+        title = _finding_title(item)
+        issues.append(f'<strong>{escape(severity)}:</strong> {escape(title)}')
+
     failed_audits = mobile.get("failed_audits", [])
     if failed_audits:
         top_fail = sorted(failed_audits, key=lambda a: a.get("score", 1))[:3]
@@ -1108,6 +1259,9 @@ def _build_executive_summary(domain, timestamp, data, report_type):
 
     # Quick wins box
     wins = []
+    for item in _coerce_items(summary.get("quick_wins")):
+        wins.append(escape(str(item)))
+
     qw = gsc.get("quick_wins", [])
     if qw:
         wins.append(f'{len(qw)} search queries at positions 4-10 with high impressions '
@@ -2029,13 +2183,17 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
         psi = data.get("psi", {})
         mobile = psi.get("psi", {}).get("mobile", psi) if isinstance(psi, dict) else {}
         perf_score = mobile.get("lighthouse_scores", {}).get("performance") if isinstance(mobile, dict) else None
+        summary = data.get("summary", {}) if isinstance(data.get("summary"), dict) else {}
+        health_score = summary.get("health_score")
+        display_score = health_score if health_score is not None else perf_score
+        has_audit_schema = bool(summary or data.get("categories") or data.get("action_plan"))
 
         sections.append(_build_title_page(
-            domain, "Google SEO Intelligence Report",
+            domain, "Full SEO Audit Report" if has_audit_schema else "Google SEO Intelligence Report",
             "Comprehensive Analysis",
-            score=perf_score,
-            score_label="Lighthouse Performance Score" if perf_score else None,
-            meta_items=[timestamp, "All Google APIs"],
+            score=display_score,
+            score_label="SEO Health Score" if health_score is not None else ("Lighthouse Performance Score" if perf_score else None),
+            meta_items=[timestamp, "Full Audit"],
         ))
 
         # Build TOC dynamically based on available data
@@ -2045,6 +2203,14 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
             ]},
         ]
         sec_num = 2
+        if data.get("categories"):
+            toc_sections.append({
+                "num": sec_num, "title": "Audit Categories", "subs": [
+                    "What Works",
+                    "Findings by Severity",
+                ],
+            })
+            sec_num += 1
         if data.get("psi") or data.get("crux"):
             toc_sections.append({
                 "num": sec_num, "title": "Core Web Vitals &amp; Performance",
@@ -2070,11 +2236,18 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
                 ],
             })
             sec_num += 1
-        toc_sections.append({
-            "num": sec_num, "title": "Recommendations", "subs": [
-                "Prioritized Action Items",
-            ],
-        })
+        if data.get("action_plan"):
+            toc_sections.append({
+                "num": sec_num, "title": "Action Plan", "subs": [
+                    "Phased Roadmap",
+                ],
+            })
+        else:
+            toc_sections.append({
+                "num": sec_num, "title": "Recommendations", "subs": [
+                    "Prioritized Action Items",
+                ],
+            })
         rec_num = sec_num
         sec_num += 1
         toc_sections.append({
@@ -2085,6 +2258,10 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
         sections.append(_build_executive_summary(domain, timestamp, data, report_type))
 
         current_sec = 2
+        if data.get("categories"):
+            sections.append(_build_full_audit_categories(data, section_num=current_sec))
+            current_sec += 1
+
         if data.get("psi") or data.get("crux"):
             cwv_html, fig_num = _build_cwv_section(
                 data.get("psi", {}), data.get("crux", {}), chart_paths,
@@ -2109,7 +2286,11 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
             sections.append(idx_html)
             current_sec += 1
 
-        sections.append(_build_recommendations(data, section_num=rec_num))
+        action_html = _build_audit_action_plan(data, section_num=rec_num)
+        if action_html:
+            sections.append(action_html)
+        else:
+            sections.append(_build_recommendations(data, section_num=rec_num))
         sections.append(_build_methodology_footer(domain, timestamp))
 
     # ── Assemble Final HTML ──────────────────────────────────────────────────
@@ -2145,6 +2326,11 @@ def generate_report(report_type, data, domain, output_dir, output_format="pdf"):
     if output_format in ("pdf", "both", "all"):
         pdf_path = output_dir / f"{base_name}.pdf"
         try:
+            if HTML is None:
+                raise RuntimeError(
+                    "WeasyPrint PDF support is unavailable. Install WeasyPrint "
+                    f"and its native dependencies. Import error: {WEASYPRINT_IMPORT_ERROR}"
+                )
             HTML(string=html_content).write_pdf(str(pdf_path))
             result["files"].append(str(pdf_path))
             # Post-generation review

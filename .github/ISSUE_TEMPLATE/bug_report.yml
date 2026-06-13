@@ -15,31 +15,31 @@ body:
     validations:
       required: true
   - type: input
-    id: node-version
+    id: python-version
     attributes:
-      label: Node.js Version
-      description: Run `node --version`
+      label: Python Version
+      description: Run `python3 --version`
     validations:
       required: true
   - type: input
-    id: browser
+    id: command
     attributes:
-      label: Browser
-      description: e.g. Chrome 120, Firefox 121, Safari 17
-    validations:
-      required: true
-  - type: textarea
-    id: description
-    attributes:
-      label: What happened?
-      description: Describe the bug and what you expected to happen
+      label: Command that failed
+      description: e.g. `/seo audit https://example.com`
     validations:
       required: true
   - type: textarea
     id: error-output
     attributes:
-      label: Error output or screenshot
-      description: Copy any console errors or attach screenshots
+      label: Full error output
+      description: Copy the complete terminal output
       render: shell
     validations:
-      required: false
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true

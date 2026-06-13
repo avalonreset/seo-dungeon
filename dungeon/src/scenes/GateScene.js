@@ -1,10 +1,11 @@
 import { CHARACTERS } from '../knight-sprite.js';
 import { SFX } from '../utils/sound-manager.js';
+import { getProfileKey, getProfileLabel, getSelectedRuntime } from '../profile-config.js';
 
-// Lookup: model ID → character key
-const MODEL_TO_CHAR = {};
+// Lookup: profile ID -> character key.
+const PROFILE_TO_CHAR = {};
 for (const [charKey, cfg] of Object.entries(CHARACTERS)) {
-  MODEL_TO_CHAR[cfg.model] = charKey;
+  PROFILE_TO_CHAR[cfg.profile] = charKey;
 }
 
 /**
@@ -43,19 +44,28 @@ export class GateScene extends Phaser.Scene {
     if (sfxEl) sfxEl.style.display = 'flex';
     this.events.once('shutdown', () => { if (sfxEl) sfxEl.style.display = 'none'; });
 
-    // Only check cache for the SELECTED character/model
-    const currentModel = this.game.characterConfig?.model || 'sonnet';
-    const MODELS = {
-      'opus':   { key: 'opus',   label: 'Opus',   color: '#d4af37', charName: 'Warrior' },
-      'sonnet': { key: 'sonnet', label: 'Sonnet', color: '#88bbff', charName: 'Samurai' },
-      'haiku':  { key: 'haiku',  label: 'Haiku',  color: '#66ddaa', charName: 'Knight' }
+    // Only check cache for the selected character/profile.
+    const currentProfile = getProfileKey(
+      this.game.characterConfig?.profile || this.game.characterConfig?.model
+    );
+    const runtime = this.game.characterConfig?.runtime || getSelectedRuntime();
+    const profileLabels = {
+      deep:     { key: 'deep',     color: '#d4af37', charName: 'Warrior' },
+      balanced: { key: 'balanced', color: '#88bbff', charName: 'Samurai' },
+      fast:     { key: 'fast',     color: '#66ddaa', charName: 'Knight' }
     };
-    this.selectedModel = MODELS[currentModel] || MODELS['sonnet'];
+    this.selectedModel = {
+      ...(profileLabels[currentProfile] || profileLabels.balanced),
+      ...getProfileLabel(currentProfile, runtime),
+    };
 
-    // Check cache for selected model
+    const cacheKey = `seo_dungeon_audit_${this.domain}_${runtime}_${this.selectedModel.key}`;
+    const legacyCurrentProfileKey = `seo_dungeon_audit_${this.domain}_${this.selectedModel.key}`;
+
+    // Check cache for selected runtime/profile.
     this.cachedRun = null;
     try {
-      const raw = localStorage.getItem(`seo_dungeon_audit_${this.domain}_${this.selectedModel.key}`);
+      const raw = localStorage.getItem(cacheKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.auditData) {
@@ -67,21 +77,38 @@ export class GateScene extends Phaser.Scene {
     // Legacy cache migration
     if (!this.cachedRun) {
       try {
-        const legacyRaw = localStorage.getItem(`seo_dungeon_audit_${this.domain}`);
-        if (legacyRaw) {
+        const legacyProfileKeys = {
+          deep: 'opus',
+          balanced: 'sonnet',
+          fast: 'haiku'
+        };
+        const candidates = [
+          legacyCurrentProfileKey,
+          `seo_dungeon_audit_${this.domain}_${legacyProfileKeys[currentProfile]}`,
+          `seo_dungeon_audit_${this.domain}`
+        ].filter(Boolean);
+
+        for (const legacyKey of candidates) {
+          const legacyRaw = localStorage.getItem(legacyKey);
+          if (!legacyRaw) continue;
           const legacy = JSON.parse(legacyRaw);
-          if (legacy && legacy.auditData && !legacy.model) {
-            localStorage.setItem(`seo_dungeon_audit_${this.domain}_${currentModel}`, JSON.stringify({
-              ...legacy, model: currentModel
-            }));
-            localStorage.removeItem(`seo_dungeon_audit_${this.domain}`);
-            this.cachedRun = legacy;
+          if (legacy && legacy.auditData) {
+            const migrated = { ...legacy, profile: currentProfile, model: currentProfile, runtime };
+            localStorage.setItem(
+              cacheKey,
+              JSON.stringify(migrated)
+            );
+            if (!legacy.model && !legacy.profile) {
+              localStorage.removeItem(`seo_dungeon_audit_${this.domain}`);
+            }
+            this.cachedRun = migrated;
+            break;
           }
         }
       } catch (_) {}
     }
 
-    // No cached data for this model - skip straight to Summoning
+    // No cached data for this profile - skip straight to Summoning.
     if (!this.cachedRun) {
       this._drawBackground(W, H);
       this.time.delayedCall(400, () => {
@@ -457,7 +484,11 @@ export class GateScene extends Phaser.Scene {
       card.addEventListener('click', () => {
         SFX.play('menuConfirm');
         this._faceKnight('right');
-        try { localStorage.removeItem(`seo_dungeon_audit_${this.domain}_${this.selectedModel.key}`); } catch (_) {}
+        try {
+          const runtime = this.game.characterConfig?.runtime || getSelectedRuntime();
+          localStorage.removeItem(`seo_dungeon_audit_${this.domain}_${runtime}_${this.selectedModel.key}`);
+          localStorage.removeItem(`seo_dungeon_audit_${this.domain}_${this.selectedModel.key}`);
+        } catch (_) {}
         SFX.play('sceneTransition');
         this._transitionOut(() => {
           this.scene.start('Summoning', {
@@ -485,22 +516,25 @@ export class GateScene extends Phaser.Scene {
   }
 
   /**
-   * Switch to a different character/model and navigate to a destination scene.
-   * If the model matches the currently loaded character, go directly.
+   * Switch to a different character/profile and navigate to a destination scene.
+   * If the profile matches the currently loaded character, go directly.
    * If different, swap the full character config and restart Boot to reload sprites.
    */
-  _switchCharacterAndGo(modelKey, destScene, destData = {}) {
-    const currentModel = this.game.characterConfig?.model;
-    const needsReload = modelKey !== currentModel;
+  _switchCharacterAndGo(profileKey, destScene, destData = {}) {
+    const currentProfile = getProfileKey(
+      this.game.characterConfig?.profile || this.game.characterConfig?.model
+    );
+    const nextProfile = getProfileKey(profileKey);
+    const needsReload = nextProfile !== currentProfile;
 
     if (needsReload) {
-      // Look up the full character config for this model
-      const charKey = MODEL_TO_CHAR[modelKey];
+      // Look up the full character config for this profile.
+      const charKey = PROFILE_TO_CHAR[nextProfile];
       if (charKey && CHARACTERS[charKey]) {
-        this.game.characterConfig = { ...CHARACTERS[charKey] };
+        this.game.characterConfig = { ...CHARACTERS[charKey], runtime: this.game.characterConfig?.runtime || getSelectedRuntime() };
       } else {
-        // Fallback: just override the model
-        this.game.characterConfig.model = modelKey;
+        this.game.characterConfig.profile = nextProfile;
+        this.game.characterConfig.runtime = this.game.characterConfig?.runtime || getSelectedRuntime();
       }
 
       // Set pending destination so Boot knows where to go after reloading sprites

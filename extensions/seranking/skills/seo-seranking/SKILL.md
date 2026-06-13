@@ -2,8 +2,8 @@
 name: seo-seranking
 description: SE Ranking AI visibility analyst (extension). Tracks AI Share-of-Voice across ChatGPT, Gemini, Perplexity, AI Overviews, and AI Mode in a single query. Highest-impact new extension per the v2 gap analysis — no other vendor covers all 5 AI platforms in one API.
 metadata:
-  version: "2.0.0"
-compatibility: "Requires an SE Ranking API key exposed to the Codex runtime as SERANKING_API_KEY."
+  version: "2.2.0"
+compatibility: "Requires an SE Ranking API key (set SERANKING_API_KEY by running extensions/seranking/install.sh)."
 ---
 
 # seo-seranking
@@ -12,8 +12,9 @@ Live AI visibility tracking via the SE Ranking REST API.
 
 ## Prerequisites
 
+- Run `extensions/seranking/install.sh` (or `install.ps1`).
 - An SE Ranking API key (https://seranking.com/api).
-- Before any call, verify `SERANKING_API_KEY` is available in the Codex runtime environment.
+- Before any call, verify `SERANKING_API_KEY` is present in `~/.claude/settings.json` under `env.`. If absent, tell the user to run the installer.
 
 ## Routing
 

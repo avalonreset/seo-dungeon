@@ -1,12 +1,12 @@
 ---
 name: seo
 description: "Comprehensive SEO analysis for any website or business type. Full site audits, single-page analysis, technical SEO (crawlability, indexability, Core Web Vitals with INP), schema markup, content quality (E-E-A-T), image optimization, sitemap analysis, and GEO for AI Overviews/ChatGPT/Perplexity. Industry detection for SaaS, e-commerce, local, publishers, agencies. Triggers on: SEO, audit, schema, Core Web Vitals, sitemap, E-E-A-T, AI Overviews, GEO, technical SEO, content quality, page speed, structured data."
-user-invokable: true
+user-invocable: true
 argument-hint: "[command] [url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.0.0"
+  version: "2.2.0"
   category: seo
 ---
 
@@ -17,10 +17,9 @@ metadata:
 **Scripts:** Located at the plugin root `scripts/` directory.
 
 Comprehensive SEO analysis across all industries (SaaS, local services,
-e-commerce, publishers, agencies). Orchestrates 24 sub-skills (21 core + 1
-orchestrator + 1 framework integration + 1 extension mirror) and 23 Codex
-sub-agents. Optional SEO data and crawl extensions are also installable (see
-"Optional Extensions" below).
+e-commerce, publishers, agencies). Orchestrates 24 sub-skills (21 core + 1 framework
+integration + 2 extension mirrors) and 18 sub-agents. A separate optional Firecrawl
+extension is also installable (see "Optional Extensions" below).
 
 ## Quick Reference
 
@@ -51,6 +50,7 @@ sub-agents. Optional SEO data and crawl extensions are also installable (see
 | `/seo ecommerce <url>` | E-commerce SEO: product schema, marketplace intelligence |
 | `/seo firecrawl [command] <url>` | Full-site crawling and site mapping (extension) |
 | `/seo dataforseo [command]` | Live SEO data via DataForSEO (extension) |
+| `/seo image-gen [use-case] <description>` | AI image generation for SEO assets (extension) |
 | `/seo flow [stage] [url\|topic]` | FLOW framework: evidence-led prompts for Find, Leverage, Optimize, Win, or Local stages |
 
 ## Orchestration Logic
@@ -58,14 +58,14 @@ sub-agents. Optional SEO data and crawl extensions are also installable (see
 When the user invokes `/seo audit`, delegate to subagents in parallel:
 1. Detect business type (SaaS, local, ecommerce, publisher, agency, other)
 2. Spawn subagents: seo-technical, seo-content, seo-schema, seo-sitemap, seo-performance, seo-visual, seo-geo
-3. If Google API credentials detected (`python scripts/google_auth.py --check`), also spawn seo-google agent
+3. If Google API credentials detected (`python3 scripts/google_auth.py --check`), also spawn seo-google agent
 4. If local business detected, also spawn seo-local agent
 5. If local business detected AND DataForSEO MCP available, also spawn seo-maps agent
-6. If backlink APIs detected (`python scripts/backlinks_auth.py --check`), also spawn seo-backlinks agent
+6. If backlink APIs detected (`python3 scripts/backlinks_auth.py --check`), also spawn seo-backlinks agent
 7. If Firecrawl MCP available, use `firecrawl_map` to discover all site URLs before analysis
 8. If content strategy signals detected (blog, pillar pages, topic clusters), also spawn seo-cluster agent
 9. If e-commerce detected, also spawn seo-ecommerce agent
-10. If drift baseline exists for this URL (`python scripts/drift_history.py <url>`), also spawn seo-drift agent
+10. If drift baseline exists for this URL (`python3 scripts/drift_history.py <url>`), also spawn seo-drift agent
 11. Always include seo-sxo in full audits (search experience applies to all sites)
 12. Collect results and generate unified report with SEO Health Score (0-100)
 13. **Synthesize via the 10-principle framework** (see "Synthesis Methodology" below) — walk PERCEIVE → ANALYZE → VALIDATE → ACT before bucketing findings into Critical / High / Medium / Low
@@ -78,7 +78,7 @@ After any analysis command completes, offer to generate a PDF report via `script
 ## Synthesis Methodology
 
 Audits are not just findings — they are findings synthesized into a coherent
-strategy. SEO Dungeon uses a 10-principle thinking framework grouped into four
+strategy. claude-seo uses a 10-principle thinking framework grouped into four
 phases: **PERCEIVE** (observe-external · observe-internal · listen),
 **ANALYZE** (think · connect-lateral · connect-system), **VALIDATE** (feel ·
 accept), **ACT** (create · grow).
@@ -113,7 +113,7 @@ Hard rules:
 - WARNING at 30+ location pages (enforce 60%+ unique content)
 - HARD STOP at 50+ location pages (require user justification)
 - Never recommend HowTo schema (deprecated Sept 2023)
-- FAQ schema for Google rich results: only government and healthcare sites (Aug 2023 restriction); existing FAQPage on commercial sites -> flag Info priority (not Critical), noting AI/LLM citation benefit; adding new FAQPage -> not recommended for Google benefit
+- FAQ schema: Google retired FAQ rich results for ALL sites on May 7, 2026 (no SERP feature anymore; supersedes the Aug 2023 gov/health restriction). Flag existing FAQPage at Info (not Critical) for its AI/LLM citation benefit; do not recommend removal; do not recommend new FAQPage for Google SERP benefit; use QAPage for genuine user Q&A
 - All Core Web Vitals references use INP, never FID
 
 ## Community Footer
@@ -156,6 +156,7 @@ Do NOT show the footer after:
 - `/seo competitor-pages` (page generation step)
 - `/seo programmatic` (quick analysis)
 - `/seo dataforseo` (data fetching utility)
+- `/seo image-gen` (asset generation)
 - Context intake questions (before analysis starts)
 - Error messages or "missing data" prompts
 
@@ -195,9 +196,9 @@ Weighted aggregate of all categories:
 
 ## Sub-Skills
 
-This skill orchestrates 24 sub-skills (21 core + 1 orchestrator + 1 framework
-integration + 1 extension mirror). The orchestrator itself (`seo`) is not
-enumerated below.
+This skill orchestrates 24 sub-skills (21 core + 1 framework integration + 2 extension
+mirrors). The orchestrator itself (`seo`) is the 25th in `skills/`, but does not
+orchestrate itself, so it is not enumerated below.
 
 1. **seo-audit** -- Full website audit with parallel delegation
 2. **seo-page** -- Deep single-page analysis
@@ -221,19 +222,22 @@ enumerated below.
 20. **seo-drift** -- SEO drift monitoring (contributed by Dan Colta)
 21. **seo-ecommerce** -- E-commerce SEO intelligence (contributed by Matej Marjanovic)
 22. **seo-dataforseo** -- Live SEO data via DataForSEO MCP (extension mirror)
-23. **seo-flow** -- FLOW framework integration (Find -> Leverage -> Optimize -> Win, 41 AI prompts, CC BY 4.0)
+23. **seo-image-gen** -- AI image generation for SEO assets via Gemini (extension mirror)
+24. **seo-flow** -- FLOW framework integration (Find -> Leverage -> Optimize -> Win, 41 AI prompts, CC BY 4.0)
 
 ### Optional Extensions
 
 The following ship in `extensions/` rather than `skills/` and require a separate
 installer to activate (see each extension's `install.sh`/`install.ps1`):
 
-- **seo-firecrawl** -- Full-site crawling and site mapping via Firecrawl MCP.
-- **seo-ahrefs** -- Ahrefs-backed backlink and keyword intelligence.
-- **seo-bing** -- Bing Webmaster Tools integration.
-- **seo-profound** -- AI search visibility and share-of-voice intelligence.
-- **seo-seranking** -- SE Ranking data integration.
-- **seo-unlighthouse** -- Lighthouse-at-scale crawl audits.
+Of the optional extensions, firecrawl, dataforseo, and image-gen are reachable
+through `/seo` subcommands. Ahrefs, Bing, Profound, SE Ranking, and Unlighthouse
+install as standalone skills invoked by their own descriptions. The model
+auto-routes to those triggers, not through `/seo <name>`.
+
+- **seo-firecrawl** -- Full-site crawling and site mapping via Firecrawl MCP. Install
+  via `extensions/firecrawl/install.sh` (Unix) or `extensions/firecrawl/install.ps1`
+  (Windows). Once installed, invoke via `/seo firecrawl <command>`.
 
 ## Subagents
 
@@ -249,18 +253,13 @@ For parallel analysis during audits:
 - `seo-maps` -- Geo-grid rank tracking, GBP audit, review intelligence, competitor radius mapping (conditional: spawned when Local Service detected AND DataForSEO MCP available)
 - `seo-google` -- CWV field data, URL indexation status, organic traffic trends (conditional: spawned when Google API credentials detected)
 - `seo-backlinks` -- Backlink profile data: DA/PA, referring domains, anchor text, toxic links (conditional: spawned when Moz/Bing API keys detected or always for CC domain-level metrics)
-- `seo-competitor-pages` -- Competitor comparison page planning and generation
 - `seo-cluster` -- Semantic clustering analysis (conditional: content strategy detected)
 - `seo-sxo` -- Page-type mismatch, user stories, persona scoring (always in full audits)
 - `seo-drift` -- Baseline comparison (conditional: drift baseline exists for URL)
 - `seo-ecommerce` -- Product schema, marketplace intel (conditional: e-commerce detected)
-- `seo-firecrawl` -- Full-site crawl discovery when Firecrawl MCP is configured
 - `seo-flow` -- FLOW framework prompts (conditional: spawned for content strategy workflows)
-- `seo-hreflang` -- International SEO and hreflang validation
-- `seo-images` -- Image SEO, SERP, and file optimization analysis
-- `seo-plan` -- Strategic SEO planning by business type
-- `seo-programmatic` -- Programmatic SEO analysis and planning
 - `seo-dataforseo` -- Live SERP, keyword, backlink, local SEO data (extension, optional)
+- `seo-image-gen` -- SEO image audit and generation plan (extension, optional)
 
 ## Error Handling
 

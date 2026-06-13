@@ -98,12 +98,20 @@ export class BridgeClient {
     }
   }
 
+  _runtimeFallback(runtime) {
+    return runtime || window.selectedCharacter?.runtime || window.selectedRuntime || 'codex';
+  }
+
   /**
    * Neutral "talk to Codex" - used outside of battle (Demon Lodge /
    * Dungeon Hall / between fights). No demon context, no framing. The
    * message goes to Codex in the user's project directory.
    */
-  chat(text, projectPath, model, onStream) {
+  chat(text, projectPath, profile, runtime, onStream) {
+    if (typeof runtime === 'function') {
+      onStream = runtime;
+      runtime = undefined;
+    }
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const id = ++this.requestId;
@@ -114,7 +122,9 @@ export class BridgeClient {
         type: 'chat',
         command: text,
         projectPath,
-        model,
+        profile,
+        model: profile,
+        runtime: this._runtimeFallback(runtime),
       }));
     });
   }
@@ -122,13 +132,21 @@ export class BridgeClient {
   /**
    * Run an SEO audit on a domain.
    */
-  audit(domain, projectPath, onStream, model) {
+  audit(domain, projectPath, onStream, profile, runtime) {
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const id = ++this.requestId;
       this.activeAuditId = id;
       this.handlers.set(id, { resolve, reject, onStream });
-      this.ws.send(JSON.stringify({ id, type: 'audit', command: domain, projectPath, model }));
+      this.ws.send(JSON.stringify({
+        id,
+        type: 'audit',
+        command: domain,
+        projectPath,
+        profile,
+        model: profile,
+        runtime: this._runtimeFallback(runtime),
+      }));
     });
   }
 
@@ -145,7 +163,7 @@ export class BridgeClient {
    * @param {string} payload.userMessage  What the user typed this turn.
    *                               Can be empty, a question, or a directive.
    */
-  fix(payload, projectPath, onStream, model) {
+  fix(payload, projectPath, onStream, profile, runtime) {
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const id = ++this.requestId;
@@ -159,7 +177,9 @@ export class BridgeClient {
         // `command` retained as a one-line breadcrumb for server logs.
         command: `${issue.title || '(no title)'}`,
         projectPath,
-        model,
+        profile,
+        model: profile,
+        runtime: this._runtimeFallback(runtime),
       }));
     });
   }
@@ -167,24 +187,39 @@ export class BridgeClient {
   /**
    * Commit the current fix to git.
    */
-  commit(message, projectPath, onStream, model) {
+  commit(message, projectPath, onStream, profile, runtime) {
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const id = ++this.requestId;
       this.handlers.set(id, { resolve, reject, onStream });
-      this.ws.send(JSON.stringify({ id, type: 'commit', command: message, projectPath, model }));
+      this.ws.send(JSON.stringify({
+        id,
+        type: 'commit',
+        command: message,
+        projectPath,
+        profile,
+        model: profile,
+        runtime: this._runtimeFallback(runtime),
+      }));
     });
   }
 
   /**
-   * Send log lines to Haiku for RPG narration.
+   * Send log lines to the fast profile for RPG narration.
    */
   narrate(logLines) {
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const id = ++this.requestId;
       this.handlers.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, type: 'narrate', command: logLines }));
+      this.ws.send(JSON.stringify({
+        id,
+        type: 'narrate',
+        command: logLines,
+        profile: 'fast',
+        model: 'fast',
+        runtime: this._runtimeFallback(),
+      }));
     });
   }
 

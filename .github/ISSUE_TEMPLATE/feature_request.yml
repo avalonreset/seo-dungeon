@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Have a great idea? We'd love to hear it! For general discussion, consider using [GitHub Discussions](https://github.com/avalonreset/seo-dungeon/discussions) instead.
+        Have a great idea? For general discussion, consider using [GitHub Discussions](https://github.com/avalonreset/seo-dungeon/discussions) instead.
   - type: textarea
     id: problem
     attributes:

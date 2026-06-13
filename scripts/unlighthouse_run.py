@@ -10,7 +10,7 @@ support without a paid Google Cloud bill.
 
 This wrapper:
   - Validates the target via url_safety before any subprocess starts.
-  - Invokes ``npx --yes unlighthouse-cli@^0.13 …`` with sensible
+  - Invokes ``npx --yes unlighthouse@0.13.5 …`` with sensible
     defaults (mobile form factor, 8 parallel workers, JSON output).
   - Captures the JSON summary the CLI writes and returns it parsed
     so claude-seo agents can ingest the result without re-running
@@ -19,7 +19,7 @@ This wrapper:
 Prerequisites
 =============
 Node.js 18+ available on ``$PATH``. The first run downloads
-unlighthouse-cli; subsequent runs use the npx cache.
+unlighthouse; subsequent runs use the npx cache.
 
 Usage::
 
@@ -45,7 +45,7 @@ if _SCRIPTS_DIR not in sys.path:
 from url_safety import URLSafetyError, validate_url_strict  # noqa: E402
 
 
-UNLIGHTHOUSE_PIN = "unlighthouse-cli@^0.13"
+UNLIGHTHOUSE_PIN = "unlighthouse@0.13.5"
 
 
 def _check_node() -> str | None:
@@ -91,7 +91,13 @@ def run(
 
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, check=False,
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
         )
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"unlighthouse timed out after {timeout}s",

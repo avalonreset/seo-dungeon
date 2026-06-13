@@ -242,3 +242,28 @@ def test_deprecated_types_reference_exists_and_lists_retired_kinds() -> None:
         assert retired in text, f"reference must mention {retired!r}"
     # Primary source must be linked.
     assert "developers.google.com/search/blog/2025/06/simplifying-search-results" in text
+
+
+def test_faq_rich_results_retirement_documented() -> None:
+    """FAQ rich results were fully retired on 2026-05-07 (supersedes the older
+    Aug 2023 gov/health restriction). The canonical schema references must reflect
+    the retirement and point users to QAPage for genuine Q&A — while keeping
+    FAQPage as an AI/entity signal (not a Critical removal)."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    deprecated = (
+        root / "skills" / "seo-schema" / "references"
+        / "deprecated-types-2024-2026.md"
+    ).read_text(encoding="utf-8")
+    schema_types = (
+        root / "skills" / "seo" / "references" / "schema-types.md"
+    ).read_text(encoding="utf-8")
+
+    # Retirement date documented in both canonical references.
+    assert "May 7, 2026" in deprecated, "deprecated-types must date the FAQ retirement"
+    assert "May 7, 2026" in schema_types, "schema-types must date the FAQ retirement"
+    # QAPage offered as the replacement for genuine Q&A.
+    assert "QAPage" in deprecated and "QAPage" in schema_types
+    # Google's faqpage doc cited as primary source.
+    assert "structured-data/faqpage" in deprecated

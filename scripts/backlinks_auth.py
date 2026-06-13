@@ -128,7 +128,13 @@ def check_credentials(service: str) -> dict:
         api_key = config.get("moz_api_key")
         if api_key:
             result["available"] = True
-            result["method"] = "api_key"
+            result["method"] = "api_key_configured"
+            result["verified"] = False
+            result["note"] = (
+                "Moz credentials are configured but not live-verified by --check. "
+                "Run a Moz command such as `python scripts/moz_api.py metrics "
+                "example.com --json` to test quota and permissions."
+            )
         else:
             result["error"] = (
                 "No Moz API key found. Set MOZ_API_KEY environment variable "
@@ -140,14 +146,20 @@ def check_credentials(service: str) -> dict:
         api_key = config.get("bing_api_key")
         if api_key:
             result["available"] = True
-            result["method"] = "api_key"
+            result["method"] = "api_key_configured"
+            result["verified"] = False
             sites = config.get("bing_verified_sites", [])
             if sites:
                 result["verified_sites"] = sites
+                result["note"] = (
+                    "Bing credentials and site list are configured but not live-verified "
+                    "by --check. Run a Bing Webmaster query to test access."
+                )
             else:
                 result["note"] = (
-                    "No verified sites listed. Add 'bing_verified_sites' to config "
-                    "for site-specific backlink queries."
+                    "Bing API key is configured but not live-verified. No verified "
+                    "sites are listed; add 'bing_verified_sites' to config for "
+                    "site-specific backlink queries."
                 )
         else:
             result["error"] = (
@@ -297,10 +309,13 @@ TIER 1: MOZ API (free signup, 2,500 rows/month)
      (Free tier continues after trial with 2,500 rows/month)
   3. A valid credit card is required at signup but will NOT be charged
   4. After signup, go to https://moz.com/products/api/keys
-  5. Copy your API key (looks like: mozscape-xxxxxxxx)
+  5. Copy your API credentials. Claude SEO accepts either:
+     - a token-style key (looks like: mozscape-xxxxxxxx)
+     - free-tier accessId:secret credentials, raw or base64 encoded
 
   Configure:
     export MOZ_API_KEY="mozscape-xxxxxxxx"
+    # or: export MOZ_API_KEY="accessId:secret"
 
   Or save to """ + CONFIG_PATH + """:
     {
@@ -310,6 +325,9 @@ TIER 1: MOZ API (free signup, 2,500 rows/month)
   Provides: Domain Authority, Page Authority, Spam Score, link counts,
             referring domains, anchor text distribution (any domain).
   Rate limit: 1 request per 10 seconds.
+  Note: `--check moz` reports whether credentials are configured; run
+        `python scripts/moz_api.py metrics example.com --json` for a live
+        permission/quota test.
 
 TIER 2: + BING WEBMASTER TOOLS API (free, verified sites)
 -----------------------------------------------------------
@@ -344,6 +362,8 @@ PREMIUM: DATAFORSEO EXTENSION (paid, most comprehensive)
 VERIFY CONFIGURATION:
   python scripts/backlinks_auth.py --check
   python scripts/backlinks_auth.py --tier
+  `--check` is configuration-only for Moz/Bing and does not claim live
+  verification unless a specific API query has been run.
 """)
 
 

@@ -14,6 +14,7 @@ Usage:
 """
 
 import argparse
+import base64
 import json
 import sys
 import time
@@ -43,6 +44,21 @@ MOZ_BASE = "https://api.moz.com"
 # Rate limit: 1 request per 10 seconds on free tier
 RATE_LIMIT_DELAY = 10
 RATE_LIMIT_FILE = os.path.expanduser("~/.cache/claude-seo/moz_last_request.lock")
+
+
+def _moz_basic_auth_header(api_key: str) -> str | None:
+    """Return a Basic auth header for accessId:secret credentials."""
+    if ":" in api_key:
+        encoded = base64.b64encode(api_key.encode("utf-8")).decode("ascii")
+        return f"Basic {encoded}"
+
+    try:
+        decoded = base64.b64decode(api_key, validate=True).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if ":" not in decoded:
+        return None
+    return f"Basic {api_key}"
 
 
 def _rate_limit():
@@ -93,9 +109,13 @@ def _moz_request(path: str, body: dict, api_key: str) -> dict:
 
     headers = {
         "Content-Type": "application/json",
-        "x-moz-token": api_key,
         "User-Agent": "ClaudeSEO/1.8.0",
     }
+    basic_auth = _moz_basic_auth_header(api_key)
+    if basic_auth:
+        headers["Authorization"] = basic_auth
+    else:
+        headers["x-moz-token"] = api_key
 
     try:
         response = requests.post(
@@ -352,7 +372,7 @@ def main():
 
     # Validate URL
     target = args.url
-    if target.startswith("http"):
+    if target.lower().startswith("http"):
         if not validate_url(target):
             result = {
                 "status": "error",

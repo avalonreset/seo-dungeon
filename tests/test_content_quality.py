@@ -29,10 +29,6 @@ import content_humanize  # noqa: E402
 import content_verify  # noqa: E402
 import seo_updates  # noqa: E402
 
-_GOOGLE_UPDATES_PATH = (
-    Path(__file__).resolve().parents[1] / "data" / "google-updates.json"
-)
-
 
 # ---------------------------------------------------------------------------
 # content_quality
@@ -219,9 +215,9 @@ def test_verify_empty_text_returns_zero_claims() -> None:
 
 
 def test_seo_updates_data_file_is_valid_json() -> None:
-    if not _GOOGLE_UPDATES_PATH.is_file():
-        pytest.skip("optional google-updates dataset is not bundled")
-    with _GOOGLE_UPDATES_PATH.open() as fh:
+    data_path = Path(__file__).resolve().parents[1] / "data" / "google-updates.json"
+    assert data_path.is_file()
+    with data_path.open() as fh:
         data = json.load(fh)
     assert "updates" in data
     assert "source_of_truth" in data
@@ -231,9 +227,8 @@ def test_seo_updates_data_file_is_valid_json() -> None:
 def test_seo_updates_every_entry_has_google_owned_source() -> None:
     """Policy: every entry must cite a Google-owned URL. Third-party-only
     claims belong in unverified[]."""
-    if not _GOOGLE_UPDATES_PATH.is_file():
-        pytest.skip("optional google-updates dataset is not bundled")
-    with _GOOGLE_UPDATES_PATH.open() as fh:
+    data_path = Path(__file__).resolve().parents[1] / "data" / "google-updates.json"
+    with data_path.open() as fh:
         data = json.load(fh)
     google_hosts = (
         "developers.google.com",
@@ -252,9 +247,8 @@ def test_seo_updates_every_entry_has_google_owned_source() -> None:
 
 def test_seo_updates_unverified_entries_call_out_status() -> None:
     """Unverified entries must include a primary_source_check pointer."""
-    if not _GOOGLE_UPDATES_PATH.is_file():
-        pytest.skip("optional google-updates dataset is not bundled")
-    with _GOOGLE_UPDATES_PATH.open() as fh:
+    data_path = Path(__file__).resolve().parents[1] / "data" / "google-updates.json"
+    with data_path.open() as fh:
         data = json.load(fh)
     for entry in data.get("unverified", []):
         assert "primary_source_check" in entry
@@ -268,8 +262,6 @@ def test_seo_updates_filter_by_kind() -> None:
     data = seo_updates._load()
     cores = seo_updates._filter(data["updates"], kinds={"core"})
     assert all(u["kind"] == "core" for u in cores)
-    if not cores:
-        return
     assert any("December 2025 Core Update" in u["name"] for u in cores)
 
 

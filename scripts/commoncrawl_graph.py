@@ -230,7 +230,7 @@ def get_domain_metrics(domain: str, release: Optional[str] = None,
     """
     # Clean domain
     domain = domain.lower().strip()
-    if domain.startswith("http"):
+    if domain.lower().startswith("http"):
         if not validate_url(domain):
             return {
                 "status": "error",

@@ -64,6 +64,52 @@
     }
 
     /* ── Character Select Row ──────────────── */
+    #runtime-select {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 14px;
+      border: 1px solid #252540;
+      border-radius: 8px;
+      background: #0d0d20;
+      overflow: hidden;
+      position: relative;
+      z-index: 5;
+    }
+
+    .runtime-option {
+      min-width: 92px;
+      min-height: 34px;
+      border: 0;
+      border-right: 1px solid #252540;
+      padding: 0 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: #8c8ca2;
+      background: transparent;
+      text-transform: uppercase;
+      cursor: pointer;
+      position: relative;
+      z-index: 1;
+      transition: color 0.16s, background 0.16s;
+    }
+
+    .runtime-option:last-child {
+      border-right: 0;
+    }
+
+    .runtime-option:hover {
+      color: #d8d8e8;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .runtime-option.selected {
+      color: #101016;
+      background: #d4af37;
+    }
+
     #char-select {
       display: flex;
       align-items: center;
@@ -73,6 +119,9 @@
     }
 
     .char-option {
+      --char-scale: 2;
+      --char-selected-scale: 2.15;
+      --char-y: 12px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -99,7 +148,7 @@
     .char-option canvas {
       image-rendering: pixelated;
       image-rendering: crisp-edges;
-      transform: translateY(12px) scale(2);
+      transform: translateY(var(--char-y)) scale(var(--char-scale));
       transform-origin: center center;
     }
 
@@ -139,6 +188,17 @@
     .char-model.gold { color: #d4af37; }
     .char-model.blue { color: #88bbff; }
     .char-model.green { color: #66ddaa; }
+
+    .char-profile-detail {
+      font-size: 8px;
+      letter-spacing: 1px;
+      opacity: 0.45;
+      margin-top: -10px;
+    }
+
+    .char-option.selected .char-profile-detail {
+      opacity: 0.75;
+    }
 
     #title-screen .tagline {
       font-size: 15px;
@@ -523,6 +583,123 @@
     @media (max-width: 900px) {
       #log-panel { width: 30%; min-width: 220px; }
     }
+
+    @media (max-width: 700px) {
+      body {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+
+      #game-area {
+        flex: none;
+        width: 100%;
+        min-height: 620px;
+      }
+
+      #title-screen {
+        height: auto;
+        min-height: 620px;
+        justify-content: flex-start;
+        padding: 18px 12px 20px;
+      }
+
+      #title-screen h1 {
+        font-size: 22px;
+        margin-bottom: 18px;
+      }
+
+      #runtime-select {
+        width: min(100%, 330px);
+        margin-bottom: 10px;
+      }
+
+      .runtime-option {
+        flex: 1;
+        min-width: 0;
+        padding: 0 8px;
+        font-size: 10px;
+      }
+
+      #char-select {
+        width: 100%;
+        max-width: 390px;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+
+      .char-option {
+        --char-scale: 0.74;
+        --char-selected-scale: 0.84;
+        --char-y: 8px;
+        width: calc((100% - 12px) / 3);
+        height: 220px;
+        min-width: 0;
+        padding-bottom: 8px;
+      }
+
+      .char-option span {
+        font-size: 9px;
+        letter-spacing: 1px;
+        transform: translateY(-8px);
+      }
+
+      .char-model {
+        font-size: 8px;
+        letter-spacing: 1px;
+        margin-top: -8px;
+        transform: translateY(-8px);
+      }
+
+      .char-profile-detail {
+        font-size: 7px;
+        letter-spacing: 0;
+        margin-top: -7px;
+      }
+
+      #title-screen .tagline {
+        font-size: 13px;
+        margin-bottom: 20px;
+      }
+
+      .form-group {
+        max-width: 100%;
+        margin-bottom: 14px;
+      }
+
+      .form-group input {
+        font-size: 13px;
+      }
+
+      #descend-btn {
+        width: 100%;
+        max-width: 360px;
+        min-height: 46px;
+        white-space: normal;
+      }
+
+      #log-panel {
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+        min-height: 220px;
+        height: 220px;
+        flex: none;
+        border-left: 0;
+        border-top: 1px solid rgba(212, 175, 55, 0.18);
+      }
+
+      #log-header {
+        padding: 10px 14px 9px;
+      }
+
+      #log-header h2 {
+        font-size: 11px;
+        letter-spacing: 4px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -532,21 +709,30 @@
     <div id="title-screen">
       <h1>SEO DUNGEON</h1>
 
+      <div id="runtime-select" role="group" aria-label="Agent CLI">
+        <button type="button" class="runtime-option selected" data-runtime="codex" aria-pressed="true">Codex</button>
+        <button type="button" class="runtime-option" data-runtime="claude" aria-pressed="false">Claude</button>
+        <button type="button" class="runtime-option" data-runtime="gemini" aria-pressed="false">Gemini</button>
+      </div>
+
       <div id="char-select">
         <div class="char-option selected" data-char="warrior">
           <canvas id="char-warrior"></canvas>
           <span>WARRIOR</span>
-          <span class="char-model gold">OPUS</span>
+          <span class="char-model gold">XHIGH</span>
+          <span class="char-profile-detail">deep audit</span>
         </div>
         <div class="char-option" data-char="samurai">
           <canvas id="char-samurai"></canvas>
           <span>SAMURAI</span>
-          <span class="char-model blue">SONNET</span>
+          <span class="char-model blue">HIGH</span>
+          <span class="char-profile-detail">balanced</span>
         </div>
         <div class="char-option" data-char="knight">
           <canvas id="char-knight"></canvas>
           <span>KNIGHT</span>
-          <span class="char-model green">HAIKU</span>
+          <span class="char-model green">MEDIUM</span>
+          <span class="char-profile-detail">quick pass</span>
         </div>
       </div>
 

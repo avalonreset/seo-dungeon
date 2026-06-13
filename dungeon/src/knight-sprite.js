@@ -3,11 +3,12 @@
  * Crops out transparent padding and displays characters at proper size.
  */
 import { SFX } from './utils/sound-manager.js';
+import { getProfileLabel, getSelectedRuntime, setSelectedRuntime } from './profile-config.js';
 
 export const CHARACTERS = {
   warrior: {
     name: 'warrior',
-    model: 'opus',
+    profile: 'deep',
     idlePath: 'assets/luizmelo/warrior/sprites/Idle.png',
     runPath: 'assets/luizmelo/warrior/sprites/Run.png',
     attackPath: 'assets/luizmelo/warrior/sprites/Attack1.png',
@@ -27,7 +28,7 @@ export const CHARACTERS = {
   },
   samurai: {
     name: 'samurai',
-    model: 'sonnet',
+    profile: 'balanced',
     idlePath: 'assets/luizmelo/samurai/sprites/Idle.png',
     runPath: 'assets/luizmelo/samurai/sprites/Run.png',
     attackPath: 'assets/luizmelo/samurai/sprites/Attack1.png',
@@ -45,7 +46,7 @@ export const CHARACTERS = {
   },
   knight: {
     name: 'knight',
-    model: 'haiku',
+    profile: 'fast',
     idlePath: 'assets/luizmelo/warrior-pack-2/player1/Idle.png',
     runPath: 'assets/luizmelo/warrior-pack-2/player1/Run.png',
     attackPath: 'assets/luizmelo/warrior-pack-2/player1/Attack2.png',
@@ -72,12 +73,47 @@ const animState = {};
 
 function setSelected(charKey) {
   window.selectedCharacter = { ...CHARACTERS[charKey] };
+  window.selectedCharacter.runtime = getSelectedRuntime();
   SFX.play('menuConfirm');
   document.querySelectorAll('.char-option').forEach(el => {
     const isTarget = el.dataset.char === charKey;
     el.classList.toggle('selected', isTarget);
     if (isTarget) _selectionBurst(el);
   });
+}
+
+function initRuntimePicker() {
+  const buttons = [...document.querySelectorAll('.runtime-option[data-runtime]')];
+  if (buttons.length === 0) return;
+
+  const applyRuntime = (runtime, playSound = false) => {
+    const selectedRuntime = setSelectedRuntime(runtime);
+    buttons.forEach((button) => {
+      const isSelected = button.dataset.runtime === selectedRuntime;
+      button.classList.toggle('selected', isSelected);
+      button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+    });
+    if (window.selectedCharacter) window.selectedCharacter.runtime = selectedRuntime;
+    refreshProfileLabels();
+    if (playSound) SFX.play('menuConfirm');
+  };
+
+  applyRuntime(getSelectedRuntime(), false);
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => applyRuntime(button.dataset.runtime, true));
+    button.addEventListener('mouseenter', () => SFX.play('menuHover'));
+  });
+}
+
+function refreshProfileLabels() {
+  const runtime = getSelectedRuntime();
+  for (const [charKey, char] of Object.entries(CHARACTERS)) {
+    const labelEl = document.querySelector(`.char-option[data-char="${charKey}"] .char-model`);
+    const detailEl = document.querySelector(`.char-option[data-char="${charKey}"] .char-profile-detail`);
+    const profile = getProfileLabel(char.profile, runtime);
+    if (labelEl) labelEl.textContent = profile.label;
+    if (detailEl) detailEl.textContent = profile.detail;
+  }
 }
 
 function _selectionBurst(el) {
@@ -124,10 +160,14 @@ function _selectionBurst(el) {
   // Subtle scale bounce on the canvas
   const canvas = el.querySelector('canvas');
   if (canvas) {
+    const style = getComputedStyle(el);
+    const lift = style.getPropertyValue('--char-y').trim() || '12px';
+    const scale = style.getPropertyValue('--char-scale').trim() || '2';
+    const selectedScale = style.getPropertyValue('--char-selected-scale').trim() || '2.15';
     canvas.style.transition = 'transform 0.15s ease-out';
-    canvas.style.transform = 'translateY(12px) scale(2.15)';
+    canvas.style.transform = `translateY(${lift}) scale(${selectedScale})`;
     setTimeout(() => {
-      canvas.style.transform = 'translateY(12px) scale(2)';
+      canvas.style.transform = `translateY(${lift}) scale(${scale})`;
     }, 150);
   }
 }
@@ -191,6 +231,8 @@ function animateAll() {
 }
 
 export function initKnightSprite() {
+  initRuntimePicker();
+  refreshProfileLabels();
   setSelected('warrior');
 
   for (const charKey of Object.keys(CHARACTERS)) {

@@ -25,7 +25,7 @@ prepare_source() {
 
   command -v git >/dev/null 2>&1 || { echo "[ERROR] Git is required for remote install."; exit 1; }
   local repo="${SEO_DUNGEON_REPO:-https://github.com/avalonreset/seo-dungeon}"
-  local ref="${SEO_DUNGEON_REF:-v2.0.0}"
+  local ref="${SEO_DUNGEON_REF:-v2.2.0}"
   local temp_dir
   temp_dir="$(mktemp -d)"
   trap 'rm -rf "${temp_dir}"' EXIT
@@ -89,13 +89,13 @@ main() {
 
   echo "========================================"
   echo "  SEO Dungeon - Installer"
-  echo "  Codex Skill Suite"
+  echo "  Codex-default Skill Suite"
   echo "========================================"
 
   install_codex "${source_dir}" "${python_bin}"
 
   echo "[OK] SEO Dungeon skills installed for Codex."
-  echo "Only Codex is supported."
+  echo "The dungeon app defaults to Codex and can point at local Claude or Gemini CLIs."
 }
 
 main "$@"

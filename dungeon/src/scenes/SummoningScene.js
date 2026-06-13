@@ -2,6 +2,7 @@ import { COLORS, FONTS } from '../utils/colors.js';
 import { bridge } from '../utils/ws.js';
 import { DESCENT_MESSAGES, TICKER_IDLE_MESSAGES, TICKER_FAILURE_MESSAGES, LEDGER_FAILURE_MESSAGES } from '../utils/flavor-text.js';
 import { SFX } from '../utils/sound-manager.js';
+import { getProfileKey, getSelectedRuntime } from '../profile-config.js';
 
 /**
  * Summoning scene - Castlevania-style side-scroller.
@@ -1413,7 +1414,8 @@ export class SummoningScene extends Phaser.Scene {
 
     try {
       if (this.game.showLoading) this.game.showLoading();
-      const model = this.game.characterConfig?.model;
+      const model = getProfileKey(this.game.characterConfig?.profile || this.game.characterConfig?.model);
+      const runtime = this.game.characterConfig?.runtime || getSelectedRuntime();
       const result = await bridge.audit(this.domain, this.projectPath, (streamData) => {
         this.streamChunks++;
         const clean = streamData.replace(/[\n\r]+/g, ' ').trim();
@@ -1451,7 +1453,7 @@ export class SummoningScene extends Phaser.Scene {
           : totalEvents > 0 ? 'Connecting...'
           : 'Summoning...';
         this.demonCounter.setText(phase);
-      }, model);
+      }, model, runtime);
 
       if (this.aborted) return; // User cancelled - don't transition
       this.setProgress(1);
@@ -1504,10 +1506,13 @@ export class SummoningScene extends Phaser.Scene {
     // Only cache fully successful audits - not partial/interrupted results
     if (cacheResult) {
       try {
-        const modelKey = this.game.characterConfig?.model || 'unknown';
-        localStorage.setItem(`seo_dungeon_audit_${this.domain}_${modelKey}`, JSON.stringify({
+        const modelKey = getProfileKey(this.game.characterConfig?.profile || this.game.characterConfig?.model);
+        const runtime = this.game.characterConfig?.runtime || getSelectedRuntime();
+        localStorage.setItem(`seo_dungeon_audit_${this.domain}_${runtime}_${modelKey}`, JSON.stringify({
           domain: this.domain,
+          profile: modelKey,
           model: modelKey,
+          runtime,
           timestamp: Date.now(),
           auditData: auditData
         }));

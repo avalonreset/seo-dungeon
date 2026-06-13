@@ -1,0 +1,34 @@
+# CODEOWNERS for SEO Dungeon
+#
+# Every change to this repository routes review to @avalonreset.
+# Sections below let us call out security-critical paths so a future
+# co-maintainer cannot accidentally land a change without the right
+# eyes on it.
+
+# Default owner — every file unless overridden below.
+*                                   @avalonreset
+
+# Security-critical: SSRF + DNS rebinding + credential handling.
+scripts/url_safety.py               @avalonreset
+scripts/google_auth.py              @avalonreset
+scripts/backlinks_auth.py           @avalonreset
+scripts/render_page.py              @avalonreset
+scripts/fetch_page.py               @avalonreset
+scripts/capture_screenshot.py       @avalonreset
+tests/test_url_safety.py            @avalonreset
+SECURITY.md                         @avalonreset
+
+# Release + distribution: install scripts and version pinning are the
+# supply-chain surface.
+install.sh                          @avalonreset
+install.ps1                         @avalonreset
+.codex-plugin/plugin.json           @avalonreset
+.claude-plugin/plugin.json          @avalonreset
+.claude-plugin/marketplace.json     @avalonreset
+requirements.txt                    @avalonreset
+pyproject.toml                      @avalonreset
+CITATION.cff                        @avalonreset
+
+# CI / governance.
+.github/                            @avalonreset
+tests/test_manifest_consistency.py  @avalonreset

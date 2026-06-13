@@ -31,6 +31,10 @@ safe_requests_get(url, *, timeout=30, **kwargs) -> requests.Response
     header and TLS SNI; only the connect() target is forced to the pinned
     address.
 
+safe_requests_head(url, *, timeout=30, **kwargs) -> requests.Response
+    Same protection as ``safe_requests_get`` for callers that only need a
+    HEAD preflight.
+
 safe_requests_session(url) -> context manager yielding requests.Session
     Same protection as ``safe_requests_get`` for callers that need a
     session (cookies, redirect chains, multiple requests to one host).
@@ -92,6 +96,7 @@ __all__ = [
     "validate_url",
     "validate_url_strict",
     "safe_requests_get",
+    "safe_requests_head",
     "safe_requests_session",
     "make_safe_playwright_route_handler",
 ]
@@ -145,6 +150,34 @@ _BLOCKED_HOSTNAMES: frozenset[str] = frozenset(
 
 class URLSafetyError(ValueError):
     """Raised when a URL fails SSRF safety checks."""
+
+
+def _raw_authority(url: str) -> str:
+    """Return the undecoded authority substring between scheme and path."""
+    match = re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]*)", url)
+    return match.group(1) if match else ""
+
+
+def _reject_authority_confusion(url: str, parsed) -> None:
+    """Reject forms where URL parsers or HTTP stacks can disagree.
+
+    Backslashes, userinfo, and fragment/userinfo ambiguity have all been
+    used to make one parser see a public host while another connects to a
+    private host. claude-seo never needs credentials in audit URLs, so
+    userinfo is refused outright.
+    """
+    authority = _raw_authority(url)
+    authority_lower = authority.lower()
+    url_lower = url.lower()
+
+    if "\\" in authority or "%5c" in authority_lower:
+        raise URLSafetyError("URL authority contains a backslash")
+    if "%" in authority:
+        raise URLSafetyError("URL authority contains percent-encoding")
+    if parsed.username is not None or parsed.password is not None or "@" in authority:
+        raise URLSafetyError("URL userinfo is not allowed")
+    if "#@" in url or "%23@" in url_lower:
+        raise URLSafetyError("URL fragment/userinfo confusion refused")
 
 
 def is_safe_ip(ip_str: str) -> bool:
@@ -231,12 +264,13 @@ def validate_url(url: str) -> bool:
     caller will open a socket — only the strict form catches a DNS
     record that resolves to a non-public IP at connect time.
     """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        return False
-    if not parsed.hostname:
-        return False
     try:
+        parsed = urlparse(url)
+        _reject_authority_confusion(url, parsed)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        if not parsed.hostname:
+            return False
         hostname = normalize_hostname(parsed.hostname)
     except URLSafetyError:
         return False
@@ -264,6 +298,7 @@ def validate_url_strict(url: str) -> tuple[str, str]:
     attacker cannot race the resolver between validate and connect.
     """
     parsed = urlparse(url)
+    _reject_authority_confusion(url, parsed)
     if parsed.scheme not in ("http", "https"):
         raise URLSafetyError(f"Invalid URL scheme: {parsed.scheme!r}")
     if not parsed.hostname:
@@ -292,7 +327,7 @@ def validate_url_strict(url: str) -> tuple[str, str]:
             family=socket.AF_INET,
             type=socket.SOCK_STREAM,
         )
-    except socket.gaierror as exc:
+    except (socket.gaierror, UnicodeError) as exc:
         raise URLSafetyError(f"DNS resolution failed for {hostname}: {exc}") from exc
 
     resolved_ips = sorted({info[4][0] for info in addrinfo})
@@ -407,6 +442,26 @@ def safe_requests_get(
     assert parsed.hostname is not None  # validate_url_strict guarantees this
     with _pin_dns(parsed.hostname, pinned_ip, port):
         return requests.get(norm_url, timeout=timeout, **kwargs)
+
+
+def safe_requests_head(
+    url: str,
+    *,
+    timeout: int = 30,
+    **kwargs,
+) -> requests.Response:
+    """
+    ``requests.head`` with DNS-rebinding protection.
+
+    The request's hostname is pinned to a pre-validated IP for the
+    duration of the call. Standard ``requests`` semantics otherwise.
+    """
+    norm_url, pinned_ip = validate_url_strict(url)
+    parsed = urlparse(norm_url)
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    assert parsed.hostname is not None
+    with _pin_dns(parsed.hostname, pinned_ip, port):
+        return requests.head(norm_url, timeout=timeout, **kwargs)
 
 
 @contextmanager

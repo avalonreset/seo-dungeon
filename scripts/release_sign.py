@@ -71,6 +71,8 @@ def _git(*args: str) -> str:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return result.stdout.strip()
 
@@ -97,7 +99,7 @@ def _sha256(path: Path) -> str:
 
 
 def _read_plugin_version() -> str:
-    manifest = REPO_ROOT / ".codex-plugin" / "plugin.json"
+    manifest = REPO_ROOT / ".claude-plugin" / "plugin.json"
     try:
         with manifest.open() as fh:
             return json.load(fh).get("version", "unknown")

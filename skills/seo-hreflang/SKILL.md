@@ -5,12 +5,12 @@ description: >
   common mistakes, validates language/region codes, and generates correct
   hreflang implementations. Use when user says "hreflang", "i18n SEO",
   "international SEO", "multi-language", "multi-region", or "language tags".
-user-invokable: true
+user-invocable: true
 argument-hint: "[url]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.0.0"
+  version: "2.2.0"
   category: seo
 ---
 
@@ -243,6 +243,8 @@ Load on-demand as needed (do NOT load all at startup):
 - `references/cultural-profiles.md`: DACH, Francophone, Hispanic, Japanese cultural adaptation profiles
 - `references/locale-formats.md`: Number, date, currency, address, phone format tables per locale
 - `references/content-parity.md`: Content parity audit methodology and scoring
+- `references/machine-translation-qa.md`: QA flags for machine-translated pages
+  that lack human review or localized substance
 
 ## Error Handling
 

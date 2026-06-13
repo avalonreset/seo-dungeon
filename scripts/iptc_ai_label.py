@@ -82,6 +82,8 @@ def _read_source_type(image: Path) -> Optional[str]:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
         )
     except subprocess.TimeoutExpired:
@@ -158,6 +160,8 @@ def inject(image: Path, source_type: str) -> dict:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         )
     except subprocess.TimeoutExpired:

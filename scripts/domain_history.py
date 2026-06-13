@@ -93,6 +93,8 @@ def _shell_whois(domain: str) -> Optional[str]:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
         )
         if result.returncode == 0 and result.stdout:

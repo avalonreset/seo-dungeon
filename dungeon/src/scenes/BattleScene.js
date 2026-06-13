@@ -2,6 +2,7 @@ import { COLORS } from '../utils/colors.js';
 import { bridge } from '../utils/ws.js';
 import { ENCOUNTER_MESSAGES, VICTORY_MESSAGES } from '../utils/flavor-text.js';
 import { SFX } from '../utils/sound-manager.js';
+import { getProfileKey, getSelectedRuntime } from '../profile-config.js';
 
  /**
   * Battle scene - Final Fantasy style turn-based combat.
@@ -439,8 +440,9 @@ export class BattleScene extends Phaser.Scene {
     kPanel.lineStyle(2, 0x40c0c0, 0.6);
     kPanel.strokeRoundedRect(kp.x, kp.y, kp.w, kp.h, 5);
 
-    const charNames = { 'opus': 'SEO WARRIOR', 'sonnet': 'SEO SAMURAI', 'haiku': 'SEO KNIGHT' };
-    const charName = charNames[this.game.characterConfig?.model] || 'SEO WARRIOR';
+    const profile = getProfileKey(this.game.characterConfig?.profile || this.game.characterConfig?.model);
+    const charNames = { deep: 'SEO WARRIOR', balanced: 'SEO SAMURAI', fast: 'SEO KNIGHT' };
+    const charName = charNames[profile] || 'SEO WARRIOR';
     this.charName = charName;
     // Append the current domain after the class name as a reminder of
     // what we are hunting. Lowercase because URLs are canonically
@@ -915,7 +917,7 @@ export class BattleScene extends Phaser.Scene {
         // Actual errors - red
         line.style.color = '#e05050';
       } else if (msg.length > 60) {
-        // Narration (long text from Haiku) - soft cyan
+        // Narration (long text from the fast profile) - soft cyan
         line.style.color = '#88bbcc';
         line.style.fontStyle = 'italic';
       }
@@ -1239,13 +1241,13 @@ export class BattleScene extends Phaser.Scene {
     container.style.position = 'relative';
 
     // Determine character name from config
-    const model = this.game?.characterConfig?.model || '';
+    const model = getProfileKey(this.game?.characterConfig?.profile || this.game?.characterConfig?.model);
     let characterName = 'WARRIOR'; // default
-    if (model.includes('haiku')) {
+    if (model === 'fast') {
       characterName = 'KNIGHT';
-    } else if (model.includes('sonnet')) {
+    } else if (model === 'balanced') {
       characterName = 'SAMURAI';
-    } else if (model.includes('opus')) {
+    } else if (model === 'deep') {
       characterName = 'WARRIOR';
     }
 
@@ -1618,7 +1620,8 @@ export class BattleScene extends Phaser.Scene {
     //    structured focus header so Codex always knows which demon we
     //    are fighting, regardless of how vague the user's message is.
     try {
-      const model = this.game.characterConfig?.model;
+      const model = getProfileKey(this.game.characterConfig?.profile || this.game.characterConfig?.model);
+      const runtime = this.game.characterConfig?.runtime || getSelectedRuntime();
       const rawLines = [];
       this._activeRequestId = bridge.requestId + 1;
       const result = await bridge.fix({
@@ -1630,7 +1633,7 @@ export class BattleScene extends Phaser.Scene {
           rawLines.push(clean);
           if (this.game.addLog) this.game.addLog(clean);
         }
-      }, model);
+      }, model, runtime);
       this._activeRequestId = null;
 
       // 3. Agent finished - stop channeling, THEN play the slash
@@ -1681,7 +1684,7 @@ export class BattleScene extends Phaser.Scene {
         ? (fixData.summary || 'The agent made changes.')
         : (fixData?.summary || 'The agent analyzed the issue.');
 
-      // 5. Narrate the attack via Haiku
+      // 5. Narrate the attack via the selected profile
       this._narrateAttack(rawLines, summary);
 
     } catch (err) {
@@ -2607,12 +2610,15 @@ Summary: ${fallbackSummary}`;
    */
   _persistProgress() {
     try {
-      const modelKey = this.game.characterConfig?.model;
+      const modelKey = getProfileKey(this.game.characterConfig?.profile || this.game.characterConfig?.model);
+      const runtime = this.game.characterConfig?.runtime || getSelectedRuntime();
       if (!modelKey || !this.game.domain || !this.game.auditData) return;
-      const cacheKey = `seo_dungeon_audit_${this.game.domain}_${modelKey}`;
+      const cacheKey = `seo_dungeon_audit_${this.game.domain}_${runtime}_${modelKey}`;
       localStorage.setItem(cacheKey, JSON.stringify({
         domain: this.game.domain,
+        profile: modelKey,
         model: modelKey,
+        runtime,
         timestamp: Date.now(),
         auditData: this.game.auditData
       }));

@@ -7,11 +7,12 @@ Tests for the v2 Checkpoint 5 deliverables:
 
 from __future__ import annotations
 
+import os
+import stat
 import sys
 from pathlib import Path
 
 import pytest
-import json
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPTS = _REPO_ROOT / "scripts"
@@ -19,11 +20,6 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import parasite_risk  # noqa: E402
-
-
-def _plugin_version() -> str:
-    manifest = _REPO_ROOT / ".codex-plugin" / "plugin.json"
-    return json.loads(manifest.read_text(encoding="utf-8"))["version"]
 
 
 # ---------------------------------------------------------------------------
@@ -113,29 +109,50 @@ def test_audit_page_counts_pattern_hits() -> None:
     ],
 )
 def test_extension_has_install_skill_and_docs(name: str, skill_dir: str) -> None:
-    """Codex build bundles extension skills through the root installer.
-
-    Standalone upstream extension installers target non-Codex runtime config and
-    are intentionally not shipped in SEO Dungeon Pro.
-    """
     base = _REPO_ROOT / "extensions" / name
+    assert (base / "install.sh").is_file(), f"{name}/install.sh missing"
+    assert (base / "install.ps1").is_file(), f"{name}/install.ps1 missing"
     assert (base / "skills" / skill_dir / "SKILL.md").is_file(), (
         f"{name}/skills/{skill_dir}/SKILL.md missing"
     )
-    assert not (base / "install.sh").exists(), f"{name}/install.sh should not ship"
-    assert not (base / "install.ps1").exists(), f"{name}/install.ps1 should not ship"
+    assert (base / "uninstall.sh").is_file(), f"{name}/uninstall.sh missing"
+    docs_dir = base / "docs"
+    assert docs_dir.is_dir(), f"{name}/docs/ missing"
+    # At least one *-SETUP.md file in docs.
+    assert any(p.suffix == ".md" for p in docs_dir.iterdir()), (
+        f"{name}/docs/ has no Markdown file"
+    )
 
 
-def test_no_standalone_extension_installers_ship() -> None:
-    """Extension installation is centralized in the Codex root installer."""
+@pytest.mark.parametrize(
+    "name", ["ahrefs", "seranking", "profound", "bing-webmaster", "unlighthouse"],
+)
+def test_extension_install_script_is_executable(name: str) -> None:
+    if os.name == "nt":
+        pytest.skip("Executable bit is enforced by git on POSIX CI")
+    install = _REPO_ROOT / "extensions" / name / "install.sh"
+    mode = install.stat().st_mode
+    assert mode & stat.S_IXUSR, f"{name}/install.sh must be executable for chmod"
+
+
+def test_every_extension_install_and_uninstall_is_executable() -> None:
+    """All extensions ship executable install.sh + uninstall.sh — including v1 ones."""
+    if os.name == "nt":
+        pytest.skip("Executable bit is enforced by git on POSIX CI")
     ext_root = _REPO_ROOT / "extensions"
     failures = []
     for ext in sorted(p for p in ext_root.iterdir() if p.is_dir()):
-        for script_name in ("install.sh", "install.ps1", "uninstall.sh", "uninstall.ps1"):
+        for script_name in ("install.sh", "uninstall.sh"):
             script = ext / script_name
-            if script.exists():
+            if not script.exists():
+                continue
+            mode = script.stat().st_mode
+            if not (mode & stat.S_IXUSR):
                 failures.append(f"{ext.name}/{script_name}")
-    assert not failures, "Standalone extension installers should not ship:\n  " + "\n  ".join(failures)
+    assert not failures, (
+        "Extension scripts missing user-exec bit (chmod +x):\n  "
+        + "\n  ".join(failures)
+    )
 
 
 @pytest.mark.parametrize(
@@ -158,10 +175,7 @@ def test_extension_skillmd_has_required_frontmatter(
     assert f"name: {skill_dir}" in head, f"{name}: frontmatter name must be {skill_dir}"
     assert "description:" in head, f"{name}: missing description"
     assert "metadata:" in head, f"{name}: missing metadata block"
-    version = _plugin_version()
-    assert f'version: "{version}"' in head, (
-        f"{name}: SKILL.md must declare version {version}"
-    )
+    assert 'version: "2.2.0"' in head, f"{name}: SKILL.md must declare version 2.2.0"
 
 
 # ---------------------------------------------------------------------------

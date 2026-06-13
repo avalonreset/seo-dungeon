@@ -9,6 +9,7 @@ import { bridge } from './utils/ws.js';
 import { initKnightSprite } from './knight-sprite.js';
 import { initActivityLog, addLog, showLoadingIndicator, hideLoadingIndicator } from './activity-log.js';
 import { SFX } from './utils/sound-manager.js';
+import { getProfileKey, getSelectedRuntime } from './profile-config.js';
 
 // Minimum 3x render scale ensures crisp text on 4K monitors.
 // On a 4K display with 150% scaling (DPR 1.5), the base 800x600 canvas
@@ -217,6 +218,7 @@ function launchGame(domain, projectPath) {
 
   addLog(`Hunting: ${domain}`);
   addLog(`Source: ${projectPath}`);
+  addLog(`CLI: ${getSelectedRuntime().toUpperCase()}`);
 
   const dpr = window.GAME_DPR;
   const config = {
@@ -238,7 +240,9 @@ function launchGame(domain, projectPath) {
   game.dpr = dpr;
   game.domain = domain;
   game.projectPath = projectPath;
-  game.characterConfig = window.selectedCharacter || null;
+  game.characterConfig = window.selectedCharacter
+    ? { ...window.selectedCharacter, runtime: getSelectedRuntime() }
+    : null;
   game.addLog = addLog;
   game.showLoading = showLoadingIndicator;
   game.hideLoading = hideLoadingIndicator;
@@ -506,11 +510,12 @@ document.addEventListener('DOMContentLoaded', () => {
     startWatchdog();
 
     const projectPath = document.getElementById('path-input')?.value?.trim() || '.';
-    const model = window.selectedCharacter?.model || 'sonnet';
+    const profile = getProfileKey(window.selectedCharacter?.profile || window.selectedCharacter?.model);
+    const runtime = window.selectedCharacter?.runtime || getSelectedRuntime();
 
     (async () => {
       try {
-        const result = await bridge.chat(text, projectPath, model, (chunk) => {
+        const result = await bridge.chat(text, projectPath, profile, runtime, (chunk) => {
           lastStreamTime = Date.now();
           if (interactiveTimeout) clearTimeout(interactiveTimeout);
           startWatchdog();
@@ -635,7 +640,11 @@ document.addEventListener('DOMContentLoaded', () => {
         game.dpr = dpr;
         game.domain = cached.domain;
         game.auditData = cached.auditData;
-        game.characterConfig = window.selectedCharacter || { model: cached.model };
+        game.characterConfig = window.selectedCharacter || {
+          profile: getProfileKey(cached.profile || cached.model),
+          model: getProfileKey(cached.profile || cached.model),
+          runtime: cached.runtime || getSelectedRuntime()
+        };
         game.addLog = addLog;
         game.showLoading = showLoadingIndicator;
         game.hideLoading = hideLoadingIndicator;

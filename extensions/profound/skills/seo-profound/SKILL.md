@@ -2,8 +2,8 @@
 name: seo-profound
 description: Profound LLM citation tracker (extension). Time-series brand citation rates across ChatGPT, Perplexity, and other LLMs. Pairs with seo-seranking for triangulated AI visibility coverage.
 metadata:
-  version: "2.0.0"
-compatibility: "Requires a Profound API key exposed to the Codex runtime as PROFOUND_API_KEY."
+  version: "2.2.0"
+compatibility: "Requires a Profound API key (set PROFOUND_API_KEY by running extensions/profound/install.sh)."
 ---
 
 # seo-profound
@@ -15,8 +15,9 @@ are first-class.
 
 ## Prerequisites
 
+- Run `extensions/profound/install.sh` or `install.ps1`.
 - Profound API key.
-- Before any tool call, check that `PROFOUND_API_KEY` is available in the Codex runtime environment.
+- Before any tool call, check `~/.claude/settings.json` has `env.PROFOUND_API_KEY`.
 
 ## Routing
 

@@ -4,10 +4,18 @@
 $ErrorActionPreference = "Stop"
 
 function Resolve-Python {
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if ($python) { return @{ Exe = "python"; Args = @() } }
-    $py = Get-Command py -ErrorAction SilentlyContinue
-    if ($py) { return @{ Exe = "py"; Args = @("-3") } }
+    $candidates = @(
+        @{ Exe = 'py'; Args = @('-3') },
+        @{ Exe = 'python3'; Args = @() },
+        @{ Exe = 'python'; Args = @() }
+    )
+    foreach ($candidate in $candidates) {
+        $cmd = Get-Command $candidate.Exe -ErrorAction SilentlyContinue
+        if (-not $cmd) { continue }
+        $source = [string]$cmd.Source
+        if ($source -match 'Microsoft Store|WindowsApps|App execution alias|was not found') { continue }
+        return $candidate
+    }
     return $null
 }
 
@@ -29,7 +37,7 @@ function Get-SourceDir {
     }
 
     $repo = if ($env:SEO_DUNGEON_REPO) { $env:SEO_DUNGEON_REPO } else { "https://github.com/avalonreset/seo-dungeon" }
-    $ref = if ($env:SEO_DUNGEON_REF) { $env:SEO_DUNGEON_REF } else { "v2.0.0" }
+    $ref = if ($env:SEO_DUNGEON_REF) { $env:SEO_DUNGEON_REF } else { "v2.2.0" }
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
     New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
     $checkout = Join-Path $tempDir "seo-dungeon"
@@ -87,10 +95,10 @@ $sourceDir = Get-SourceDir
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  SEO Dungeon - Installer" -ForegroundColor Cyan
-Write-Host "  Codex Skill Suite" -ForegroundColor Cyan
+Write-Host "  Codex-default Skill Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 Install-Codex $sourceDir $python
 
 Write-Host "[OK] SEO Dungeon skills installed for Codex." -ForegroundColor Green
-Write-Host "Only Codex is supported." -ForegroundColor Cyan
+Write-Host "The dungeon app defaults to Codex and can point at local Claude or Gemini CLIs." -ForegroundColor Cyan

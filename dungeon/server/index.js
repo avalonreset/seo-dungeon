@@ -102,12 +102,31 @@ function sanitizeDomain(input) {
   }
 }
 
-function resolveAgentProvider() {
-  return 'codex';
+function normalizeRuntime(runtime) {
+  const key = String(runtime || process.env.SEO_DUNGEON_RUNTIME || 'codex').trim().toLowerCase();
+  return ['codex', 'claude', 'gemini'].includes(key) ? key : 'codex';
+}
+
+function resolveAgentProvider(runtime) {
+  return normalizeRuntime(runtime);
 }
 
 function resolveCodexCli() {
-  return { execPath: 'codex', args: [] };
+  return {
+    execPath: process.env.SEO_DUNGEON_CODEX_CLI || 'codex',
+    args: splitArgs(process.env.SEO_DUNGEON_CODEX_ARGS || '')
+  };
+}
+
+function splitArgs(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  const matches = raw.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+  return matches.map(part => {
+    const quote = part[0];
+    if ((quote === '"' || quote === "'") && part.endsWith(quote)) return part.slice(1, -1);
+    return part;
+  });
 }
 
 /**
@@ -120,6 +139,13 @@ function safeEnv() {
   if (process.env.LOCALAPPDATA) env.LOCALAPPDATA = process.env.LOCALAPPDATA;
   if (process.env.CODEX_HOME) env.CODEX_HOME = process.env.CODEX_HOME;
   if (process.env.OPENAI_API_KEY) env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+  if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (process.env.CLAUDE_CONFIG_DIR) env.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
+  if (process.env.GEMINI_API_KEY) env.GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  if (process.env.GOOGLE_API_KEY) env.GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+  if (process.env.GEMINI_CONFIG_DIR) env.GEMINI_CONFIG_DIR = process.env.GEMINI_CONFIG_DIR;
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) env.GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (process.env.XDG_CONFIG_HOME) env.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME;
   if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
   if (process.env.TEMP) env.TEMP = process.env.TEMP;
   if (process.env.TMP) env.TMP = process.env.TMP;
@@ -176,7 +202,11 @@ wss.on('connection', (ws) => {
       safeSend(JSON.stringify({ id: 0, type: 'error', message: 'Invalid message format' }));
       return;
     }
-    const { id, command, type, projectPath, issue, userMessage } = msg;
+    const { id, command, type, projectPath, issue, userMessage, model, profile, runtime } = msg;
+    const agentOptions = {
+      runtime: normalizeRuntime(runtime),
+      profile: normalizeProfile(profile || model)
+    };
 
     // Validate message type against allowlist
     if (type && !ALLOWED_TYPES.includes(type)) {
@@ -197,6 +227,7 @@ wss.on('connection', (ws) => {
     const fixCwd = validatedPath;
 
     console.log(`Command #${id} [${type}]: ${command || '(no command)'}`);
+    if (type !== 'cancel') console.log(`  Runtime: ${agentOptions.runtime}, profile: ${agentOptions.profile}`);
     if (validatedPath !== PROJECT_ROOT) console.log(`  Project: ${validatedPath}`);
 
     // Cancel - kill the child process for a given request
@@ -226,7 +257,7 @@ wss.on('connection', (ws) => {
         }
         const result = await runAudit(domain, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
-        }, undefined, id);
+        }, undefined, id, agentOptions);
         activeProcesses.delete(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Audit done: ${result.issues.length} issues, score ${result.score}`);
@@ -234,7 +265,7 @@ wss.on('connection', (ws) => {
       } else if (type === 'fix') {
         const result = await runFix(issue, userMessage, fixCwd, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
-        }, id);
+        }, id, agentOptions);
         activeProcesses.delete(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Fix done: ${(issue && issue.title) || command}`);
@@ -244,7 +275,7 @@ wss.on('connection', (ws) => {
         const safeMessage = (command || 'SEO fix').replace(/[^\x20-\x7E\n]/g, '').slice(0, 500);
         const result = await runCommit(safeMessage, fixCwd, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
-        }, id);
+        }, id, agentOptions);
         activeProcesses.delete(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Commit done in ${fixCwd}`);
@@ -252,7 +283,7 @@ wss.on('connection', (ws) => {
       } else if (type === 'narrate') {
         const result = await runAgent(command, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
-        }, undefined, id);
+        }, undefined, id, agentOptions);
         activeProcesses.delete(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Narration done`);
@@ -263,7 +294,7 @@ wss.on('connection', (ws) => {
         // exactly what the user typed and runs in their project directory.
         const result = await runAgent(command, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
-        }, fixCwd, id);
+        }, fixCwd, id, agentOptions);
         activeProcesses.delete(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Chat done`);
@@ -354,7 +385,7 @@ function ensureFixBranch(projectCwd) {
 /**
  * Run an SEO audit via Codex CLI.
  */
-async function runAudit(domain, onStream, cwd, requestId, model) {
+async function runAudit(domain, onStream, cwd, requestId, agentOptions) {
   const prompt = `Run /seo audit on ${domain}. This will trigger the full SEO audit skill which spawns multiple subagents for technical SEO, content quality, schema markup, performance, crawlability, images, and more.
 
 After the audit completes, CONSOLIDATE the findings into actionable groups. Do NOT list every granular finding as a separate issue. Instead, group related problems that would be fixed together into a single issue. For example, all mobile responsiveness problems (touch targets, font sizes, overflow) become one issue. All missing meta tags become one issue. Aim for 8-15 total issues maximum - each one should represent a meaningful, distinct area of work.
@@ -365,7 +396,7 @@ Format as a single JSON object. Return ONLY valid JSON at the very end (no markd
 
 Quality over quantity. Each issue should be a real battle worth fighting, not busywork.`;
 
-  const raw = await runAgent(prompt, onStream, undefined, requestId);
+  const raw = await runAgent(prompt, onStream, undefined, requestId, agentOptions);
 
   // Try to extract structured audit data from the agent response.
   const parsed = _tryParseAudit(raw, domain);
@@ -382,7 +413,7 @@ Quality over quantity. Each issue should be a real battle worth fighting, not bu
 Raw audit output:
 ${rawText.slice(-12000)}`;
 
-  const retryRaw = await runAgent(retryPrompt, onStream, undefined, requestId);
+  const retryRaw = await runAgent(retryPrompt, onStream, undefined, requestId, agentOptions);
   const retryParsed = _tryParseAudit(retryRaw, domain);
   if (retryParsed) return retryParsed;
 
@@ -504,7 +535,7 @@ function buildDemonHeader(issue) {
  * @param {string} userMessage  What the user typed in the Attack input.
  *                              May be empty, a question, or a directive.
  */
-async function runFix(issue, userMessage, projectCwd, onStream, requestId, model) {
+async function runFix(issue, userMessage, projectCwd, onStream, requestId, agentOptions) {
   const header = buildDemonHeader(issue);
   const msg = (userMessage || '').trim();
   const userBlock = msg
@@ -539,7 +570,7 @@ End your response with a single-line JSON summary so the battle scene
 can score the turn:
   {"fixed":<true if you edited files, false otherwise>,"summary":"<one short sentence>","filesChanged":["<list of files you changed, or []>"]}`;
 
-  const raw = await runAgent(prompt, onStream, projectCwd, requestId);
+  const raw = await runAgent(prompt, onStream, projectCwd, requestId, agentOptions);
 
   try {
     const text = typeof raw === 'string' ? raw : (raw.raw || JSON.stringify(raw));
@@ -553,10 +584,10 @@ can score the turn:
 /**
  * Commit current changes in the project.
  */
-async function runCommit(message, projectCwd, onStream, requestId, model) {
+async function runCommit(message, projectCwd, onStream, requestId, agentOptions) {
   const prompt = `In this project directory, stage all changed files and create a git commit with this message: "${message}". Do NOT push. Return JSON: {"committed":true,"message":"<commit message>","hash":"<short hash>"}`;
 
-  const raw = await runAgent(prompt, onStream, projectCwd, requestId);
+  const raw = await runAgent(prompt, onStream, projectCwd, requestId, agentOptions);
 
   try {
     const text = typeof raw === 'string' ? raw : (raw.raw || JSON.stringify(raw));
@@ -573,15 +604,163 @@ async function runCommit(message, projectCwd, onStream, requestId, model) {
  * @param {function} onStream - Callback for streaming output
  * @param {string} [cwd] - Working directory (defaults to PROJECT_ROOT)
  */
-function runAgent(prompt, onStream, cwd, requestId) {
-  return runCodex(prompt, onStream, cwd, requestId);
+function normalizeProfile(profile) {
+  const key = String(profile || '').trim().toLowerCase();
+  if (key === 'deep' || key === 'opus') return 'deep';
+  if (key === 'fast' || key === 'haiku') return 'fast';
+  return 'balanced';
 }
 
-function runCodex(prompt, onStream, cwd, requestId) {
+function runAgent(prompt, onStream, cwd, requestId, options = {}) {
+  const runtime = normalizeRuntime(options.runtime);
+  const profile = normalizeProfile(options.profile);
+  if (runtime === 'claude' || runtime === 'gemini') {
+    return runTextCli(runtime, prompt, onStream, cwd, requestId, profile);
+  }
+  return runCodex(prompt, onStream, cwd, requestId, profile);
+}
+
+function getCodexProfileConfig(profile) {
+  const key = normalizeProfile(profile);
+  const envSuffix = key.toUpperCase();
+  const defaultEffort = { deep: 'xhigh', balanced: 'high', fast: 'medium' }[key];
+  return {
+    key,
+    model: process.env[`SEO_DUNGEON_CODEX_MODEL_${envSuffix}`] || process.env.SEO_DUNGEON_CODEX_MODEL || '',
+    effort: process.env[`SEO_DUNGEON_CODEX_EFFORT_${envSuffix}`] || defaultEffort,
+  };
+}
+
+const DEFAULT_TEXT_CLI_MODELS = {
+  claude: {
+    deep: 'opus',
+    balanced: 'sonnet',
+    fast: 'haiku',
+  },
+  gemini: {
+    deep: 'gemini-3.1-pro-preview',
+    balanced: 'gemini-3.5-flash',
+    fast: 'gemini-3.1-flash-lite',
+  },
+};
+
+function getTextCliProfileConfig(runtime, profile) {
+  const normalizedRuntime = normalizeRuntime(runtime);
+  const key = normalizeProfile(profile);
+  const runtimeEnv = normalizedRuntime.toUpperCase();
+  const profileEnv = key.toUpperCase();
+  const configuredModel =
+    process.env[`SEO_DUNGEON_${runtimeEnv}_MODEL_${profileEnv}`] ??
+    process.env[`SEO_DUNGEON_${runtimeEnv}_MODEL`] ??
+    DEFAULT_TEXT_CLI_MODELS[normalizedRuntime]?.[key] ??
+    '';
+  const model = /^(auto|default|none)$/i.test(String(configuredModel)) ? '' : configuredModel;
+  return { key, model };
+}
+
+function resolveTextCli(runtime) {
+  const normalizedRuntime = normalizeRuntime(runtime);
+  const runtimeEnv = normalizedRuntime.toUpperCase();
+  const execPath = process.env[`SEO_DUNGEON_${runtimeEnv}_CLI`] || normalizedRuntime;
+  const defaultArgs = normalizedRuntime === 'claude'
+    ? ['--print', '--output-format', 'text', '--permission-mode', 'acceptEdits']
+    : ['--prompt', '{{prompt}}', '--output-format', 'text', '--approval-mode', 'auto_edit'];
+  const args = process.env[`SEO_DUNGEON_${runtimeEnv}_ARGS`]
+    ? splitArgs(process.env[`SEO_DUNGEON_${runtimeEnv}_ARGS`])
+    : defaultArgs;
+  return { execPath, args };
+}
+
+function insertPromptArg(args, prompt) {
+  let inserted = false;
+  const finalArgs = args.map((arg) => {
+    if (arg === '{{prompt}}') {
+      inserted = true;
+      return prompt;
+    }
+    return arg;
+  });
+  if (!inserted) finalArgs.push(prompt);
+  return finalArgs;
+}
+
+function runTextCli(runtime, prompt, onStream, cwd, requestId, profile) {
+  const normalizedRuntime = normalizeRuntime(runtime);
+  const workDir = cwd || PROJECT_ROOT;
+  return new Promise((resolve, reject) => {
+    const { execPath: cliExec, args: cliArgs } = resolveTextCli(normalizedRuntime);
+    const cliProfile = getTextCliProfileConfig(normalizedRuntime, profile);
+    const args = [...cliArgs];
+    if (cliProfile.model) args.push('--model', cliProfile.model);
+    const finalArgs = insertPromptArg(args, prompt);
+
+    console.log(`  Running with ${normalizedRuntime} CLI (profile: ${cliProfile.key}${cliProfile.model ? `, model: ${cliProfile.model}` : ', default model'})`);
+    console.log(`  CWD: ${workDir}`);
+    const proc = spawn(cliExec, finalArgs, {
+      cwd: workDir,
+      env: safeEnv(),
+      shell: process.platform === 'win32' && /\.ps1$/i.test(cliExec),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+
+    if (requestId) activeProcesses.set(requestId, proc);
+
+    let fullText = '';
+    let lineBuffer = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => {
+      const text = data.toString();
+      fullText += text;
+      lineBuffer += text;
+      const lines = lineBuffer.split(/\r?\n/);
+      lineBuffer = lines.pop();
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) onStream(trimmed);
+      }
+    });
+
+    proc.stderr.on('data', (data) => {
+      const text = data.toString();
+      stderr += text;
+      const trimmed = text.trim();
+      if (trimmed && !/^\[?debug\]?/i.test(trimmed)) onStream(trimmed);
+    });
+
+    proc.on('close', (code) => {
+      if (lineBuffer.trim()) onStream(lineBuffer.trim());
+      console.log(`  ${normalizedRuntime} CLI finished (exit ${code}), ${fullText.length} chars`);
+      if (code !== 0) {
+        reject(new Error(`${normalizedRuntime} CLI exited with code ${code}: ${stderr || fullText}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(fullText));
+      } catch {
+        resolve({ raw: fullText });
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to spawn ${normalizedRuntime} CLI: ${err.message}. Is ${normalizedRuntime} installed and authenticated?`));
+    });
+
+    const MAX_RUNTIME_MS = 15 * 60 * 1000;
+    const timeoutHandle = setTimeout(() => {
+      try { proc.kill('SIGTERM'); } catch {}
+      reject(new Error('Operation timed out after 15 minutes.'));
+    }, MAX_RUNTIME_MS);
+    proc.on('close', () => clearTimeout(timeoutHandle));
+  });
+}
+
+function runCodex(prompt, onStream, cwd, requestId, profile) {
   const workDir = cwd || PROJECT_ROOT;
   return new Promise((resolve, reject) => {
     const { execPath: cliExec, args: cliArgs } = resolveCodexCli();
-    const codexModel = process.env.SEO_DUNGEON_CODEX_MODEL;
+    const codexProfile = getCodexProfileConfig(profile);
     const args = [
       ...cliArgs,
       'exec',
@@ -591,13 +770,15 @@ function runCodex(prompt, onStream, cwd, requestId) {
       'workspace-write',
       '-c',
       'approval_policy="never"',
+      '-c',
+      `model_reasoning_effort="${codexProfile.effort}"`,
       '-C',
       workDir
     ];
-    if (codexModel) args.push('-m', codexModel);
+    if (codexProfile.model) args.push('-m', codexProfile.model);
     args.push(prompt);
 
-    console.log(`  Running with codex exec${codexModel ? ` (model: ${codexModel})` : ''}`);
+    console.log(`  Running with codex exec (profile: ${codexProfile.key}, effort: ${codexProfile.effort}${codexProfile.model ? `, model: ${codexProfile.model}` : ''})`);
     console.log(`  CWD: ${workDir}`);
     const proc = spawn(cliExec, args, {
       cwd: workDir,
