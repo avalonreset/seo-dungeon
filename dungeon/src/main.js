@@ -480,15 +480,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Validation helpers ──────────────────────
   function cleanDomain(raw) {
-    let d = raw.trim();
+    let d = normalizeKnownDomainAlias(raw);
     d = d.replace(/^https?:\/\//i, '');
     d = d.replace(/\/+$/, '');
     return d;
   }
 
+  function normalizeKnownDomainAlias(raw) {
+    const trimmed = raw.trim();
+    const key = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (key === 'seodungeon' || key === 'dungeonseo') {
+      return 'seodungeon.com';
+    }
+    return trimmed;
+  }
+
   function isDomainValid(raw) {
-    const d = cleanDomain(raw);
-    return d.length > 0 && d.includes('.');
+    if (!raw.trim()) return false;
+    try {
+      normalizeWebsiteUrl(raw);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   function isPathValid(raw) {
@@ -496,7 +510,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function normalizeWebsiteUrl(raw) {
-    const trimmed = raw.trim();
+    const trimmed = normalizeKnownDomainAlias(raw);
     const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
     const url = new URL(withProtocol);
     if (!/^https?:$/i.test(url.protocol) || !url.hostname.includes('.')) {
@@ -506,20 +520,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function openWebsiteUrl(url) {
-    const popup = window.open(url, '_blank', 'noopener,noreferrer');
-    if (popup) {
-      try { popup.opener = null; } catch (_) {}
-      return true;
-    }
-
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.target = '_blank';
-    anchor.rel = 'noopener';
+    anchor.rel = 'noopener noreferrer';
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    return false;
+    return true;
   }
 
   function updateButtonState() {

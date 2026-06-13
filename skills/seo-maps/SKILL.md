@@ -16,7 +16,7 @@ license: MIT
 compatibility: "DataForSEO MCP for Tier 1+, Google Maps API for Tier 2"
 metadata:
   author: AgriciDaniel
-  version: "2.2.3"
+  version: "2.2.4"
   category: seo
 ---
 

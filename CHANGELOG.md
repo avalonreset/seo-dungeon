@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.4] - 2026-06-13
+
+### Changed
+- **Simpler quick-open icons**: replaced the drawn folder glyph and external-link
+  arrow with emoji buttons for the website and project folder actions.
+
+### Fixed
+- **Domain quick-open reliability**: the website button now uses direct anchor
+  navigation instead of popup-window routing, avoiding `about:blank` fallbacks.
+- **SEO Dungeon alias support**: typing `SEO Dungeon` in the domain field now
+  resolves to `seodungeon.com` for both quick-open and audit launch.
+
 ## [2.2.3] - 2026-06-13
 
 ### Added

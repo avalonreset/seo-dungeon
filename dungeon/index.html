@@ -283,34 +283,6 @@
       border-color: rgba(212, 175, 55, 0.55);
     }
 
-    .folder-glyph {
-      position: relative;
-      display: block;
-      width: calc(15px * var(--title-scale));
-      min-width: 12px;
-      height: calc(11px * var(--title-scale));
-      min-height: 9px;
-      border: 2px solid currentColor;
-      border-radius: 2px;
-      box-sizing: border-box;
-    }
-
-    .folder-glyph::before {
-      content: '';
-      position: absolute;
-      left: -2px;
-      top: calc(-6px * var(--title-scale));
-      width: calc(8px * var(--title-scale));
-      min-width: 6px;
-      height: calc(5px * var(--title-scale));
-      min-height: 4px;
-      border: 2px solid currentColor;
-      border-bottom: 0;
-      border-radius: 2px 2px 0 0;
-      box-sizing: border-box;
-      background: rgba(5, 5, 7, 0.82);
-    }
-
     .input-action-button:disabled {
       opacity: 0.35;
       cursor: not-allowed;
@@ -1109,7 +1081,7 @@
         <label>Domain</label>
         <div class="input-action-row">
           <input type="text" id="domain-input" value="seodungeon.com" placeholder="example.com" autocomplete="off" spellcheck="false">
-          <button id="open-domain-btn" class="input-action-button" type="button" title="Open website" aria-label="Open website">↗</button>
+          <button id="open-domain-btn" class="input-action-button" type="button" title="Open website" aria-label="Open website">🌐</button>
         </div>
       </div>
 
@@ -1117,7 +1089,7 @@
         <label>Project Folder</label>
         <div class="input-action-row">
           <input type="text" id="path-input" class="path-input" value="D:\seodungeon" placeholder="/path/to/your/project" autocomplete="off" spellcheck="false">
-          <button id="open-folder-btn" class="input-action-button" type="button" title="Open project folder" aria-label="Open project folder"><span class="folder-glyph" aria-hidden="true"></span></button>
+          <button id="open-folder-btn" class="input-action-button" type="button" title="Open project folder" aria-label="Open project folder">📁</button>
         </div>
       </div>
 
