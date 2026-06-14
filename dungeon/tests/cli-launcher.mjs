@@ -171,6 +171,11 @@ exit $LASTEXITCODE
   assert.equal(bridge.normalizeDangerousBypass(false), false);
   delete process.env.SEO_DUNGEON_CODEX_DANGEROUS_BYPASS;
 
+  const capabilities = bridge.getBridgeCapabilities();
+  assert.equal(capabilities.supportsSteer, true, 'bridge capabilities should advertise live steering');
+  assert(capabilities.allowedTypes.includes('steer'), 'bridge allowlist should accept steer messages');
+  assert(capabilities.allowedTypes.includes('capabilities'), 'bridge allowlist should accept capability probes');
+
   const validProjectDir = fs.mkdtempSync(path.join(tmp, 'project-'));
   process.env.SEO_DUNGEON_CODEX_CLI = process.execPath;
   process.env.SEO_DUNGEON_CODEX_ARGS = `"${fakeCodexAppServer}"`;

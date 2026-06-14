@@ -12,6 +12,10 @@ export class BridgeClient {
     this._reconnectTimer = null;
     this._onStatusChange = []; // callbacks: (connected: boolean) => void
     this.activeLedgerId = null;
+    this.capabilities = null;
+    this.supportsSteer = null;
+    this._capabilitiesChecked = false;
+    this._capabilitiesPromise = null;
   }
 
   /** Register a callback that fires whenever connection status changes. */
@@ -46,8 +50,10 @@ export class BridgeClient {
 
       this.ws.onopen = () => {
         this._setConnected(true);
+        this._capabilitiesChecked = false;
         this._clearReconnect();
         resolve();
+        this.refreshCapabilities().catch(() => {});
       };
 
       this.ws.onerror = (err) => {
@@ -56,6 +62,10 @@ export class BridgeClient {
 
       this.ws.onclose = () => {
         this._setConnected(false);
+        this.capabilities = null;
+        this.supportsSteer = null;
+        this._capabilitiesChecked = false;
+        this._capabilitiesPromise = null;
         // Reject all pending handlers so callers don't hang forever
         for (const [id, handler] of this.handlers) {
           handler.reject(new Error('Bridge connection lost'));
@@ -107,6 +117,81 @@ export class BridgeClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('Bridge server is not connected. Start it with: npm start');
     }
+  }
+
+  _emitCapabilitiesChange() {
+    try {
+      window.dispatchEvent(new CustomEvent('seo-dungeon-bridge-capabilities', {
+        detail: {
+          capabilities: this.capabilities,
+          supportsSteer: this.supportsSteer,
+        }
+      }));
+    } catch (_) {}
+  }
+
+  _setCapabilities(capabilities) {
+    this.capabilities = capabilities || null;
+    this.supportsSteer = Boolean(capabilities?.supportsSteer);
+    this._capabilitiesChecked = true;
+    this._emitCapabilitiesChange();
+    return this.capabilities;
+  }
+
+  _requestControl(payload) {
+    return new Promise((resolve, reject) => {
+      try { this._ensureOpen(); } catch (e) { return reject(e); }
+      const id = ++this.requestId;
+      this.handlers.set(id, { resolve, reject });
+      this.ws.send(JSON.stringify({ id, ...payload }));
+    });
+  }
+
+  async _probeSteerSupport() {
+    try {
+      await this._requestControl({
+        type: 'steer',
+        targetId: -1,
+        command: '__seo_dungeon_steer_capability_probe__',
+      });
+      return this._setCapabilities({
+        version: null,
+        protocol: 1,
+        supportsSteer: true,
+        steerMode: 'legacy-probe',
+      });
+    } catch (err) {
+      const message = String(err?.message || '');
+      const supportsSteer = !/Unknown command type:\s*steer/i.test(message);
+      return this._setCapabilities({
+        version: null,
+        protocol: 1,
+        supportsSteer,
+        steerMode: supportsSteer ? 'legacy-probe' : 'unsupported',
+      });
+    }
+  }
+
+  refreshCapabilities({ force = false } = {}) {
+    if (this._capabilitiesPromise && !force) return this._capabilitiesPromise;
+    if (this._capabilitiesChecked && !force) return Promise.resolve(this.capabilities);
+    this._capabilitiesPromise = (async () => {
+      try {
+        const response = await this._requestControl({ type: 'capabilities' });
+        return this._setCapabilities(response?.data || {});
+      } catch (err) {
+        const message = String(err?.message || '');
+        if (/Unknown command type:\s*capabilities/i.test(message)) {
+          return this._probeSteerSupport();
+        }
+        this._capabilitiesChecked = true;
+        this._emitCapabilitiesChange();
+        return this.capabilities;
+      } finally {
+        this._capabilitiesPromise = null;
+      }
+    })();
+    return this._capabilitiesPromise;
   }
 
   _runtimeFallback(runtime) {
@@ -272,12 +357,18 @@ export class BridgeClient {
    * Steer the active agent turn without cancelling it or starting a new turn.
    */
   steer(text, targetId) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
       const clean = String(text || '').trim();
       if (!clean) return reject(new Error('Nothing to steer.'));
       const activeId = targetId || this._activeTurnId();
       if (!activeId) return reject(new Error('No active turn to steer.'));
+      try {
+        if (this.supportsSteer !== true) await this.refreshCapabilities();
+      } catch (_) {}
+      if (this.supportsSteer === false) {
+        return reject(new Error('This SEO Dungeon bridge does not support live steering. Restart SEO Dungeon from the latest release and try again.'));
+      }
       const id = ++this.requestId;
       this.handlers.set(id, { resolve, reject });
       this.ws.send(JSON.stringify({

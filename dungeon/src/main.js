@@ -963,9 +963,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logStop) logStop.disabled = !busy;
     if (promptQueueSteer) {
       const actionLabel = busy ? 'Steer' : 'Send';
-      promptQueueSteer.disabled = promptQueue.length === 0 || selectedPromptId == null || steeringPromptId != null;
+      const steerUnsupported = busy && bridge.supportsSteer === false;
+      promptQueueSteer.disabled = promptQueue.length === 0 || selectedPromptId == null || steeringPromptId != null || steerUnsupported;
       promptQueueSteer.textContent = actionLabel;
-      promptQueueSteer.title = busy ? 'Steer selected prompt into active turn' : 'Send selected queued prompt';
+      promptQueueSteer.title = steerUnsupported
+        ? 'Restart the SEO Dungeon bridge to enable live steering'
+        : busy
+          ? 'Steer selected prompt into active turn'
+          : 'Send selected queued prompt';
       promptQueueSteer.setAttribute('aria-label', promptQueueSteer.title);
     }
     if (promptQueueClear) promptQueueClear.disabled = promptQueue.length === 0 || steeringPromptId != null;
@@ -1095,12 +1100,13 @@ document.addEventListener('DOMContentLoaded', () => {
         addLog('> ' + selected.text, { immediate: true });
         addLog('Steered active turn.');
       } catch (err) {
+        const message = String(err.message || 'unknown');
         if (findPromptIndex(selected.id) < 0) {
           promptQueue.splice(Math.min(idx, promptQueue.length), 0, selected);
         }
         selectedPromptId = selected.id;
         queueHold = wasHeld && promptQueue.length > 0;
-        addLog('Could not steer active turn: ' + (err.message || 'unknown'));
+        addLog('Could not steer active turn: ' + message);
         addLog('Prompt stayed queued.');
       } finally {
         steeringPromptId = null;
@@ -1316,6 +1322,10 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPromptQueue();
     updatePromptControls();
     scheduleQueueDrain();
+  });
+  window.addEventListener('seo-dungeon-bridge-capabilities', () => {
+    renderPromptQueue();
+    updatePromptControls();
   });
   bridge.onStatusChange((connected) => {
     renderPromptQueue();

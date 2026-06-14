@@ -4,12 +4,32 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 
-const server = http.createServer();
-
 const PORT = 3001;
 
 // Project root: server/ -> dungeon/ -> seo-dungeon/
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const DUNGEON_ROOT = path.resolve(__dirname, '..');
+let PACKAGE_VERSION = '0.0.0';
+try {
+  PACKAGE_VERSION = JSON.parse(fs.readFileSync(path.join(DUNGEON_ROOT, 'package.json'), 'utf8')).version || PACKAGE_VERSION;
+} catch (_) {}
+
+const server = http.createServer((req, res) => {
+  if (req.method === 'GET' && (req.url === '/health' || req.url === '/capabilities')) {
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store'
+    });
+    res.end(JSON.stringify({
+      ok: true,
+      ...getBridgeCapabilities()
+    }));
+    return;
+  }
+
+  res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+});
 
 // Evidence directory for failed audits. When _tryParseAudit gives up
 // and we fall back to the synthetic "Parse Error" demon, we write the
@@ -73,9 +93,22 @@ function logFailedAudit(domain, raw, note) {
 }
 
 // ── Security: Allowed message types and rate limits ──
-const ALLOWED_TYPES = ['audit', 'fix', 'commit', 'narrate', 'chat', 'cancel', 'steer', 'open-folder'];
+const ALLOWED_TYPES = ['audit', 'fix', 'commit', 'narrate', 'chat', 'cancel', 'steer', 'open-folder', 'capabilities'];
 const MAX_CONCURRENT_PROCESSES = 5;
 const MAX_MESSAGES_PER_MINUTE = 30;
+
+function getBridgeCapabilities() {
+  return {
+    version: PACKAGE_VERSION,
+    protocol: 2,
+    supportsSteer: true,
+    steerMode: 'active-turn',
+    defaultCodexTransport: /^exec$/i.test(String(process.env.SEO_DUNGEON_CODEX_TRANSPORT || ''))
+      ? 'exec'
+      : 'app-server',
+    allowedTypes: [...ALLOWED_TYPES]
+  };
+}
 
 // ── Security: Origin validation ──
 const EXTRA_ALLOWED_ORIGINS = (process.env.SEO_DUNGEON_ALLOWED_ORIGINS || '')
@@ -684,6 +717,11 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    if (type === 'capabilities') {
+      safeSend(JSON.stringify({ id, type: 'result', data: getBridgeCapabilities() }));
+      return;
+    }
+
     // Validate and resolve projectPath. Folder-open requests get their own
     // fallback path: if the saved folder is invalid, the bridge opens a
     // native folder picker instead of rejecting before the handler runs.
@@ -698,8 +736,8 @@ wss.on('connection', (ws) => {
     const fixCwd = validatedPath;
 
     console.log(`Command #${id} [${type}]: ${command || '(no command)'}`);
-    if (type !== 'cancel' && type !== 'steer') console.log(`  Runtime: ${agentOptions.runtime}, profile: ${agentOptions.profile}`);
-    if (type !== 'cancel' && type !== 'steer' && agentOptions.runtime === 'codex') console.log(`  Codex dangerous bypass: ${agentOptions.dangerousBypass ? 'on' : 'off'}`);
+    if (type !== 'cancel' && type !== 'steer' && type !== 'capabilities') console.log(`  Runtime: ${agentOptions.runtime}, profile: ${agentOptions.profile}`);
+    if (type !== 'cancel' && type !== 'steer' && type !== 'capabilities' && agentOptions.runtime === 'codex') console.log(`  Codex dangerous bypass: ${agentOptions.dangerousBypass ? 'on' : 'off'}`);
     if (validatedPath && validatedPath !== PROJECT_ROOT) console.log(`  Project: ${validatedPath}`);
 
     // Cancel - kill the child process for a given request
@@ -1785,6 +1823,7 @@ module.exports = {
   getCodexProfileConfig,
   getTextCliProfileConfig,
   insertPromptArg,
+  getBridgeCapabilities,
   steerActiveProcess,
   safeEnv,
   validateProjectPath,
