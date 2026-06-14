@@ -98,14 +98,15 @@ const MAX_CONCURRENT_PROCESSES = 5;
 const MAX_MESSAGES_PER_MINUTE = 30;
 
 function getBridgeCapabilities() {
+  const codexTransport = /^exec$/i.test(String(process.env.SEO_DUNGEON_CODEX_TRANSPORT || ''))
+    ? 'exec'
+    : 'app-server';
   return {
     version: PACKAGE_VERSION,
     protocol: 2,
-    supportsSteer: true,
+    supportsSteer: codexTransport === 'app-server',
     steerMode: 'active-turn',
-    defaultCodexTransport: /^exec$/i.test(String(process.env.SEO_DUNGEON_CODEX_TRANSPORT || ''))
-      ? 'exec'
-      : 'app-server',
+    defaultCodexTransport: codexTransport,
     allowedTypes: [...ALLOWED_TYPES]
   };
 }

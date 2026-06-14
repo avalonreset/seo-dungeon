@@ -189,6 +189,20 @@ try {
   );
   assert.equal(finalResult.type, 'result', `client B disconnect must not cancel client A: ${JSON.stringify(finalResult)}`);
 
+  clientA.send(JSON.stringify({
+    id: 1003,
+    type: 'steer',
+    targetId: 1001,
+    command: 'late steer after completion'
+  }));
+  const lateSteerResult = await waitForMessage(
+    messagesA,
+    (msg) => msg.id === 1003,
+    'late steer result'
+  );
+  assert.equal(lateSteerResult.type, 'error', `late steer should reject after completion: ${JSON.stringify(lateSteerResult)}`);
+  assert.match(lateSteerResult.message || '', /No active operation to steer/i);
+
   const streamLines = messagesA
     .filter((msg) => msg.type === 'stream')
     .map((msg) => String(msg.content || ''));

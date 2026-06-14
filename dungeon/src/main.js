@@ -745,6 +745,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let steeringPromptId = null;
   const promptQueue = [];
 
+  window.__seoDungeonDialogueState = () => ({
+    queue: promptQueue.map((item) => ({ id: item.id, text: item.text })),
+    queueHold,
+    hasQueueDrainTimer: Boolean(queueDrainTimer),
+    selectedPromptId,
+    steeringPromptId,
+    ledgerRunning,
+    busy: isAgentBusy(),
+  });
+
   let interactiveTimeout = null;
   let lastStreamTime = 0;
 
@@ -795,8 +805,14 @@ document.addEventListener('DOMContentLoaded', () => {
     bridge.activeAuditId ||
     bridge.activeFixId ||
     bridge.activeCommitId ||
-    bridge.activeNarrationId ||
     isBattleBusy()
+  );
+
+  const hasSteerableTurn = () => Boolean(
+    bridge.activeLedgerId ||
+    bridge.activeAuditId ||
+    bridge.activeFixId ||
+    bridge.activeCommitId
   );
 
   function findPromptIndex(id) {
@@ -964,13 +980,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (logStop) logStop.disabled = !busy;
     if (promptQueueSteer) {
-      const actionLabel = busy ? 'Steer' : 'Send';
-      const steerUnsupported = busy && bridge.supportsSteer === false;
+      const shouldSteer = hasSteerableTurn();
+      const actionLabel = shouldSteer ? 'Steer' : 'Send';
+      const steerUnsupported = shouldSteer && bridge.supportsSteer === false;
       promptQueueSteer.disabled = promptQueue.length === 0 || selectedPromptId == null || steeringPromptId != null || steerUnsupported;
       promptQueueSteer.textContent = actionLabel;
       promptQueueSteer.title = steerUnsupported
         ? 'Restart the SEO Dungeon bridge to enable live steering'
-        : busy
+        : shouldSteer
           ? 'Steer selected prompt into active turn'
           : 'Send selected queued prompt';
       promptQueueSteer.setAttribute('aria-label', promptQueueSteer.title);
@@ -981,6 +998,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function enqueuePrompt(text, { front = false } = {}) {
     const clean = String(text || '').trim();
     if (!clean) return;
+    if (queueDrainTimer) {
+      clearTimeout(queueDrainTimer);
+      queueDrainTimer = null;
+    }
     const item = { id: ++promptQueueId, text: clean, createdAt: Date.now() };
     if (front) promptQueue.unshift(item);
     else promptQueue.push(item);
@@ -1067,6 +1088,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function stopActiveAgent({ announce = true, holdQueue = true } = {}) {
     const hadBusyState = isAgentBusy();
     queueHold = holdQueue && promptQueue.length > 0;
+    if (queueHold && queueDrainTimer) {
+      clearTimeout(queueDrainTimer);
+      queueDrainTimer = null;
+    }
     const cancelledIds = cancelActiveBridgeRequests();
     cancelledIds.forEach((id) => suppressedDrainIds.add(id));
     flushLogQueue();
@@ -1087,7 +1112,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (idx < 0) return;
     const selected = promptQueue[idx];
     const wasHeld = queueHold;
-    if (isAgentBusy()) {
+    if (hasSteerableTurn()) {
       steeringPromptId = selected.id;
       renderPromptQueue();
       updatePromptControls();
@@ -1131,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     queueDrainTimer = setTimeout(() => {
       queueDrainTimer = null;
       drainPromptQueue();
-    }, 250);
+    }, 900);
   }
 
   function drainPromptQueue() {
@@ -1246,10 +1271,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep log scrolled to bottom as input grows
     if (logContent) logContent.scrollTop = logContent.scrollHeight;
   };
-  logInput.addEventListener('input', autoResize);
-  logInput.addEventListener('input', updatePromptControls);
+  const syncComposerControls = () => {
+    autoResize();
+    updatePromptControls();
+  };
+  const scheduleComposerSync = () => requestAnimationFrame(syncComposerControls);
+  ['input', 'change', 'keyup', 'paste', 'compositionend', 'focus'].forEach((eventName) => {
+    logInput.addEventListener(eventName, scheduleComposerSync);
+  });
+  let lastComposerValue = logInput.value;
+  setInterval(() => {
+    const currentValue = logInput.value;
+    const hasText = Boolean(currentValue.trim());
+    const classMatches = logInputBar?.classList.contains('has-text') === hasText;
+    if (currentValue !== lastComposerValue || !classMatches) {
+      lastComposerValue = currentValue;
+      syncComposerControls();
+    }
+  }, 150);
   window.addEventListener('resize', autoResize);
-  autoResize();
+  syncComposerControls();
   renderPromptQueue();
   updatePromptControls();
 
@@ -1336,6 +1377,8 @@ document.addEventListener('DOMContentLoaded', () => {
       scheduleQueueDrain();
     }
   });
+  window.__seoDungeonDialogueReady = true;
+  window.dispatchEvent(new Event('seo-dungeon-dialogue-ready'));
 
   // Global Escape handler - double-tap cancels any active agent operation
   document.addEventListener('keydown', (e) => {

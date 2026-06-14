@@ -1,6 +1,6 @@
 {
   "name": "seo-dungeon",
-  "version": "2.2.12",
+  "version": "2.2.13",
   "description": "A 16-bit dungeon crawler interface for local AI SEO audits",
   "scripts": {
     "start": "node launch.js",
@@ -14,7 +14,8 @@
     "test:all": "npm run test:cli && npm run test:dialogue && npm run test:live-bridge && npm run test:ux",
     "logs": "node scripts/watch-logs.mjs",
     "serve": "npx serve dist -l 3000 -s",
-    "test:ux": "node tests/ux-harness.mjs"
+    "test:ux": "node tests/ux-harness.mjs",
+    "test:stress": "node tests/stress-loop.mjs"
   },
   "dependencies": {
     "concurrently": "^10.0.3",

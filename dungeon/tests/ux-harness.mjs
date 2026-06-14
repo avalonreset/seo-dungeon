@@ -46,7 +46,7 @@ function completeTurn(turnId, status = 'completed') {
   send({ method: 'turn/completed', params: { turn: { id: turnId, status } } });
 }
 
-function scheduleTurnDeltas(turnId) {
+function scheduleTurnDeltas(turnId, completeDelay = 6200) {
   const turn = turns.get(turnId);
   if (!turn) return;
   tinyDeltas.forEach((delta, index) => {
@@ -55,7 +55,7 @@ function scheduleTurnDeltas(turnId) {
       send({ method: 'item/agentMessage/delta', params: { delta } });
     }, 320 + (index * 95)));
   });
-  turn.timers.push(setTimeout(() => completeTurn(turnId), 6200));
+  turn.timers.push(setTimeout(() => completeTurn(turnId), completeDelay));
 }
 
 rl.on('line', (line) => {
@@ -71,13 +71,17 @@ rl.on('line', (line) => {
   }
   if (msg.method === 'turn/start') {
     const turnId = 'turn_' + nextTurn++;
+    const promptText = textFromInput(msg.params && msg.params.input);
+    const completeDelay = promptText.includes('Initial battle harness prompt.')
+      ? 12000
+      : 6200;
     const turn = { id: turnId, completed: false, timers: [] };
     turns.set(turnId, turn);
     currentTurn = turnId;
     setTimeout(() => {
       send({ method: 'turn/started', params: { turn: { id: turnId } } });
       send({ id: msg.id, result: { turn: { id: turnId } } });
-      scheduleTurnDeltas(turnId);
+      scheduleTurnDeltas(turnId, completeDelay);
     }, 80);
     return;
   }
@@ -195,7 +199,19 @@ async function expectNoStreamWordSpam(page) {
 async function waitForIdle(page) {
   await page.waitForFunction(() => {
     const stop = document.querySelector('#log-stop');
-    return stop && stop.disabled;
+    const state = window.__seoDungeonDialogueState?.();
+    const battle = window.__seoDungeonGame?.scene?.getScene('Battle');
+    const battleReady = !battle ||
+      !battle.scene?.isActive?.() ||
+      battle.battleOver ||
+      battle.isPlayerTurn === true;
+    return stop &&
+      stop.disabled &&
+      state &&
+      state.busy === false &&
+      state.ledgerRunning === false &&
+      state.hasQueueDrainTimer === false &&
+      battleReady;
   }, null, { timeout: 12000 });
 }
 
@@ -270,11 +286,19 @@ async function runBattleLedgerHarness(context) {
   assert.deepEqual(await queueTexts(page), ['Please steer this into the active turn.']);
 
   await page.locator('#prompt-queue-steer').click();
-  await waitForLog(page, /Steered active turn\./i, 'steer confirmation');
-  await waitForLog(page, /> Please steer this into the active turn\./i, 'steered user line');
+  await page.waitForFunction(() => document.querySelectorAll('.prompt-queue-item').length === 0);
   assert.deepEqual(await queueTexts(page), [], 'steered prompt should leave the queue immediately');
-  await waitForLog(page, /STEERED_OK Please steer this into the active turn\./i, 'steered text reaches fake Codex');
-  await waitForLog(page, /I'll verify this against the live repo\./i, 'coalesced agent stream');
+
+  await fillAndSubmit(page, 'Queued after a successful steer.');
+  await page.locator('#log-stop').click();
+  await page.waitForFunction(() => document.querySelector('#prompt-queue-title')?.textContent === 'Held');
+  assert.deepEqual(await queueTexts(page), ['Queued after a successful steer.'], 'stop after steer should hold the later queued prompt only');
+
+  await page.locator('#prompt-queue-steer').click();
+  await waitForLog(page, /Submitted held prompt\./i, 'post-steer held prompt submission');
+  assert.deepEqual(await queueTexts(page), [], 'post-steer held prompt should leave queue when submitted');
+  await waitForLog(page, /> Queued after a successful steer\./i, 'post-steer held prompt becomes active user line');
+  await waitForLog(page, /I'll verify this against the live repo\./i, 'post-steer held coalesced stream');
   await expectNoStreamWordSpam(page);
   await waitForIdle(page);
 
@@ -283,7 +307,7 @@ async function runBattleLedgerHarness(context) {
   await fillAndSubmit(page, 'Hold this prompt after stop.');
   await page.locator('#prompt-queue-panel.open').waitFor({ timeout: 5000 });
   await page.locator('#log-stop').click();
-  await waitForLog(page, /Stopped\. Queue held\./i, 'stop holds queue');
+  await page.waitForFunction(() => document.querySelector('#prompt-queue-title')?.textContent === 'Held');
   assert.deepEqual(await queueTexts(page), ['Hold this prompt after stop.'], 'stop should hold queued prompt instead of orphaning it');
 
   await page.locator('#prompt-queue-steer').click();

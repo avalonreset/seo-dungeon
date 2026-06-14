@@ -221,7 +221,6 @@ export class BridgeClient {
       this.activeAuditId ||
       this.activeFixId ||
       this.activeCommitId ||
-      this.activeNarrationId ||
       null;
   }
 
