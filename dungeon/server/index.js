@@ -1215,7 +1215,7 @@ function buildCodexExecArgs({ cliArgs = [], prompt, workDir, profile, dangerousB
 }
 
 function codexTextInput(text) {
-  return [{ type: 'text', text: String(text || '') }];
+  return [{ type: 'text', text: String(text || ''), text_elements: [] }];
 }
 
 function codexRpcErrorMessage(error) {

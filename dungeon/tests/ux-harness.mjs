@@ -33,9 +33,15 @@ let nextTurn = 1;
 let currentTurn = null;
 const turns = new Map();
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n');
-const textFromInput = (input) => Array.isArray(input)
-  ? input.map((item) => item && item.text ? item.text : '').join('\\n').trim()
-  : '';
+const textFromInput = (input) => {
+  if (!Array.isArray(input)) return '';
+  for (const item of input) {
+    if (item?.type === 'text' && !Array.isArray(item.text_elements)) {
+      throw new Error('Codex text input must include text_elements');
+    }
+  }
+  return input.map((item) => item && item.text ? item.text : '').join('\\n').trim();
+};
 const tinyDeltas = ["I'll", " verify", " this", " against", " the", " live", " repo", "."];
 
 function completeTurn(turnId, status = 'completed') {

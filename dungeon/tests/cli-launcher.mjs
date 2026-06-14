@@ -58,9 +58,15 @@ const rl = readline.createInterface({ input: process.stdin });
 let turnStarted = false;
 let completed = false;
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n');
-const textFromInput = (input) => Array.isArray(input)
-  ? input.map((item) => item && item.text ? item.text : '').join('\\n').trim()
-  : '';
+const textFromInput = (input) => {
+  if (!Array.isArray(input)) return '';
+  for (const item of input) {
+    if (item?.type === 'text' && !Array.isArray(item.text_elements)) {
+      throw new Error('Codex text input must include text_elements');
+    }
+  }
+  return input.map((item) => item && item.text ? item.text : '').join('\\n').trim();
+};
 
 rl.on('line', (line) => {
   const msg = JSON.parse(line);
@@ -74,6 +80,7 @@ rl.on('line', (line) => {
     return;
   }
   if (msg.method === 'turn/start') {
+    textFromInput(msg.params && msg.params.input);
     setTimeout(() => {
       turnStarted = true;
       send({ method: 'turn/started', params: { turn: { id: 'turn_fake' } } });
