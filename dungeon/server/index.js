@@ -4,7 +4,7 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 
-const PORT = 3001;
+const PORT = Number(process.env.SEO_DUNGEON_BRIDGE_PORT || 3001);
 
 // Project root: server/ -> dungeon/ -> seo-dungeon/
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
@@ -140,6 +140,7 @@ const wss = new WebSocketServer({
 
 // Track active child processes so they can be cancelled
 const activeProcesses = new Map(); // id -> ChildProcess
+const activeProcessOwners = new Map(); // id -> connection token
 
 /**
  * Validate and resolve projectPath to prevent path traversal.
@@ -614,12 +615,16 @@ function safeEnv(cwd) {
   return env;
 }
 
-function trackProcess(requestId, proc) {
-  if (requestId !== undefined && requestId !== null) activeProcesses.set(requestId, proc);
+function trackProcess(requestId, proc, ownerToken = null) {
+  if (requestId === undefined || requestId === null) return;
+  activeProcesses.set(requestId, proc);
+  if (ownerToken) activeProcessOwners.set(requestId, ownerToken);
 }
 
 function untrackProcess(requestId) {
-  if (requestId !== undefined && requestId !== null) activeProcesses.delete(requestId);
+  if (requestId === undefined || requestId === null) return;
+  activeProcesses.delete(requestId);
+  activeProcessOwners.delete(requestId);
 }
 
 function steerActiveProcess(targetId, text) {
@@ -666,6 +671,7 @@ function summarizeCliFailure(runtime, code, stderr, stdout) {
 
 wss.on('connection', (ws) => {
   console.log('Game client connected');
+  const connectionToken = Symbol('seo-dungeon-client');
 
   // Per-connection rate limiting
   const messageTimestamps = [];
@@ -709,6 +715,7 @@ wss.on('connection', (ws) => {
       profile: normalizeProfile(profile || model),
       dangerousBypass: normalizeDangerousBypass(dangerousBypass)
     };
+    agentOptions.connectionToken = connectionToken;
 
     // Validate message type against allowlist
     if (type && !ALLOWED_TYPES.includes(type)) {
@@ -746,7 +753,7 @@ wss.on('connection', (ws) => {
       if (proc) {
         console.log(`Cancelling process #${id}`);
         if (typeof proc.kill === 'function') proc.kill('SIGTERM');
-        activeProcesses.delete(id);
+        untrackProcess(id);
       }
       safeSend(JSON.stringify({ id, type: 'error', message: 'Cancelled by user' }));
       return;
@@ -789,7 +796,7 @@ wss.on('connection', (ws) => {
         const result = await runAudit(domain, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, fixCwd, id, agentOptions);
-        activeProcesses.delete(id);
+        untrackProcess(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Audit done: ${result.issues.length} issues, score ${result.score}`);
 
@@ -797,7 +804,7 @@ wss.on('connection', (ws) => {
         const result = await runFix(issue, userMessage, fixCwd, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, id, agentOptions);
-        activeProcesses.delete(id);
+        untrackProcess(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Fix done: ${(issue && issue.title) || command}`);
 
@@ -807,7 +814,7 @@ wss.on('connection', (ws) => {
         const result = await runCommit(safeMessage, fixCwd, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, id, agentOptions);
-        activeProcesses.delete(id);
+        untrackProcess(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Commit done in ${fixCwd}`);
 
@@ -815,7 +822,7 @@ wss.on('connection', (ws) => {
         const result = await runAgent(command, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, undefined, id, agentOptions);
-        activeProcesses.delete(id);
+        untrackProcess(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Narration done`);
 
@@ -826,7 +833,7 @@ wss.on('connection', (ws) => {
         const result = await runAgent(command, (chunk) => {
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, fixCwd, id, agentOptions);
-        activeProcesses.delete(id);
+        untrackProcess(id);
         safeSend(JSON.stringify({ id, type: 'result', data: result }));
         console.log(`Chat done`);
       }
@@ -838,12 +845,15 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     clearInterval(pingInterval);
-    // Kill any orphaned Codex processes for this connection.
+    // Kill only the processes launched by this browser connection. Other
+    // clients may probe the bridge, refresh, or close without owning the
+    // user's active turn.
     for (const [procId, proc] of activeProcesses.entries()) {
+      if (activeProcessOwners.get(procId) !== connectionToken) continue;
       try {
         if (typeof proc.kill === 'function') proc.kill('SIGTERM');
       } catch (e) {}
-      activeProcesses.delete(procId);
+      untrackProcess(procId);
     }
     console.log('Game client disconnected');
   });
@@ -1157,9 +1167,14 @@ function runAgent(prompt, onStream, cwd, requestId, options = {}) {
   ].join('\n');
   const effectivePrompt = `${policy}\n\n${prompt}`;
   if (runtime === 'claude' || runtime === 'gemini') {
-    return runTextCli(runtime, effectivePrompt, onStream, cwd, requestId, profile);
+    return runTextCli(runtime, effectivePrompt, onStream, cwd, requestId, profile, {
+      connectionToken: options.connectionToken || null
+    });
   }
-  return runCodex(effectivePrompt, onStream, cwd, requestId, profile, { dangerousBypass });
+  return runCodex(effectivePrompt, onStream, cwd, requestId, profile, {
+    dangerousBypass,
+    connectionToken: options.connectionToken || null
+  });
 }
 
 function getCodexProfileConfig(profile) {
@@ -1230,7 +1245,7 @@ function summarizeCodexAppServerFailure(code, stderr) {
   return `Codex app-server exited with code ${code}: ${(parsed[parsed.length - 1] || lines[lines.length - 1] || text).slice(0, 500)}`;
 }
 
-function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile, dangerousBypass }) {
+function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile, dangerousBypass, ownerToken = null }) {
   const { execPath: cliExec, args: cliArgs } = resolveCodexCli();
   const launch = resolveCliLaunch(cliExec);
   const codexProfile = getCodexProfileConfig(profile);
@@ -1258,6 +1273,8 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
   let turnId = null;
   let timeoutHandle = null;
   let settled = false;
+  let agentStreamBuffer = '';
+  let agentStreamTimer = null;
   const pending = new Map();
 
   let settleResolve;
@@ -1271,6 +1288,10 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
       timeoutHandle = null;
+    }
+    if (agentStreamTimer) {
+      clearTimeout(agentStreamTimer);
+      agentStreamTimer = null;
     }
     for (const [id, handlers] of pending.entries()) {
       handlers.reject(new Error('Codex app-server stopped before responding.'));
@@ -1322,13 +1343,55 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
     }
   }
 
-  function streamText(text) {
+  function shouldFlushAgentBuffer(text) {
+    if (!text) return false;
+    if (text.includes('\n') || text.includes('\r')) return true;
+    if (text.length >= 220) return true;
+    return /[.!?)]["']?\s$/.test(text) && text.length >= 70;
+  }
+
+  function flushAgentStream({ force = false } = {}) {
+    if (agentStreamTimer) {
+      clearTimeout(agentStreamTimer);
+      agentStreamTimer = null;
+    }
+    const clean = agentStreamBuffer.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!clean) {
+      agentStreamBuffer = '';
+      return;
+    }
+    if (!force && !shouldFlushAgentBuffer(agentStreamBuffer)) return;
+    agentStreamBuffer = '';
+    onStream(clean);
+  }
+
+  function scheduleAgentFlush() {
+    if (agentStreamTimer) return;
+    agentStreamTimer = setTimeout(() => {
+      agentStreamTimer = null;
+      const cleanLength = agentStreamBuffer.replace(/\s+/g, ' ').trim().length;
+      if (cleanLength >= 80 || shouldFlushAgentBuffer(agentStreamBuffer)) {
+        flushAgentStream({ force: true });
+      } else if (agentStreamBuffer) {
+        scheduleAgentFlush();
+      }
+    }, 1200);
+  }
+
+  function enqueueAgentDelta(text) {
     const value = String(text || '');
     if (!value) return;
     fullText += value;
-    for (const line of value.split(/\r?\n/).filter((entry) => entry.trim())) {
-      onStream(line.trim());
+    agentStreamBuffer += value;
+    if (shouldFlushAgentBuffer(agentStreamBuffer)) {
+      flushAgentStream({ force: true });
+      return;
     }
+    scheduleAgentFlush();
+  }
+
+  function streamText(text) {
+    enqueueAgentDelta(text);
   }
 
   function handleItemCompleted(item) {
@@ -1338,16 +1401,19 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
       return;
     }
     if (item.type === 'commandExecution') {
+      flushAgentStream({ force: true });
       const label = item.command ? `command: ${String(item.command).slice(0, 90)}` : 'command';
       onStream(`[${label}]`);
       return;
     }
     if (item.type === 'mcpToolCall') {
+      flushAgentStream({ force: true });
       const label = [item.server, item.tool].filter(Boolean).join('/') || 'mcp tool';
       onStream(`[${label}]`);
       return;
     }
     if (item.type === 'dynamicToolCall') {
+      flushAgentStream({ force: true });
       onStream(`[${item.tool || 'tool'}]`);
     }
   }
@@ -1369,6 +1435,7 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
     if (method === 'turn/completed') {
       const completedTurn = params.turn || {};
       const status = completedTurn.status;
+      flushAgentStream({ force: true });
       if (status === 'completed') {
         onStream('[Complete]');
         settle(settleResolve, { raw: fullText });
@@ -1513,7 +1580,7 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
     }
   };
 
-  trackProcess(requestId, run);
+  trackProcess(requestId, run, ownerToken);
   return run;
 }
 
@@ -1523,7 +1590,15 @@ function runCodexAppServer(prompt, onStream, cwd, requestId, profile, options = 
   if (!dangerousBypass) {
     throw new Error('YOLO Mode must be armed before SEO Dungeon can launch Codex.');
   }
-  const run = createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile, dangerousBypass });
+  const run = createCodexAppServerRun({
+    prompt,
+    onStream,
+    workDir,
+    requestId,
+    profile,
+    dangerousBypass,
+    ownerToken: options.connectionToken || null
+  });
   return run.start().catch((err) => {
     try {
       if (run.child && !run.child.killed) run.child.kill('SIGTERM');
@@ -1586,7 +1661,7 @@ function insertPromptArg(args, prompt) {
   return finalArgs;
 }
 
-function runTextCli(runtime, prompt, onStream, cwd, requestId, profile) {
+function runTextCli(runtime, prompt, onStream, cwd, requestId, profile, options = {}) {
   const normalizedRuntime = normalizeRuntime(runtime);
   const workDir = cwd || PROJECT_ROOT;
   return new Promise((resolve, reject) => {
@@ -1609,7 +1684,7 @@ function runTextCli(runtime, prompt, onStream, cwd, requestId, profile) {
       windowsHide: true
     });
 
-    trackProcess(requestId, proc);
+    trackProcess(requestId, proc, options.connectionToken || null);
 
     let fullText = '';
     let lineBuffer = '';
@@ -1696,7 +1771,7 @@ function runCodexExec(prompt, onStream, cwd, requestId, profile, options = {}) {
       windowsHide: true
     });
 
-    trackProcess(requestId, proc);
+    trackProcess(requestId, proc, options.connectionToken || null);
 
     let fullText = '';
     let buffer = '';

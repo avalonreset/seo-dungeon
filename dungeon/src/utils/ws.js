@@ -8,7 +8,7 @@ export class BridgeClient {
     this.handlers = new Map();
     this.requestId = 0;
     this.connected = false;
-    this._url = 'ws://127.0.0.1:3001';
+    this._url = this._configuredUrl();
     this._reconnectTimer = null;
     this._onStatusChange = []; // callbacks: (connected: boolean) => void
     this.activeLedgerId = null;
@@ -16,6 +16,20 @@ export class BridgeClient {
     this.supportsSteer = null;
     this._capabilitiesChecked = false;
     this._capabilitiesPromise = null;
+  }
+
+  _configuredUrl() {
+    const fallback = 'ws://127.0.0.1:3001';
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = params.get('bridge');
+      const fromGlobal = window.SEO_DUNGEON_BRIDGE_URL;
+      const fromStorage = localStorage.getItem('seo_dungeon_bridge_url');
+      const candidate = fromQuery || fromGlobal || fromStorage || fallback;
+      const url = new URL(candidate);
+      if (url.protocol === 'ws:' || url.protocol === 'wss:') return url.href;
+    } catch (_) {}
+    return fallback;
   }
 
   /** Register a callback that fires whenever connection status changes. */

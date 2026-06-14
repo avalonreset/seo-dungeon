@@ -36,6 +36,7 @@ window.returnToTitle = returnToTitle;
 // Dev hook - lets you push a log line from the browser console for
 // debugging or linkifier verification. Harmless in production.
 window.addLog = addLog;
+window.__seoDungeonFlushLogQueue = flushLogQueue;
 
 function refreshGameLayout() {
   if (game?.scale?.refresh) {
@@ -368,6 +369,7 @@ function launchGame(domain, projectPath) {
   };
 
   game = new Phaser.Game(config);
+  window.__seoDungeonGame = game;
   game.dpr = dpr;
   game.domain = domain;
   game.projectPath = projectPath;
@@ -1369,6 +1371,7 @@ document.addEventListener('DOMContentLoaded', () => {
           scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
           scene: [BootScene, GateScene, SummoningScene, DungeonHallScene, BattleScene, VictoryScene]
         });
+        window.__seoDungeonGame = game;
         game.dpr = dpr;
         game.domain = cached.domain;
         game.auditData = cached.auditData;
@@ -1381,15 +1384,12 @@ document.addEventListener('DOMContentLoaded', () => {
         game.addLog = addLog;
         game.showLoading = showLoadingIndicator;
         game.hideLoading = hideLoadingIndicator;
-        // After boot, jump straight to battle
-        game.events.on('ready', () => {
+        // After boot loads the selected character/demon assets, jump straight
+        // to the target battle. This uses BootScene's normal re-entry path
+        // instead of racing Phaser's scene lifecycle events.
+        game.pendingDestination = { scene: 'Battle', data: { issue } };
+        game.events.once('ready', () => {
           game.scene.start('Boot');
-          // Wait for Boot to finish loading assets, then override to Battle
-          game.scene.getScene('Boot').events.on('create', () => {
-            game.scene.getScene('Boot').time.delayedCall(500, () => {
-              game.scene.start('Battle', { issue });
-            });
-          });
         });
       }
     }
