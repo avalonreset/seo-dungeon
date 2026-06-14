@@ -235,13 +235,21 @@ try {
   await installBridgeHarness(page);
 
   assert.equal(await page.locator('#log-input-bar #log-stop').count(), 1, 'input bar should expose the stop button');
+  assert.equal(await page.locator('#log-input-bar #log-submit').count(), 1, 'input bar should expose the send/queue button');
   assert.equal(await page.locator('#log-input-bar #prompt-queue-steer').count(), 0, 'input bar should not expose queue/steer buttons');
   assert.equal(await page.locator('#log-stop').isVisible(), false, 'stop should be hidden while idle');
+  assert.equal(await page.locator('#log-submit').isVisible(), false, 'send should be hidden until there is composer text');
+
+  await page.locator('#log-input').fill('Visible send control');
+  assert.equal(await page.locator('#log-submit').isVisible(), true, 'send should show when the composer has text');
+  await page.locator('#log-input').fill('');
+  assert.equal(await page.locator('#log-submit').isVisible(), false, 'send should hide again when the composer is empty');
 
   await submitPrompt(page, 'Idle direct command');
   await waitForCalls(page, 1);
   await waitForUserLine(page, 'Idle direct command');
   assert.equal(await page.locator('#log-stop').isVisible(), true, 'stop should show while the agent is running');
+  assert.equal(await page.locator('#prompt-queue-panel').isVisible(), false, 'queue panel should stay hidden while running with no queued prompts');
   assert.equal(await queueCount(page), 0, 'idle submit should not create a queued item');
   await resolveOldest(page, 'idle complete');
   await waitForUiIdle(page);
@@ -255,6 +263,7 @@ try {
 
   await submitPrompt(page, 'Queued while busy');
   await waitForQueueCount(page, 1);
+  assert.equal(await page.locator('#prompt-queue-panel').isVisible(), true, 'queue panel should open only when queued prompts exist');
   assert.equal((await callTexts(page)).length, 2, 'busy submit should wait in queue');
   assert.equal(await userLineCount(page, 'Queued while busy'), 0, 'queued text should not render as submitted user text');
   assert.equal(await queueStatusLeakCount(page, 'Queued while busy'), 0, 'queue status line should not leak queued prompt content');
@@ -273,7 +282,7 @@ try {
   assert.deepEqual(await queueTexts(page), ['Edited queued command'], 'remove should only drop the targeted queued row');
 
   await page.locator('#log-stop').click();
-  await page.waitForFunction(() => document.querySelector('#prompt-queue-title')?.textContent === 'Held Queue');
+  await page.waitForFunction(() => document.querySelector('#prompt-queue-title')?.textContent === 'Held');
   assert.equal((await callTexts(page)).length, 2, 'stop should not submit the held queue');
   await page.waitForTimeout(650);
   assert.equal((await callTexts(page)).length, 2, 'held queue should not auto-drain after stop');

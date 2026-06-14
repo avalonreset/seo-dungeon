@@ -722,6 +722,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const promptQueuePanel = document.getElementById('prompt-queue-panel');
   const promptQueueTitle = document.getElementById('prompt-queue-title');
   const promptQueueList = document.getElementById('prompt-queue-list');
+  const logSubmit = document.getElementById('log-submit');
   const logStop = document.getElementById('log-stop');
   const promptQueueSteer = document.getElementById('prompt-queue-steer');
   const promptQueueClear = document.getElementById('prompt-queue-clear');
@@ -826,17 +827,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasQueue = promptQueue.length > 0;
     const busy = isAgentBusy();
     ensurePromptSelection();
-    promptQueuePanel?.classList.toggle('open', hasQueue || busy);
-    promptQueuePanel?.classList.toggle('running', busy);
+    promptQueuePanel?.classList.toggle('open', hasQueue);
+    promptQueuePanel?.classList.toggle('running', busy && hasQueue);
     promptQueuePanel?.classList.toggle('holding', queueHold && hasQueue);
     if (promptQueueTitle) {
       promptQueueTitle.textContent = queueHold && hasQueue
-        ? 'Held Queue'
+        ? 'Held'
         : hasQueue
           ? 'Queued'
-          : busy
-            ? 'Running'
-            : 'Queued';
+          : 'Queued';
     }
     logInputBar?.classList.toggle('agent-busy', busy);
     if (!promptQueueList) return;
@@ -938,6 +937,14 @@ document.addEventListener('DOMContentLoaded', () => {
   function updatePromptControls() {
     ensurePromptSelection();
     const busy = isAgentBusy();
+    const hasText = Boolean(logInput?.value?.trim());
+    logInputBar?.classList.toggle('has-text', hasText);
+    if (logSubmit) {
+      logSubmit.disabled = !hasText;
+      logSubmit.textContent = busy ? '↵' : '↑';
+      logSubmit.title = busy ? 'Queue prompt' : 'Send prompt';
+      logSubmit.setAttribute('aria-label', busy ? 'Queue prompt' : 'Send prompt');
+    }
     if (logStop) logStop.disabled = !busy;
     if (promptQueueSteer) promptQueueSteer.disabled = promptQueue.length === 0 || selectedPromptId == null;
     if (promptQueueClear) promptQueueClear.disabled = promptQueue.length === 0;
@@ -1221,6 +1228,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   logStop?.addEventListener('click', () => stopActiveAgent());
+  logSubmit?.addEventListener('click', () => {
+    submitLedgerInput();
+    autoResize();
+  });
   promptQueueSteer?.addEventListener('click', () => steerSelectedPrompt());
   promptQueueClear?.addEventListener('click', () => {
     if (!promptQueue.length) return;

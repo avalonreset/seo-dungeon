@@ -828,31 +828,60 @@
       animation: promptPulse 1.5s ease-in-out infinite;
     }
 
+    #log-submit,
     #log-stop {
       display: none;
       align-items: center;
       justify-content: center;
-      min-width: 58px;
+      width: 34px;
       height: 30px;
       margin-left: 4px;
-      border: 1px solid rgba(204, 68, 68, 0.62);
       border-radius: 3px;
-      background:
-        linear-gradient(180deg, rgba(105, 14, 24, 0.9), rgba(28, 4, 8, 0.92));
-      color: #ff6969;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 15px;
       font-weight: 800;
-      letter-spacing: 1.2px;
-      text-transform: uppercase;
       cursor: pointer;
-      box-shadow: 0 0 14px rgba(120, 0, 0, 0.18);
       flex-shrink: 0;
+    }
+
+    #log-submit {
+      border: 1px solid rgba(212, 175, 55, 0.5);
+      background:
+        linear-gradient(180deg, rgba(212, 175, 55, 0.92), rgba(116, 87, 18, 0.94));
+      color: #08080c;
+      box-shadow: 0 0 14px rgba(212, 175, 55, 0.16);
+    }
+
+    #log-input-bar.has-text #log-submit {
+      display: inline-flex;
+    }
+
+    #log-input-bar.agent-busy #log-submit {
+      border-color: rgba(92, 184, 200, 0.5);
+      background:
+        linear-gradient(180deg, rgba(28, 76, 95, 0.95), rgba(7, 18, 28, 0.96));
+      color: #8ec9ff;
+      box-shadow: 0 0 14px rgba(92, 184, 200, 0.12);
+    }
+
+    #log-submit:hover:not(:disabled) {
+      color: #000;
+      border-color: rgba(240, 204, 80, 0.85);
+      background:
+        linear-gradient(180deg, rgba(240, 204, 80, 0.98), rgba(146, 105, 18, 0.98));
     }
 
     #log-input-bar.agent-busy #log-stop,
     #log-input-bar.running #log-stop {
       display: inline-flex;
+    }
+
+    #log-stop {
+      border: 1px solid rgba(204, 68, 68, 0.62);
+      background:
+        linear-gradient(180deg, rgba(105, 14, 24, 0.9), rgba(28, 4, 8, 0.92));
+      color: #ff6969;
+      box-shadow: 0 0 14px rgba(120, 0, 0, 0.18);
     }
 
     #log-stop:hover:not(:disabled) {
@@ -862,6 +891,7 @@
         linear-gradient(180deg, rgba(140, 18, 32, 0.98), rgba(55, 5, 13, 0.98));
     }
 
+    #log-submit:disabled,
     #log-stop:disabled {
       opacity: 0.35;
       cursor: not-allowed;
@@ -1535,7 +1565,8 @@
     <div id="log-input-bar">
       <span id="log-input-prompt">&gt;</span>
       <textarea id="log-input" placeholder="Talk to the Demon Lord..." autocomplete="off" spellcheck="false" rows="1"></textarea>
-      <button id="log-stop" type="button" title="Stop current turn" aria-label="Stop current turn">Stop</button>
+      <button id="log-submit" type="button" title="Send prompt" aria-label="Send prompt">↑</button>
+      <button id="log-stop" type="button" title="Stop current turn" aria-label="Stop current turn">■</button>
     </div>
   </div>
   <button id="ledger-open-toggle" type="button" title="Show Guild Ledger" aria-label="Show Guild Ledger">‹</button>
