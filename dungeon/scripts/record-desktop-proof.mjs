@@ -37,6 +37,11 @@ function parseArgs(argv) {
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean),
+    closeBlockerProcesses: (process.env.SEO_DUNGEON_DESKTOP_PROOF_CLOSE_BLOCKER_PROCESSES || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+    allowFallbackProject: process.env.SEO_DUNGEON_DESKTOP_PROOF_ALLOW_FALLBACK_PROJECT === '1',
     allowForegroundMismatch: process.env.SEO_DUNGEON_DESKTOP_PROOF_ALLOW_FOREGROUND_MISMATCH === '1',
   };
 
@@ -71,6 +76,13 @@ function parseArgs(argv) {
       if (!processName) throw new Error('--blocker-process cannot be empty.');
       options.blockerProcesses.push(processName);
     }
+    else if (token === '--close-blocker-process') {
+      const processName = readValue().trim();
+      if (!processName) throw new Error('--close-blocker-process cannot be empty.');
+      options.closeBlockerProcesses.push(processName);
+      options.blockerProcesses.push(processName);
+    }
+    else if (token === '--allow-fallback-project') options.allowFallbackProject = true;
     else if (token === '--allow-foreground-mismatch') options.allowForegroundMismatch = true;
     else if (token === '--help' || token === '-h') options.help = true;
     else throw new Error(`Unknown option: ${token}`);
@@ -102,7 +114,8 @@ function usage() {
     '  node scripts/record-desktop-proof.mjs [--output-dir path] [--domain seodungeon.com] [--project E:\\seo-dungeon-website]',
     '    [--browser-x 960] [--browser-y 0] [--browser-width 960] [--browser-height 1040] [--fake-codex|--real-codex]',
     '    [--browser-command "..."] [--codex-command "..."] [--command-timeout-ms 120000]',
-    '    [--minimize-known-blockers] [--hide-known-blockers] [--blocker-process CapCut] [--allow-foreground-mismatch]',
+    '    [--minimize-known-blockers] [--hide-known-blockers] [--blocker-process CapCut] [--close-blocker-process Taskmgr]',
+    '    [--allow-fallback-project] [--allow-foreground-mismatch]',
     '',
     'Records a full-desktop RC-008 rehearsal with SEO Dungeon in a headed browser window.',
     'This does not automate the Codex desktop UI. Put Codex on the left before running for side-by-side proof framing.',
@@ -480,9 +493,31 @@ if ($pids.Count -gt 0) {
   return result.stdout.trim().split(/\r?\n/).filter(Boolean);
 }
 
-async function assertBrowserForeground(options, logOutput = []) {
+async function closeBlockerProcess(processName, pid, logOutput = []) {
+  const safeProcessName = String(processName || '').replace(/'/g, "''");
+  const safePid = Number(pid);
+  if (!safeProcessName || !Number.isInteger(safePid) || safePid <= 0) {
+    throw new Error(`Invalid blocker process close request: ${processName}:${pid}`);
+  }
+  const script = `
+$p = Get-Process -Id ${safePid} -ErrorAction Stop
+if ($p.ProcessName -ne '${safeProcessName}') {
+  Write-Error "PID ${safePid} is $($p.ProcessName), not ${safeProcessName}"
+  exit 3
+}
+Stop-Process -Id ${safePid} -Force
+Write-Output "$($p.ProcessName):$($p.Id)"
+`;
+  const result = await runTool('powershell', ['-NoProfile', '-Command', script], 8000);
+  logOutput.push(`\n[close-blocker-process] code=${result.code}\n${result.stdout}${result.stderr}\n`);
+  if (result.code !== 0) throw new Error(`Could not close blocker process:\n${result.stderr || result.stdout}`);
+  return result.stdout.trim().split(/\r?\n/).filter(Boolean);
+}
+
+async function assertBrowserForeground(options, logOutput = [], blockerActions = []) {
   if (options.minimizeKnownBlockers) {
-    await minimizeKnownBlockers(logOutput, options.hideKnownBlockers, options.blockerProcesses);
+    blockerActions.push(...(await minimizeKnownBlockers(logOutput, options.hideKnownBlockers, options.blockerProcesses))
+      .map((target) => ({ action: options.hideKnownBlockers ? 'hide' : 'minimize', target })));
   }
   await focusBrowserWindowByTitle('SEO Dungeon Desktop Proof', logOutput);
   await new Promise((resolve) => setTimeout(resolve, 350));
@@ -492,7 +527,18 @@ async function assertBrowserForeground(options, logOutput = []) {
     foregroundInfo.processName &&
     options.blockerProcesses.some((name) => name.toLowerCase() === foregroundInfo.processName.toLowerCase())
   ) {
-    await minimizeKnownBlockers(logOutput, options.hideKnownBlockers, options.blockerProcesses);
+    blockerActions.push(...(await minimizeKnownBlockers(logOutput, options.hideKnownBlockers, options.blockerProcesses))
+      .map((target) => ({ action: options.hideKnownBlockers ? 'hide' : 'minimize', target })));
+    await focusBrowserWindowByTitle('SEO Dungeon Desktop Proof', logOutput);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    foregroundInfo = await getForegroundWindowInfo(logOutput);
+  }
+  if (
+    foregroundInfo.processName &&
+    options.closeBlockerProcesses.some((name) => name.toLowerCase() === foregroundInfo.processName.toLowerCase())
+  ) {
+    blockerActions.push(...(await closeBlockerProcess(foregroundInfo.processName, foregroundInfo.pid, logOutput))
+      .map((target) => ({ action: 'close', target })));
     await focusBrowserWindowByTitle('SEO Dungeon Desktop Proof', logOutput);
     await new Promise((resolve) => setTimeout(resolve, 350));
     foregroundInfo = await getForegroundWindowInfo(logOutput);
@@ -579,6 +625,10 @@ async function main() {
   let vite;
   let recorder;
   let foregroundBeforeCapture = '';
+  let bridgeHealth = null;
+  let watchedEvent = null;
+  let sendJson = null;
+  const blockerActions = [];
   let failureError = null;
 
   fs.mkdirSync(outputDir, { recursive: true });
@@ -586,8 +636,13 @@ async function main() {
   fs.writeFileSync(path.join(fallbackProject, 'README.md'), '# SEO Dungeon Desktop Proof Fallback Project\n', 'utf8');
   writeFakeCodexAppServer(fakeCodexAppServer, options);
 
-  const projectPath = fs.existsSync(options.projectPath)
-    ? path.resolve(options.projectPath)
+  const requestedProjectPath = path.resolve(options.projectPath);
+  const projectPathExists = fs.existsSync(options.projectPath);
+  if (!projectPathExists && !options.fakeCodex && !options.allowFallbackProject) {
+    throw new Error(`Project path does not exist for real-Codex proof: ${options.projectPath}`);
+  }
+  const projectPath = projectPathExists
+    ? requestedProjectPath
     : fallbackProject;
 
   try {
@@ -596,6 +651,7 @@ async function main() {
       env: {
         ...process.env,
         SEO_DUNGEON_BRIDGE_PORT: String(bridgePort),
+        SEO_DUNGEON_BRIDGE_STRICT_PORT: '1',
         SEO_DUNGEON_ALLOWED_ORIGINS: origin,
         ...(options.fakeCodex
           ? {
@@ -616,7 +672,10 @@ async function main() {
     vite.stdout.on('data', (chunk) => viteOutput.push(chunk.toString()));
     vite.stderr.on('data', (chunk) => viteOutput.push(chunk.toString()));
 
-    await waitForHttp(`http://127.0.0.1:${bridgePort}/health`, 'bridge', bridgeOutput, bridge);
+    const bridgeHealthResponse = await waitForHttp(`http://127.0.0.1:${bridgePort}/health`, 'bridge', bridgeOutput, bridge);
+    bridgeHealth = await bridgeHealthResponse.json();
+    assert.equal(bridgeHealth.ok, true);
+    assert.equal(bridgeHealth.supportsRemoteControl, true);
     await waitForHttp(origin, 'vite', viteOutput, vite);
 
     browser = await chromium.launch({
@@ -649,7 +708,7 @@ async function main() {
       await page.locator('#danger-mode-toggle').click();
     }
     await positionBrowserWindow(page, options);
-    foregroundBeforeCapture = await assertBrowserForeground(options, ffmpegOutput);
+    foregroundBeforeCapture = await assertBrowserForeground(options, ffmpegOutput, blockerActions);
 
     recorder = startDesktopRecorder({ capturePath: rawVideoPath, fps: options.fps, ffmpegOutput });
     await new Promise((resolve) => setTimeout(resolve, 800));
@@ -680,7 +739,7 @@ async function main() {
     fs.writeFileSync(watchOutputPath, watchResult.stdout, 'utf8');
     assert.equal(watchResult.code, 0, watchResult.stdout);
     const watchLines = parseJsonLines(watchResult.stdout);
-    const watchedEvent = watchLines.find((line) => line.type === 'session-event');
+    watchedEvent = watchLines.find((line) => line.type === 'session-event');
     assert.equal(watchedEvent?.event?.command, options.browserCommand);
     assert.equal(watchedEvent?.event?.projectPath, projectPath);
 
@@ -694,7 +753,7 @@ async function main() {
       '--json',
       '--wait',
       '--timeout',
-      '15000',
+      String(options.commandTimeoutMs),
       '--project',
       projectPath,
       '--profile',
@@ -705,7 +764,7 @@ async function main() {
     ], { bridgeWs, origin, timeoutMs: options.commandTimeoutMs + 3000 });
     fs.writeFileSync(sendOutputPath, sendResult.stdout, 'utf8');
     assert.equal(sendResult.code, 0, sendResult.stdout);
-    const sendJson = JSON.parse(sendResult.stdout);
+    sendJson = JSON.parse(sendResult.stdout);
     assert.equal(sendJson.ok, true);
     assert.equal(sendJson.waitEvent?.status, 'complete');
     await waitForLedger(page, new RegExp(`Remote codex-cli: ${escapeRegExp(options.codexCommand)}`, 'i'), 'desktop proof helper command mirrored', options.commandTimeoutMs);
@@ -739,11 +798,19 @@ async function main() {
           projectPath,
           browserCommand: options.browserCommand,
           codexCommand: options.codexCommand,
+          commandTimeoutMs: options.commandTimeoutMs,
           usedFallbackProject: projectPath === fallbackProject,
+          allowFallbackProject: options.allowFallbackProject,
           fakeCodex: options.fakeCodex,
+          codexTransport: bridgeHealth?.defaultCodexTransport || null,
+          codexCliOverride: options.fakeCodex ? process.execPath : (process.env.SEO_DUNGEON_CODEX_CLI || null),
+          codexArgsOverride: options.fakeCodex ? `"${fakeCodexAppServer}"` : (process.env.SEO_DUNGEON_CODEX_ARGS || null),
+          bridgeHealth,
           minimizedKnownBlockers: options.minimizeKnownBlockers,
           hiddenKnownBlockers: options.hideKnownBlockers,
           blockerProcesses: options.blockerProcesses,
+          closeBlockerProcesses: options.closeBlockerProcesses,
+          blockerActions,
           allowForegroundMismatch: options.allowForegroundMismatch,
           foregroundBeforeCapture,
           browserWindow: {
@@ -792,11 +859,23 @@ async function main() {
     projectPath,
     browserCommand: options.browserCommand,
     codexCommand: options.codexCommand,
+    commandTimeoutMs: options.commandTimeoutMs,
     usedFallbackProject: projectPath === fallbackProject,
+    allowFallbackProject: options.allowFallbackProject,
     fakeCodex: options.fakeCodex,
+    codexTransport: bridgeHealth?.defaultCodexTransport || null,
+    codexCliOverride: options.fakeCodex ? process.execPath : (process.env.SEO_DUNGEON_CODEX_CLI || null),
+    codexArgsOverride: options.fakeCodex ? `"${fakeCodexAppServer}"` : (process.env.SEO_DUNGEON_CODEX_ARGS || null),
+    bridgeHealth,
+    watchedEvent,
+    sendCommandId: sendJson?.data?.commandId || null,
+    sendEvent: sendJson?.data?.event || null,
+    waitEvent: sendJson?.waitEvent || null,
     minimizedKnownBlockers: options.minimizeKnownBlockers,
     hiddenKnownBlockers: options.hideKnownBlockers,
     blockerProcesses: options.blockerProcesses,
+    closeBlockerProcesses: options.closeBlockerProcesses,
+    blockerActions,
     foregroundBeforeCapture,
     browserWindow: {
       x: options.browserX,

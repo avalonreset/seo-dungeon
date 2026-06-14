@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 const DEFAULT_PORT = Number(process.env.SEO_DUNGEON_BRIDGE_PORT || 3003);
+const STRICT_PORT = process.env.SEO_DUNGEON_BRIDGE_STRICT_PORT === '1';
 let PORT = DEFAULT_PORT;
 
 // Project root: server/ -> dungeon/ -> seo-dungeon/
@@ -2396,7 +2397,7 @@ function startBridge() {
 function listenWithFallback(port, attemptsLeft = 24) {
   const onError = (err) => {
     server.off('listening', onListening);
-    if (err.code === 'EADDRINUSE' && attemptsLeft > 0) {
+    if (err.code === 'EADDRINUSE' && attemptsLeft > 0 && !STRICT_PORT) {
       const nextPort = port + 1;
       console.warn(`Bridge port ${port} is busy; trying ${nextPort}.`);
       setTimeout(() => listenWithFallback(nextPort, attemptsLeft - 1), 80);
