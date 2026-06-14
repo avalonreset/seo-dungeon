@@ -11,6 +11,7 @@ const GLOW_DURATION = 2000;
 let logEl = null;
 let queue = [];
 let isTyping = false;
+let currentTyping = null;
 let loadingIndicator = null;
 let loadingFrame = 0;
 let loadingInterval = null;
@@ -35,6 +36,7 @@ const ICONS = {
   error:    '\u2620',          // ☠ skull - something died
   complete: '\u2726',          // ✦ four-pointed star - victory
   status:   '\u25C8',          // ◈ diamond - status/progress
+  queue:    '\u21AC',          // ↬ arrow - queued steering
   system:   '\u2042',          // ⁂ asterism - system message
   domain:   '\u2302',          // ⌂ house - domain/site
   score:    '\u2694\uFE0E',   // ⚔ crossed swords - scoring
@@ -60,8 +62,9 @@ function classify(text) {
 
   if (text.startsWith('> ')) return 'user';
   if (text.includes('[Complete]') || text.includes('omplete')) return 'complete';
+  if (/^(Queued|Queue|Requeued|Prompt queued|Prompt returned|Returned prompt|Removed queued|Updated queued|Submitted queued)/i.test(text)) return 'queue';
 
-  if (/^(Audit|Fix|Score|Found|Scanning|Initializing|Subagent)/i.test(text)) return 'status';
+  if (/^(Audit|Fix|Score|Found|Scanning|Initializing|Subagent|Stopped|Nothing active)/i.test(text)) return 'status';
   if (/demons?\s*(remain|found|slain|await)/i.test(text)) return 'demon';
   if (/score/i.test(text)) return 'score';
 
@@ -114,40 +117,80 @@ function markAsLatest(line) {
   }
 }
 
+function addLineSeparatorIfNeeded() {
+  lineCount++;
+
+  if (lineCount % 12 === 0) {
+    const sep = document.createElement('div');
+    sep.className = 'log-separator';
+    sep.innerHTML = '<span class="sep-dot">\u25C7</span><span class="sep-dot">\u25C6</span><span class="sep-dot">\u25C7</span>';
+    logEl.appendChild(sep);
+  }
+}
+
+function createLogLine(text, cls, { typing = false } = {}) {
+  const line = document.createElement('div');
+  line.className = `log-line ${cls}${typing ? ' typing' : ''} glow`;
+
+  // Icon with its own category-specific animation class
+  const icon = document.createElement('span');
+  icon.className = `log-icon icon-${cls}`;
+  icon.textContent = getIcon(cls);
+  line.appendChild(icon);
+
+  // Text content typed out
+  const content = document.createElement('span');
+  content.className = 'log-text';
+  content.textContent = typing ? '' : text;
+  line.appendChild(content);
+
+  logEl.appendChild(line);
+  scrollToBottom();
+  addLineSeparatorIfNeeded();
+
+  return { line, content };
+}
+
+function finishTypingContext(ctx) {
+  if (!ctx || ctx.done) return;
+  ctx.done = true;
+  if (ctx.interval) clearInterval(ctx.interval);
+  ctx.content.textContent = ctx.text;
+  ctx.line.classList.remove('typing');
+  setTimeout(() => ctx.line.classList.remove('glow'), GLOW_DURATION);
+  linkify(ctx.content);
+  markAsLatest(ctx.line);
+  if (currentTyping === ctx) currentTyping = null;
+  ctx.resolve?.();
+}
+
+function appendInstantLine(text, cls) {
+  hideLoading();
+  const { line, content } = createLogLine(text, cls, { typing: false });
+  setTimeout(() => line.classList.remove('glow'), GLOW_DURATION);
+  linkify(content);
+  markAsLatest(line);
+}
+
+export function flushLogQueue() {
+  hideLoading();
+  if (currentTyping) finishTypingContext(currentTyping);
+  while (queue.length > 0) {
+    const { text, cls } = queue.shift();
+    appendInstantLine(text, cls);
+  }
+}
+
 // ── Typewriter effect with icon prefix ──
 function typewriterLine(text, cls) {
   return new Promise((resolve) => {
-    const line = document.createElement('div');
-    line.className = `log-line ${cls} typing glow`;
-
-    // Icon with its own category-specific animation class
-    const icon = document.createElement('span');
-    icon.className = `log-icon icon-${cls}`;
-    icon.textContent = getIcon(cls);
-    line.appendChild(icon);
-
-    // Text content typed out
-    const content = document.createElement('span');
-    content.className = 'log-text';
-    content.textContent = '';
-    line.appendChild(content);
-
-    logEl.appendChild(line);
-    scrollToBottom();
-
-    lineCount++;
-
-    // Separator every 12 lines
-    if (lineCount % 12 === 0) {
-      const sep = document.createElement('div');
-      sep.className = 'log-separator';
-      sep.innerHTML = '<span class="sep-dot">\u25C7</span><span class="sep-dot">\u25C6</span><span class="sep-dot">\u25C7</span>';
-      logEl.appendChild(sep);
-    }
+    const { line, content } = createLogLine(text, cls, { typing: true });
+    const ctx = { line, content, text, interval: null, resolve, done: false };
+    currentTyping = ctx;
 
     let i = 0;
     const speed = queue.length > 10 ? 1 : queue.length > 5 ? 4 : queue.length > 2 ? 8 : CHAR_DELAY_BASE;
-    const interval = setInterval(() => {
+    ctx.interval = setInterval(() => {
       const charsPerTick = speed <= 2 ? 4 : speed <= 5 ? 2 : 1;
       for (let c = 0; c < charsPerTick && i < text.length; c++) {
         content.textContent += text[i];
@@ -155,12 +198,7 @@ function typewriterLine(text, cls) {
       }
       scrollToBottom();
       if (i >= text.length) {
-        clearInterval(interval);
-        line.classList.remove('typing');
-        setTimeout(() => line.classList.remove('glow'), GLOW_DURATION);
-        linkify(content);
-        markAsLatest(line);
-        resolve();
+        finishTypingContext(ctx);
       }
     }, speed);
   });
@@ -689,6 +727,7 @@ export function initActivityLog() {
     .log-line.search  { color: #8ab6d2; }
     .log-line.read    { color: #8ab6d2; }
     .log-line.domain  { color: #8ab6d2; }
+    .log-line.queue   { color: #8ec9ff; }
 
     /* Forge green - execution and success */
     .log-line.bash    { color: #7fb890; }
@@ -710,7 +749,7 @@ export function initActivityLog() {
     .log-line.demon   { color: #c85050; }
 
     /* Icon colors mirror line family (grouped, not 1:1 recopied) */
-    .icon-tool, .icon-fetch, .icon-search, .icon-read, .icon-domain { color: #8ab6d2; }
+    .icon-tool, .icon-fetch, .icon-search, .icon-read, .icon-domain, .icon-queue { color: #8ab6d2; }
     .icon-bash, .icon-complete { color: #7fb890; }
     .icon-skill, .icon-fix, .icon-user, .icon-score { color: #d4af37; }
     .icon-write, .icon-status { color: #c89a40; }
@@ -1139,7 +1178,13 @@ export function initActivityLog() {
   logEl.innerHTML = '';
 }
 
-export function addLog(msg) {
+function trimLog() {
+  while (logEl.children.length > 300) {
+    logEl.removeChild(logEl.firstChild);
+  }
+}
+
+export function addLog(msg, options = {}) {
   if (!msg || !logEl) return;
 
   let clean = msg.replace(/[\n\r]+/g, ' ').trim();
@@ -1151,11 +1196,16 @@ export function addLog(msg) {
   if (clean === '```') return;
 
   const cls = classify(clean);
+  if (options.immediate || cls === 'user') {
+    flushLogQueue();
+    appendInstantLine(clean, cls);
+    trimLog();
+    return;
+  }
+
   queue.push({ text: clean, cls });
 
-  while (logEl.children.length > 300) {
-    logEl.removeChild(logEl.firstChild);
-  }
+  trimLog();
 
   processQueue();
 }

@@ -7,7 +7,7 @@ import { VictoryScene } from './scenes/VictoryScene.js';
 import { GateScene } from './scenes/GateScene.js';
 import { bridge } from './utils/ws.js';
 import { initKnightSprite } from './knight-sprite.js';
-import { initActivityLog, addLog, showLoadingIndicator, hideLoadingIndicator } from './activity-log.js';
+import { initActivityLog, addLog, showLoadingIndicator, hideLoadingIndicator, flushLogQueue } from './activity-log.js';
 import { SFX } from './utils/sound-manager.js';
 import { getDangerousBypassEnabled, getProfileKey, getSelectedRuntime } from './profile-config.js';
 
@@ -719,17 +719,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Ledger Terminal (one-shot Codex turns) ─────
   const logInput = document.getElementById('log-input');
   const logInputBar = document.getElementById('log-input-bar');
-  const logCancel = document.getElementById('log-cancel');
-  const logQueue = document.getElementById('log-queue');
-  const logSend = document.getElementById('log-send');
   const promptQueuePanel = document.getElementById('prompt-queue-panel');
+  const promptQueueTitle = document.getElementById('prompt-queue-title');
   const promptQueueList = document.getElementById('prompt-queue-list');
-  const promptQueueRun = document.getElementById('prompt-queue-run');
+  const logStop = document.getElementById('log-stop');
+  const promptQueueSteer = document.getElementById('prompt-queue-steer');
   const promptQueueClear = document.getElementById('prompt-queue-clear');
+  const promptEditModal = document.getElementById('prompt-edit-modal');
+  const promptEditText = document.getElementById('prompt-edit-text');
+  const promptEditSave = document.getElementById('prompt-edit-save');
+  const promptEditCancel = document.getElementById('prompt-edit-cancel');
+  const promptEditRemove = document.getElementById('prompt-edit-remove');
   let lastEscTime = 0;
   let ledgerRunning = false;
   let promptQueueId = 0;
   let queueDrainTimer = null;
+  let queueHold = false;
+  const suppressedDrainIds = new Set();
+  let selectedPromptId = null;
+  let editingPromptId = null;
+  let draggedPromptId = null;
   const promptQueue = [];
 
   let interactiveTimeout = null;
@@ -740,6 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
     logInputBar.classList.remove('running');
     hideLoadingIndicator();
     if (interactiveTimeout) { clearTimeout(interactiveTimeout); interactiveTimeout = null; }
+    renderPromptQueue();
     updatePromptControls();
   };
 
@@ -777,6 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const isAgentBusy = () => Boolean(
     ledgerRunning ||
+    bridge.activeLedgerId ||
     bridge.activeAuditId ||
     bridge.activeFixId ||
     bridge.activeCommitId ||
@@ -784,54 +795,140 @@ document.addEventListener('DOMContentLoaded', () => {
     isBattleBusy()
   );
 
+  function findPromptIndex(id) {
+    return promptQueue.findIndex((entry) => entry.id === id);
+  }
+
+  function ensurePromptSelection() {
+    if (promptQueue.length === 0) {
+      selectedPromptId = null;
+      return;
+    }
+    if (findPromptIndex(selectedPromptId) < 0) {
+      selectedPromptId = promptQueue[0].id;
+    }
+  }
+
+  function removeQueuedPrompt(id, { announce = true } = {}) {
+    const idx = findPromptIndex(id);
+    if (idx < 0) return null;
+    const [removed] = promptQueue.splice(idx, 1);
+    if (selectedPromptId === id) {
+      selectedPromptId = promptQueue[idx]?.id || promptQueue[idx - 1]?.id || promptQueue[0]?.id || null;
+    }
+    if (announce) addLog('Removed queued prompt.');
+    renderPromptQueue();
+    updatePromptControls();
+    return removed;
+  }
+
   function renderPromptQueue() {
     const hasQueue = promptQueue.length > 0;
-    promptQueuePanel?.classList.toggle('open', hasQueue);
+    const busy = isAgentBusy();
+    ensurePromptSelection();
+    promptQueuePanel?.classList.toggle('open', hasQueue || busy);
+    promptQueuePanel?.classList.toggle('running', busy);
+    promptQueuePanel?.classList.toggle('holding', queueHold && hasQueue);
+    if (promptQueueTitle) {
+      promptQueueTitle.textContent = queueHold && hasQueue
+        ? 'Held Queue'
+        : hasQueue
+          ? 'Queued'
+          : busy
+            ? 'Running'
+            : 'Queued';
+    }
+    logInputBar?.classList.toggle('agent-busy', busy);
     if (!promptQueueList) return;
     promptQueueList.innerHTML = '';
 
     promptQueue.forEach((item, index) => {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = `prompt-queue-item${index === 0 ? ' next' : ''}`;
-      row.title = isAgentBusy() ? 'Make this the next prompt' : 'Run this prompt';
+      const row = document.createElement('div');
+      row.className = `prompt-queue-item${item.id === selectedPromptId ? ' selected' : ''}`;
+      row.title = 'Click to select. Double-click to edit. Drag to reorder.';
       row.dataset.id = String(item.id);
+      row.draggable = true;
+      row.tabIndex = 0;
+      row.setAttribute('role', 'button');
+      row.setAttribute('aria-selected', item.id === selectedPromptId ? 'true' : 'false');
 
       const rank = document.createElement('span');
       rank.className = 'prompt-queue-rank';
-      rank.textContent = index === 0 ? 'NEXT' : String(index + 1).padStart(2, '0');
+      rank.textContent = String(index + 1).padStart(2, '0');
 
       const text = document.createElement('span');
       text.className = 'prompt-queue-text';
       text.textContent = truncatePrompt(item.text, 180);
 
-      const remove = document.createElement('span');
+      const actions = document.createElement('span');
+      actions.className = 'prompt-queue-row-actions';
+
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'prompt-queue-edit';
+      edit.textContent = 'Edit';
+      edit.title = 'Edit queued prompt';
+      edit.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        selectedPromptId = item.id;
+        renderPromptQueue();
+        openPromptEditor(item.id);
+      });
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
       remove.className = 'prompt-queue-remove';
-      remove.textContent = 'x';
-      remove.title = 'Remove';
+      remove.textContent = '×';
+      remove.title = 'Remove queued prompt';
+      remove.setAttribute('aria-label', 'Remove queued prompt');
       remove.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        const idx = promptQueue.findIndex((entry) => entry.id === item.id);
-        if (idx >= 0) promptQueue.splice(idx, 1);
+        removeQueuedPrompt(item.id);
+      });
+
+      actions.append(edit, remove);
+      row.append(rank, text, actions);
+      row.addEventListener('click', () => {
+        selectedPromptId = item.id;
         renderPromptQueue();
         updatePromptControls();
       });
-
-      row.append(rank, text, remove);
-      row.addEventListener('click', () => {
-        const idx = promptQueue.findIndex((entry) => entry.id === item.id);
-        if (idx < 0) return;
-        const [selected] = promptQueue.splice(idx, 1);
-        if (isAgentBusy()) {
-          promptQueue.unshift(selected);
-          addLog(`Next: ${truncatePrompt(selected.text)}`);
-          renderPromptQueue();
-          updatePromptControls();
-          return;
+      row.addEventListener('dblclick', () => openPromptEditor(item.id));
+      row.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          selectedPromptId = item.id;
+          steerSelectedPrompt();
+        } else if (event.key.toLowerCase() === 'e') {
+          event.preventDefault();
+          openPromptEditor(item.id);
+        } else if (event.key === 'Delete' || event.key === 'Backspace') {
+          event.preventDefault();
+          removeQueuedPrompt(item.id);
         }
-        renderPromptQueue();
-        executeLedgerCommand(selected.text, { fromQueue: true });
+      });
+      row.addEventListener('dragstart', (event) => {
+        draggedPromptId = item.id;
+        selectedPromptId = item.id;
+        row.classList.add('dragging');
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(item.id));
+      });
+      row.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        if (draggedPromptId && draggedPromptId !== item.id) row.classList.add('drag-over');
+      });
+      row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+      row.addEventListener('drop', (event) => {
+        event.preventDefault();
+        row.classList.remove('drag-over');
+        reorderPrompt(draggedPromptId, item.id);
+      });
+      row.addEventListener('dragend', () => {
+        draggedPromptId = null;
+        row.classList.remove('dragging', 'drag-over');
       });
 
       promptQueueList.appendChild(row);
@@ -839,15 +936,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updatePromptControls() {
-    const hasText = Boolean(logInput?.value?.trim());
+    ensurePromptSelection();
     const busy = isAgentBusy();
-    if (logSend) {
-      logSend.disabled = !hasText;
-      logSend.textContent = busy ? 'Steer' : 'Send';
-      logSend.classList.toggle('steer', busy);
-    }
-    if (logQueue) logQueue.disabled = !hasText;
-    if (promptQueueRun) promptQueueRun.disabled = busy || promptQueue.length === 0;
+    if (logStop) logStop.disabled = !busy;
+    if (promptQueueSteer) promptQueueSteer.disabled = promptQueue.length === 0 || selectedPromptId == null;
     if (promptQueueClear) promptQueueClear.disabled = promptQueue.length === 0;
   }
 
@@ -857,9 +949,132 @@ document.addEventListener('DOMContentLoaded', () => {
     const item = { id: ++promptQueueId, text: clean, createdAt: Date.now() };
     if (front) promptQueue.unshift(item);
     else promptQueue.push(item);
-    addLog(`${front ? 'Steer next' : 'Queued'}: ${truncatePrompt(clean)}`);
+    selectedPromptId = item.id;
+    addLog(front ? 'Prompt returned to front of queue.' : `Prompt queued. ${promptQueue.length} waiting.`);
     renderPromptQueue();
     updatePromptControls();
+  }
+
+  function reorderPrompt(draggedId, targetId) {
+    if (!draggedId || !targetId || draggedId === targetId) return;
+    const from = findPromptIndex(draggedId);
+    const to = findPromptIndex(targetId);
+    if (from < 0 || to < 0) return;
+    const [item] = promptQueue.splice(from, 1);
+    const adjustedTo = from < to ? to - 1 : to;
+    promptQueue.splice(adjustedTo, 0, item);
+    selectedPromptId = item.id;
+    renderPromptQueue();
+    updatePromptControls();
+  }
+
+  function openPromptEditor(id) {
+    const idx = findPromptIndex(id);
+    if (idx < 0 || !promptEditModal || !promptEditText) return;
+    editingPromptId = id;
+    promptEditText.value = promptQueue[idx].text;
+    promptEditModal.classList.add('open');
+    promptEditModal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => {
+      promptEditText.focus();
+      promptEditText.setSelectionRange(promptEditText.value.length, promptEditText.value.length);
+    }, 50);
+  }
+
+  function closePromptEditor() {
+    editingPromptId = null;
+    promptEditModal?.classList.remove('open');
+    promptEditModal?.setAttribute('aria-hidden', 'true');
+  }
+
+  function savePromptEditor() {
+    const idx = findPromptIndex(editingPromptId);
+    if (idx < 0 || !promptEditText) {
+      closePromptEditor();
+      return;
+    }
+    const clean = promptEditText.value.trim();
+    if (!clean) {
+      removeQueuedPrompt(editingPromptId);
+      closePromptEditor();
+      return;
+    }
+    promptQueue[idx].text = clean;
+    selectedPromptId = promptQueue[idx].id;
+    addLog('Updated queued prompt.');
+    closePromptEditor();
+    renderPromptQueue();
+    updatePromptControls();
+  }
+
+  function cancelActiveBridgeRequests() {
+    const cancelledIds = [];
+    const ids = [
+      bridge.activeLedgerId,
+      bridge.activeAuditId,
+      bridge.activeFixId,
+      bridge.activeCommitId,
+      bridge.activeNarrationId
+    ].filter(Boolean);
+    for (const id of ids) {
+      bridge.cancel(id);
+      cancelledIds.push(id);
+    }
+    const battleScene = getBattleScene();
+    if (battleScene?._activeRequestId) {
+      bridge.cancel(battleScene._activeRequestId);
+      cancelledIds.push(battleScene._activeRequestId);
+    }
+    return cancelledIds;
+  }
+
+  function stopActiveAgent({ announce = true, holdQueue = true } = {}) {
+    const hadBusyState = isAgentBusy();
+    queueHold = holdQueue && promptQueue.length > 0;
+    const cancelledIds = cancelActiveBridgeRequests();
+    cancelledIds.forEach((id) => suppressedDrainIds.add(id));
+    flushLogQueue();
+    if (hadBusyState || cancelledIds.length > 0 || ledgerRunning) {
+      resetLoadingState();
+      if (announce) addLog(queueHold ? 'Stopped. Queue held.' : 'Stopped.', { immediate: true });
+    } else if (announce) {
+      addLog('Nothing active to stop.', { immediate: true });
+    }
+    renderPromptQueue();
+    updatePromptControls();
+  }
+
+  async function steerSelectedPrompt() {
+    ensurePromptSelection();
+    const idx = findPromptIndex(selectedPromptId);
+    if (idx < 0) return;
+    const [selected] = promptQueue.splice(idx, 1);
+    const wasHeld = queueHold;
+    if (isAgentBusy()) {
+      queueHold = wasHeld && promptQueue.length > 0;
+      selectedPromptId = promptQueue[idx]?.id || promptQueue[idx - 1]?.id || promptQueue[0]?.id || null;
+      renderPromptQueue();
+      updatePromptControls();
+      try {
+        await bridge.steer(selected.text);
+        addLog('> ' + selected.text, { immediate: true });
+        addLog('Steered active turn.');
+      } catch (err) {
+        promptQueue.unshift(selected);
+        selectedPromptId = selected.id;
+        addLog('Could not steer active turn: ' + (err.message || 'unknown'));
+        addLog('Prompt returned to front of queue.');
+      }
+      renderPromptQueue();
+      updatePromptControls();
+      return;
+    }
+    queueHold = wasHeld && promptQueue.length > 0;
+    selectedPromptId = promptQueue[0]?.id || null;
+    renderPromptQueue();
+    updatePromptControls();
+    addLog(wasHeld ? 'Submitted held prompt.' : 'Submitted queued prompt.');
+    executeLedgerCommand(selected.text, { fromQueue: true, preserveQueueHold: queueHold });
   }
 
   function scheduleQueueDrain() {
@@ -872,8 +1087,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function drainPromptQueue() {
     updatePromptControls();
-    if (!promptQueue.length || isAgentBusy() || !bridge.connected) return;
+    if (!promptQueue.length || queueHold || isAgentBusy() || !bridge.connected) {
+      renderPromptQueue();
+      return;
+    }
     const item = promptQueue.shift();
+    if (selectedPromptId === item.id) selectedPromptId = promptQueue[0]?.id || null;
     renderPromptQueue();
     executeLedgerCommand(item.text, { fromQueue: true });
   }
@@ -886,11 +1105,15 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePromptControls();
   }
 
-  const executeLedgerCommand = (text, { fromQueue = false } = {}) => {
+  const executeLedgerCommand = (text, { fromQueue = false, preserveQueueHold = false } = {}) => {
     if (!text.trim()) return;
+    if (queueDrainTimer) {
+      clearTimeout(queueDrainTimer);
+      queueDrainTimer = null;
+    }
     if (!bridge.connected) {
-      addLog('Bridge not connected.');
-      if (fromQueue) enqueuePrompt(text, { front: true });
+      addLog('Bridge not connected. Prompt kept in queue.');
+      enqueuePrompt(text, { front: fromQueue });
       return;
     }
 
@@ -906,48 +1129,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Outside battle - neutral chat. Pass-through to Codex in the user's
     // project dir. No demon anchoring; the user can ask anything.
+    if (fromQueue && !preserveQueueHold) queueHold = false;
     logInputBar.classList.add('running');
     showLoadingIndicator();
-    addLog('> ' + text);
+    addLog('> ' + text, { immediate: true });
+    showLoadingIndicator();
     ledgerRunning = true;
+    renderPromptQueue();
+    updatePromptControls();
     lastStreamTime = Date.now();
     startWatchdog();
 
     const projectPath = document.getElementById('path-input')?.value?.trim() || '.';
     const profile = getProfileKey(window.selectedCharacter?.profile || window.selectedCharacter?.model);
     const runtime = window.selectedCharacter?.runtime || getSelectedRuntime();
+    let ledgerRequestId = null;
 
     (async () => {
       try {
-        const result = await bridge.chat(text, projectPath, profile, runtime, (chunk) => {
+        const pendingResult = bridge.chat(text, projectPath, profile, runtime, (chunk) => {
           lastStreamTime = Date.now();
           if (interactiveTimeout) clearTimeout(interactiveTimeout);
           startWatchdog();
           const clean = chunk.replace(/[\n\r]+/g, ' ').trim();
           if (clean.length > 0) addLog(clean);
         });
+        ledgerRequestId = bridge.activeLedgerId;
+        const result = await pendingResult;
         if (result?.data?.summary) addLog(result.data.summary);
       } catch (err) {
         if (err.message !== 'Cancelled by user') {
           addLog('Error: ' + (err.message || 'unknown'));
+          if (fromQueue) enqueuePrompt(text, { front: true });
         }
       } finally {
+        flushLogQueue();
         resetLoadingState();
-        scheduleQueueDrain();
+        if (ledgerRequestId && suppressedDrainIds.delete(ledgerRequestId)) {
+          renderPromptQueue();
+          updatePromptControls();
+        } else {
+          scheduleQueueDrain();
+        }
       }
     })();
   };
 
-  const submitLedgerInput = ({ queueOnly = false, frontWhenBusy = false } = {}) => {
+  const submitLedgerInput = () => {
     const text = logInput.value.trim();
     if (!text) return;
     clearInput();
-    if (queueOnly) {
-      enqueuePrompt(text);
-      return;
-    }
     if (isAgentBusy()) {
-      enqueuePrompt(text, { front: frontWhenBusy });
+      enqueuePrompt(text);
       return;
     }
     executeLedgerCommand(text);
@@ -975,35 +1208,69 @@ document.addEventListener('DOMContentLoaded', () => {
     // Enter submits, Shift+Enter adds newline
     if (e.key === 'Enter' && !e.shiftKey && logInput.value.trim()) {
       e.preventDefault();
-      submitLedgerInput({ frontWhenBusy: false });
+      submitLedgerInput();
       autoResize();
     }
     if (e.key === 'Escape') {
       const now = Date.now();
-      if (now - lastEscTime < 500 && ledgerRunning) {
-        bridge.cancelLedger();
-        addLog('Interrupted.');
-        logInputBar.classList.remove('running');
-        ledgerRunning = false;
-        hideLoadingIndicator();
+      if (now - lastEscTime < 500 && isAgentBusy()) {
+        stopActiveAgent({ announce: true });
       }
       lastEscTime = now;
     }
   });
 
-  logQueue?.addEventListener('click', () => submitLedgerInput({ queueOnly: true }));
-  logSend?.addEventListener('click', () => submitLedgerInput({ frontWhenBusy: true }));
-  promptQueueRun?.addEventListener('click', () => drainPromptQueue());
+  logStop?.addEventListener('click', () => stopActiveAgent());
+  promptQueueSteer?.addEventListener('click', () => steerSelectedPrompt());
   promptQueueClear?.addEventListener('click', () => {
     if (!promptQueue.length) return;
     promptQueue.splice(0, promptQueue.length);
+    selectedPromptId = null;
+    queueHold = false;
     addLog('Queue cleared.');
     renderPromptQueue();
     updatePromptControls();
   });
+  promptQueueList?.addEventListener('dragover', (event) => event.preventDefault());
+  promptQueueList?.addEventListener('drop', (event) => {
+    event.preventDefault();
+    if (!draggedPromptId || event.target.closest?.('.prompt-queue-item')) return;
+    const from = findPromptIndex(draggedPromptId);
+    if (from >= 0) {
+      const [item] = promptQueue.splice(from, 1);
+      promptQueue.push(item);
+      selectedPromptId = item.id;
+      renderPromptQueue();
+      updatePromptControls();
+    }
+  });
+  promptEditSave?.addEventListener('click', () => savePromptEditor());
+  promptEditCancel?.addEventListener('click', () => closePromptEditor());
+  promptEditRemove?.addEventListener('click', () => {
+    removeQueuedPrompt(editingPromptId);
+    closePromptEditor();
+  });
+  promptEditModal?.querySelector('.prompt-edit-backdrop')?.addEventListener('click', () => closePromptEditor());
+  promptEditText?.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      savePromptEditor();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closePromptEditor();
+    }
+  });
   window.addEventListener('seo-dungeon-agent-settled', () => {
+    renderPromptQueue();
     updatePromptControls();
     scheduleQueueDrain();
+  });
+  bridge.onStatusChange((connected) => {
+    renderPromptQueue();
+    updatePromptControls();
+    if (connected && promptQueue.length && !queueHold) {
+      scheduleQueueDrain();
+    }
   });
 
   // Global Escape handler - double-tap cancels any active agent operation
@@ -1011,49 +1278,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') {
       const now = Date.now();
       if (now - lastEscTime < 500) {
-        // Cancel neutral ledger activity
-        if (ledgerRunning) {
-          bridge.cancelLedger();
-          addLog('Interrupted.');
-          logInputBar.classList.remove('running');
-          ledgerRunning = false;
-          hideLoadingIndicator();
-        }
-        // Cancel active battle attack
-        if (game) {
-          const battleScene = game.scene.getScene('Battle');
-          if (battleScene && battleScene._activeRequestId) {
-            bridge.cancel(battleScene._activeRequestId);
-          }
-        }
-        // Cancel active audit
-        if (bridge.activeAuditId) {
-          bridge.cancel(bridge.activeAuditId);
-          addLog('Audit cancelled.');
-        }
+        stopActiveAgent({ announce: true });
       }
       lastEscTime = now;
-    }
-  });
-
-  logCancel.addEventListener('click', () => {
-    if (ledgerRunning) {
-      bridge.cancelLedger();
-      addLog('Interrupted.');
-      logInputBar.classList.remove('running');
-      ledgerRunning = false;
-      hideLoadingIndicator();
-    }
-    // Also cancel battle/audit
-    if (game) {
-      const battleScene = game.scene.getScene('Battle');
-      if (battleScene && battleScene._activeRequestId) {
-        bridge.cancel(battleScene._activeRequestId);
-      }
-    }
-    if (bridge.activeAuditId) {
-      bridge.cancel(bridge.activeAuditId);
-      addLog('Audit cancelled.');
     }
   });
 

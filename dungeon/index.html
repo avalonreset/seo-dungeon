@@ -823,31 +823,48 @@
       color: #454560;
     }
 
-    #log-cancel {
-      background: none;
-      border: 1px solid #2a2a40;
-      border-radius: 3px;
-      color: #505068;
-      font-size: 10px;
-      cursor: pointer;
-      padding: 2px 6px;
-      font-family: 'JetBrains Mono', monospace;
-      transition: color 0.15s, border-color 0.15s;
-      display: none;
-    }
-
-    #log-cancel:hover {
-      color: #cc4444;
-      border-color: #cc4444;
-    }
-
-    #log-input-bar.running #log-cancel {
-      display: block;
-    }
-
     #log-input-bar.running #log-input-prompt {
       color: #60c060;
       animation: promptPulse 1.5s ease-in-out infinite;
+    }
+
+    #log-stop {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      min-width: 58px;
+      height: 30px;
+      margin-left: 4px;
+      border: 1px solid rgba(204, 68, 68, 0.62);
+      border-radius: 3px;
+      background:
+        linear-gradient(180deg, rgba(105, 14, 24, 0.9), rgba(28, 4, 8, 0.92));
+      color: #ff6969;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 0 14px rgba(120, 0, 0, 0.18);
+      flex-shrink: 0;
+    }
+
+    #log-input-bar.agent-busy #log-stop,
+    #log-input-bar.running #log-stop {
+      display: inline-flex;
+    }
+
+    #log-stop:hover:not(:disabled) {
+      color: #ffffff;
+      border-color: rgba(255, 84, 84, 0.9);
+      background:
+        linear-gradient(180deg, rgba(140, 18, 32, 0.98), rgba(55, 5, 13, 0.98));
+    }
+
+    #log-stop:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
 
     #prompt-queue-panel {
@@ -868,6 +885,13 @@
 
     #prompt-queue-panel.open {
       display: flex;
+    }
+
+    #prompt-queue-panel.running {
+      border-top-color: rgba(204, 68, 68, 0.28);
+      background:
+        linear-gradient(180deg, rgba(204, 68, 68, 0.055), rgba(212, 175, 55, 0.03) 46%, transparent),
+        #050507;
     }
 
     #prompt-queue-head {
@@ -896,6 +920,12 @@
       scrollbar-color: rgba(212, 175, 55, 0.35) rgba(10, 10, 14, 0.5);
     }
 
+    #prompt-queue-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .prompt-queue-item {
       display: grid;
       grid-template-columns: auto 1fr auto;
@@ -910,14 +940,24 @@
       font-size: 12px;
       line-height: 1.35;
       padding: 7px 8px;
-      cursor: pointer;
+      cursor: grab;
       text-align: left;
+      user-select: none;
     }
 
     .prompt-queue-item:hover,
-    .prompt-queue-item.next {
+    .prompt-queue-item.selected {
       border-color: rgba(212, 175, 55, 0.55);
       background: rgba(30, 24, 18, 0.92);
+    }
+
+    .prompt-queue-item.dragging {
+      opacity: 0.45;
+    }
+
+    .prompt-queue-item.drag-over {
+      border-color: rgba(240, 204, 80, 0.9);
+      box-shadow: inset 0 0 0 1px rgba(240, 204, 80, 0.45);
     }
 
     .prompt-queue-rank {
@@ -933,9 +973,19 @@
       white-space: nowrap;
     }
 
+    .prompt-queue-item.selected .prompt-queue-text {
+      color: #e1e6ff;
+    }
+
+    .prompt-queue-row-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .prompt-queue-edit,
     .prompt-queue-remove,
-    .prompt-queue-action,
-    .log-action-btn {
+    .prompt-queue-action {
       border: 1px solid rgba(212, 175, 55, 0.28);
       border-radius: 3px;
       background: rgba(5, 5, 7, 0.82);
@@ -948,47 +998,150 @@
       text-transform: uppercase;
     }
 
+    .prompt-queue-edit {
+      height: 28px;
+      padding: 0 8px;
+      color: #8ec9ff;
+      border-color: rgba(92, 184, 200, 0.3);
+    }
+
     .prompt-queue-remove {
-      width: 24px;
-      height: 24px;
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      color: #ff5454;
+      border-color: rgba(204, 68, 68, 0.55);
+      font-size: 20px;
       line-height: 1;
     }
 
     .prompt-queue-action {
-      padding: 4px 7px;
+      min-height: 28px;
+      padding: 4px 10px;
       color: #8ec9ff;
       border-color: rgba(92, 184, 200, 0.28);
     }
 
+    #prompt-queue-clear {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      padding: 0;
+      color: #ff5454;
+      border-color: rgba(204, 68, 68, 0.55);
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .prompt-queue-edit:hover,
     .prompt-queue-remove:hover,
-    .prompt-queue-action:hover,
-    .log-action-btn:hover:not(:disabled) {
+    .prompt-queue-action:hover:not(:disabled) {
       color: #f0cc50;
       border-color: rgba(212, 175, 55, 0.55);
       background: rgba(18, 18, 28, 0.95);
     }
 
-    .log-action-btn:disabled {
+    .prompt-queue-remove:hover,
+    #prompt-queue-clear:hover:not(:disabled) {
+      color: #ffffff;
+      border-color: rgba(255, 84, 84, 0.85);
+      background: rgba(75, 10, 16, 0.95);
+    }
+
+    .prompt-queue-action:disabled {
       opacity: 0.35;
       cursor: not-allowed;
     }
 
-    #log-input-actions {
+    .prompt-edit-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .prompt-edit-modal.open {
       display: flex;
-      align-items: flex-start;
-      gap: 6px;
-      flex-shrink: 0;
     }
 
-    #log-send,
-    #log-queue {
-      min-height: 24px;
-      padding: 3px 8px;
+    .prompt-edit-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(5px);
     }
 
-    #log-send.steer {
-      color: #8ec9ff;
-      border-color: rgba(92, 184, 200, 0.36);
+    .prompt-edit-box {
+      position: relative;
+      width: min(620px, calc(100vw - 36px));
+      border: 1px solid rgba(212, 175, 55, 0.45);
+      border-radius: 6px;
+      background: #07070a;
+      box-shadow: 0 0 42px rgba(0, 0, 0, 0.75), 0 0 22px rgba(212, 175, 55, 0.12);
+      padding: 18px;
+    }
+
+    .prompt-edit-box h2 {
+      margin: 0 0 12px;
+      color: #d4af37;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    #prompt-edit-text {
+      width: 100%;
+      min-height: 160px;
+      max-height: min(45vh, 360px);
+      resize: vertical;
+      border: 1px solid rgba(92, 184, 200, 0.3);
+      border-radius: 4px;
+      background: #0d0d22;
+      color: #d9def5;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 12px;
+      outline: none;
+    }
+
+    .prompt-edit-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .prompt-edit-button {
+      min-height: 32px;
+      border: 1px solid rgba(212, 175, 55, 0.35);
+      border-radius: 3px;
+      background: rgba(5, 5, 7, 0.9);
+      color: #d4af37;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 6px 10px;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .prompt-edit-button.primary {
+      color: #0a0a12;
+      background: #d4af37;
+      border-color: #f0cc50;
+    }
+
+    .prompt-edit-button.danger {
+      color: #ff5454;
+      border-color: rgba(204, 68, 68, 0.55);
     }
 
     @keyframes promptPulse {
@@ -1372,22 +1525,33 @@
     <div id="prompt-queue-panel" aria-live="polite">
       <div id="prompt-queue-head">
         <span id="prompt-queue-title">Queued</span>
-        <button id="prompt-queue-run" class="prompt-queue-action" type="button">Next</button>
-        <button id="prompt-queue-clear" class="prompt-queue-action" type="button">Clear</button>
+        <div id="prompt-queue-actions">
+          <button id="prompt-queue-steer" class="prompt-queue-action" type="button">Steer</button>
+          <button id="prompt-queue-clear" class="prompt-queue-action" type="button" title="Clear queue" aria-label="Clear queue">×</button>
+        </div>
       </div>
       <div id="prompt-queue-list"></div>
     </div>
     <div id="log-input-bar">
       <span id="log-input-prompt">&gt;</span>
       <textarea id="log-input" placeholder="Talk to the Demon Lord..." autocomplete="off" spellcheck="false" rows="1"></textarea>
-      <div id="log-input-actions">
-        <button id="log-queue" class="log-action-btn" type="button">Queue</button>
-        <button id="log-send" class="log-action-btn" type="button">Send</button>
-        <button id="log-cancel" class="log-action-btn" type="button" title="Cancel (Esc x2)">&#x25A0;</button>
-      </div>
+      <button id="log-stop" type="button" title="Stop current turn" aria-label="Stop current turn">Stop</button>
     </div>
   </div>
   <button id="ledger-open-toggle" type="button" title="Show Guild Ledger" aria-label="Show Guild Ledger">‹</button>
+
+  <div id="prompt-edit-modal" class="prompt-edit-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="prompt-edit-title">
+    <div class="prompt-edit-backdrop"></div>
+    <div class="prompt-edit-box">
+      <h2 id="prompt-edit-title">Edit Queued Prompt</h2>
+      <textarea id="prompt-edit-text" spellcheck="false"></textarea>
+      <div class="prompt-edit-buttons">
+        <button id="prompt-edit-remove" class="prompt-edit-button danger" type="button">Remove</button>
+        <button id="prompt-edit-cancel" class="prompt-edit-button" type="button">Cancel</button>
+        <button id="prompt-edit-save" class="prompt-edit-button primary" type="button">Save</button>
+      </div>
+    </div>
+  </div>
 
   <div id="runtime-warning-modal" class="runtime-warning-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="runtime-warning-title">
     <div class="runtime-warning-backdrop"></div>

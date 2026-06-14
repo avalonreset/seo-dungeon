@@ -73,7 +73,7 @@ function logFailedAudit(domain, raw, note) {
 }
 
 // ── Security: Allowed message types and rate limits ──
-const ALLOWED_TYPES = ['audit', 'fix', 'commit', 'narrate', 'chat', 'cancel', 'open-folder'];
+const ALLOWED_TYPES = ['audit', 'fix', 'commit', 'narrate', 'chat', 'cancel', 'steer', 'open-folder'];
 const MAX_CONCURRENT_PROCESSES = 5;
 const MAX_MESSAGES_PER_MINUTE = 30;
 
@@ -589,6 +589,33 @@ function untrackProcess(requestId) {
   if (requestId !== undefined && requestId !== null) activeProcesses.delete(requestId);
 }
 
+function steerActiveProcess(targetId, text) {
+  const numericTargetId = Number(targetId);
+  const clean = String(text || '').trim();
+  if (!Number.isFinite(numericTargetId)) {
+    throw new Error('Invalid active turn id.');
+  }
+  if (!clean) {
+    throw new Error('Nothing to steer.');
+  }
+
+  const proc = activeProcesses.get(numericTargetId);
+  if (!proc) {
+    throw new Error('No active operation to steer.');
+  }
+
+  if (typeof proc.steer === 'function') {
+    return proc.steer(clean);
+  }
+
+  if (proc.stdin && proc.stdin.writable && !proc.stdin.destroyed) {
+    proc.stdin.write(`\n${clean}\n`);
+    return { targetId: numericTargetId, mode: 'stdin' };
+  }
+
+  throw new Error('Active runtime cannot accept live steering. Prompt kept in queue.');
+}
+
 function createSpawnError(runtime, err, launch) {
   const display = launch?.display || runtime;
   const hint = err && err.code === 'EPERM'
@@ -643,7 +670,7 @@ wss.on('connection', (ws) => {
       safeSend(JSON.stringify({ id: 0, type: 'error', message: 'Invalid message format' }));
       return;
     }
-    const { id, command, type, projectPath, issue, userMessage, model, profile, runtime, dangerousBypass } = msg;
+    const { id, command, type, projectPath, issue, userMessage, model, profile, runtime, dangerousBypass, targetId } = msg;
     const agentOptions = {
       runtime: normalizeRuntime(runtime),
       profile: normalizeProfile(profile || model),
@@ -661,7 +688,7 @@ wss.on('connection', (ws) => {
     // fallback path: if the saved folder is invalid, the bridge opens a
     // native folder picker instead of rejecting before the handler runs.
     const validatedPath = validateProjectPath(projectPath);
-    if (projectPath && !validatedPath && type !== 'open-folder') {
+    if (projectPath && !validatedPath && type !== 'open-folder' && type !== 'cancel' && type !== 'steer') {
       console.warn(`Rejected invalid projectPath: ${projectPath}`);
       safeSend(JSON.stringify({ id, type: 'error', message: 'Invalid project path' }));
       return;
@@ -671,8 +698,8 @@ wss.on('connection', (ws) => {
     const fixCwd = validatedPath;
 
     console.log(`Command #${id} [${type}]: ${command || '(no command)'}`);
-    if (type !== 'cancel') console.log(`  Runtime: ${agentOptions.runtime}, profile: ${agentOptions.profile}`);
-    if (type !== 'cancel' && agentOptions.runtime === 'codex') console.log(`  Codex dangerous bypass: ${agentOptions.dangerousBypass ? 'on' : 'off'}`);
+    if (type !== 'cancel' && type !== 'steer') console.log(`  Runtime: ${agentOptions.runtime}, profile: ${agentOptions.profile}`);
+    if (type !== 'cancel' && type !== 'steer' && agentOptions.runtime === 'codex') console.log(`  Codex dangerous bypass: ${agentOptions.dangerousBypass ? 'on' : 'off'}`);
     if (validatedPath && validatedPath !== PROJECT_ROOT) console.log(`  Project: ${validatedPath}`);
 
     // Cancel - kill the child process for a given request
@@ -680,10 +707,21 @@ wss.on('connection', (ws) => {
       const proc = activeProcesses.get(id);
       if (proc) {
         console.log(`Cancelling process #${id}`);
-        proc.kill('SIGTERM');
+        if (typeof proc.kill === 'function') proc.kill('SIGTERM');
         activeProcesses.delete(id);
       }
       safeSend(JSON.stringify({ id, type: 'error', message: 'Cancelled by user' }));
+      return;
+    }
+
+    if (type === 'steer') {
+      try {
+        const steerResult = await steerActiveProcess(targetId, command);
+        console.log(`Steered process #${targetId}`);
+        safeSend(JSON.stringify({ id, type: 'result', data: steerResult || { targetId } }));
+      } catch (err) {
+        safeSend(JSON.stringify({ id, type: 'error', message: err.message || 'Could not steer active turn' }));
+      }
       return;
     }
 
@@ -764,7 +802,9 @@ wss.on('connection', (ws) => {
     clearInterval(pingInterval);
     // Kill any orphaned Codex processes for this connection.
     for (const [procId, proc] of activeProcesses.entries()) {
-      try { proc.kill('SIGTERM'); } catch (e) {}
+      try {
+        if (typeof proc.kill === 'function') proc.kill('SIGTERM');
+      } catch (e) {}
       activeProcesses.delete(procId);
     }
     console.log('Game client disconnected');
@@ -1120,6 +1160,341 @@ function buildCodexExecArgs({ cliArgs = [], prompt, workDir, profile, dangerousB
   return { args, codexProfile };
 }
 
+function codexTextInput(text) {
+  return [{ type: 'text', text: String(text || '') }];
+}
+
+function codexRpcErrorMessage(error) {
+  if (!error) return 'Unknown Codex app-server error';
+  if (typeof error === 'string') return error;
+  if (error.message) return error.message;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function summarizeCodexAppServerFailure(code, stderr) {
+  const text = String(stderr || '').trim();
+  if (!text) return `Codex app-server exited with code ${code}`;
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const parsed = lines
+    .map((line) => {
+      try { return JSON.parse(line); } catch { return null; }
+    })
+    .filter(Boolean)
+    .map((entry) => entry?.fields?.message || entry?.message)
+    .filter(Boolean);
+  return `Codex app-server exited with code ${code}: ${(parsed[parsed.length - 1] || lines[lines.length - 1] || text).slice(0, 500)}`;
+}
+
+function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile, dangerousBypass }) {
+  const { execPath: cliExec, args: cliArgs } = resolveCodexCli();
+  const launch = resolveCliLaunch(cliExec);
+  const codexProfile = getCodexProfileConfig(profile);
+  const appArgs = [...launch.argsPrefix, ...cliArgs, 'app-server', '--stdio'];
+  const launchDisplay = `${launch.display} app-server --stdio`;
+
+  console.log(`  Running with codex app-server (profile: ${codexProfile.key}, effort: ${codexProfile.effort}${codexProfile.model ? `, model: ${codexProfile.model}` : ''}, bypass: ${dangerousBypass ? 'on' : 'off'})`);
+  console.log(`  Executable: ${launchDisplay}`);
+  console.log(`  CWD: ${workDir}`);
+
+  const child = spawn(launch.command, appArgs, {
+    cwd: workDir,
+    env: safeEnv(workDir),
+    shell: launch.shell,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true
+  });
+
+  let nextRpcId = 1;
+  let stdoutBuffer = '';
+  let stderr = '';
+  let fullText = '';
+  let sawAgentDelta = false;
+  let threadId = null;
+  let turnId = null;
+  let timeoutHandle = null;
+  let settled = false;
+  const pending = new Map();
+
+  let settleResolve;
+  let settleReject;
+  const completion = new Promise((resolve, reject) => {
+    settleResolve = resolve;
+    settleReject = reject;
+  });
+
+  function cleanup() {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+      timeoutHandle = null;
+    }
+    for (const [id, handlers] of pending.entries()) {
+      handlers.reject(new Error('Codex app-server stopped before responding.'));
+      pending.delete(id);
+    }
+    untrackProcess(requestId);
+    if (!child.killed) {
+      try { child.kill('SIGTERM'); } catch {}
+    }
+  }
+
+  function settle(fn, value) {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    fn(value);
+  }
+
+  function request(method, params = {}) {
+    if (settled || child.stdin.destroyed || !child.stdin.writable) {
+      return Promise.reject(new Error('Codex app-server is no longer accepting requests.'));
+    }
+    const id = nextRpcId++;
+    child.stdin.write(JSON.stringify({ id, method, params }) + '\n');
+    return new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject, method });
+    });
+  }
+
+  function notify(method, params = {}) {
+    if (settled || child.stdin.destroyed || !child.stdin.writable) return;
+    child.stdin.write(JSON.stringify({ method, params }) + '\n');
+  }
+
+  function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function waitForTurnReady(timeoutMs = 5000) {
+    const started = Date.now();
+    while (!settled && (!threadId || !turnId) && Date.now() - started < timeoutMs) {
+      await delay(100);
+    }
+    if (settled) {
+      throw new Error('Codex turn already ended.');
+    }
+    if (!threadId || !turnId) {
+      throw new Error('Codex turn is still starting and cannot be steered yet.');
+    }
+  }
+
+  function streamText(text) {
+    const value = String(text || '');
+    if (!value) return;
+    fullText += value;
+    for (const line of value.split(/\r?\n/).filter((entry) => entry.trim())) {
+      onStream(line.trim());
+    }
+  }
+
+  function handleItemCompleted(item) {
+    if (!item || typeof item !== 'object') return;
+    if (item.type === 'agentMessage') {
+      if (!sawAgentDelta && item.text) streamText(item.text);
+      return;
+    }
+    if (item.type === 'commandExecution') {
+      const label = item.command ? `command: ${String(item.command).slice(0, 90)}` : 'command';
+      onStream(`[${label}]`);
+      return;
+    }
+    if (item.type === 'mcpToolCall') {
+      const label = [item.server, item.tool].filter(Boolean).join('/') || 'mcp tool';
+      onStream(`[${label}]`);
+      return;
+    }
+    if (item.type === 'dynamicToolCall') {
+      onStream(`[${item.tool || 'tool'}]`);
+    }
+  }
+
+  function handleNotification(method, params = {}) {
+    if (method === 'item/agentMessage/delta') {
+      sawAgentDelta = true;
+      streamText(params.delta || '');
+      return;
+    }
+    if (method === 'item/completed') {
+      handleItemCompleted(params.item);
+      return;
+    }
+    if (method === 'turn/started' && params.turn?.id) {
+      turnId = params.turn.id;
+      return;
+    }
+    if (method === 'turn/completed') {
+      const completedTurn = params.turn || {};
+      const status = completedTurn.status;
+      if (status === 'completed') {
+        onStream('[Complete]');
+        settle(settleResolve, { raw: fullText });
+      } else if (status === 'interrupted') {
+        settle(settleReject, new Error('Cancelled by user'));
+      } else {
+        const message = completedTurn.error?.message || `Codex turn ${status || 'failed'}`;
+        settle(settleReject, new Error(message));
+      }
+      return;
+    }
+    if (method === 'error' && params.error?.message && !params.willRetry) {
+      settle(settleReject, new Error(params.error.message));
+    }
+  }
+
+  child.stdout.on('data', (chunk) => {
+    stdoutBuffer += chunk.toString();
+    const lines = stdoutBuffer.split(/\r?\n/);
+    stdoutBuffer = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      if (message.id && pending.has(message.id)) {
+        const handlers = pending.get(message.id);
+        pending.delete(message.id);
+        if (message.error) {
+          handlers.reject(new Error(codexRpcErrorMessage(message.error)));
+        } else {
+          handlers.resolve(message.result);
+        }
+      } else if (message.method) {
+        handleNotification(message.method, message.params || {});
+      }
+    }
+  });
+
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  child.on('error', (err) => {
+    settle(settleReject, createSpawnError('codex app-server', err, launch));
+  });
+
+  child.on('close', (code) => {
+    if (settled) return;
+    const message = code === 0
+      ? 'Codex app-server closed before the turn completed.'
+      : summarizeCodexAppServerFailure(code, stderr);
+    settle(settleReject, new Error(message));
+  });
+
+  const run = {
+    get threadId() { return threadId; },
+    get turnId() { return turnId; },
+    child,
+    async start() {
+      timeoutHandle = setTimeout(() => {
+        this.kill('SIGTERM');
+        settle(settleReject, new Error('Operation timed out after 15 minutes.'));
+      }, 15 * 60 * 1000);
+
+      await request('initialize', {
+        clientInfo: { name: 'seo-dungeon', version: '2.2' },
+        capabilities: { experimentalApi: true }
+      });
+      notify('initialized', {});
+
+      const threadResponse = await request('thread/start', {
+        cwd: workDir,
+        approvalPolicy: 'never',
+        sandbox: 'danger-full-access',
+        ephemeral: true,
+        threadSource: 'seo-dungeon',
+        model: codexProfile.model || null
+      });
+      threadId = threadResponse?.thread?.id;
+      if (!threadId) throw new Error('Codex app-server did not return a thread id.');
+
+      const turnParams = {
+        threadId,
+        cwd: workDir,
+        approvalPolicy: 'never',
+        sandboxPolicy: { type: 'dangerFullAccess' },
+        effort: codexProfile.effort,
+        input: codexTextInput(prompt)
+      };
+      if (codexProfile.model) turnParams.model = codexProfile.model;
+      const turnResponse = await request('turn/start', turnParams);
+      turnId = turnResponse?.turn?.id || turnId;
+      if (!turnId) throw new Error('Codex app-server did not return a turn id.');
+      return completion;
+    },
+    steer(text) {
+      return (async () => {
+        await waitForTurnReady();
+        const params = {
+          threadId,
+          expectedTurnId: turnId,
+          input: codexTextInput(text)
+        };
+        let lastError;
+        for (let attempt = 0; attempt < 8; attempt++) {
+          try {
+            const result = await request('turn/steer', params);
+            return {
+              ...(result || {}),
+              targetId: requestId,
+              threadId,
+              turnId,
+              mode: 'codex-app-server'
+            };
+          } catch (err) {
+            lastError = err;
+            const message = String(err.message || '');
+            if (!/no active turn|active turn|expected turn|not steerable/i.test(message) || settled) {
+              break;
+            }
+            await delay(250);
+          }
+        }
+        throw lastError || new Error('Could not steer active Codex turn.');
+      })();
+    },
+    kill(signal = 'SIGTERM') {
+      if (threadId && turnId && !settled) {
+        request('turn/interrupt', { threadId, turnId }).catch(() => {});
+      }
+      setTimeout(() => {
+        if (!child.killed) {
+          try { child.kill(signal); } catch {}
+        }
+      }, 250);
+      if (!settled) settle(settleReject, new Error('Cancelled by user'));
+    }
+  };
+
+  trackProcess(requestId, run);
+  return run;
+}
+
+function runCodexAppServer(prompt, onStream, cwd, requestId, profile, options = {}) {
+  const workDir = cwd || PROJECT_ROOT;
+  const dangerousBypass = normalizeDangerousBypass(options.dangerousBypass);
+  if (!dangerousBypass) {
+    throw new Error('YOLO Mode must be armed before SEO Dungeon can launch Codex.');
+  }
+  const run = createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile, dangerousBypass });
+  return run.start().catch((err) => {
+    try {
+      if (run.child && !run.child.killed) run.child.kill('SIGTERM');
+    } catch {}
+    untrackProcess(requestId);
+    throw err;
+  });
+}
+
 const DEFAULT_TEXT_CLI_MODELS = {
   claude: {
     deep: 'opus',
@@ -1257,7 +1632,7 @@ function runTextCli(runtime, prompt, onStream, cwd, requestId, profile) {
   });
 }
 
-function runCodex(prompt, onStream, cwd, requestId, profile, options = {}) {
+function runCodexExec(prompt, onStream, cwd, requestId, profile, options = {}) {
   const workDir = cwd || PROJECT_ROOT;
   return new Promise((resolve, reject) => {
     const { execPath: cliExec, args: cliArgs } = resolveCodexCli();
@@ -1366,6 +1741,13 @@ function runCodex(prompt, onStream, cwd, requestId, profile, options = {}) {
   });
 }
 
+function runCodex(prompt, onStream, cwd, requestId, profile, options = {}) {
+  if (/^exec$/i.test(String(process.env.SEO_DUNGEON_CODEX_TRANSPORT || ''))) {
+    return runCodexExec(prompt, onStream, cwd, requestId, profile, options);
+  }
+  return runCodexAppServer(prompt, onStream, cwd, requestId, profile, options);
+}
+
 function startBridge() {
   installConsoleFileLogger();
   // Catch crashes only in the live bridge. Tests import this module and should
@@ -1399,9 +1781,11 @@ module.exports = {
   resolveCodexCli,
   resolveTextCli,
   buildCodexExecArgs,
+  runCodex,
   getCodexProfileConfig,
   getTextCliProfileConfig,
   insertPromptArg,
+  steerActiveProcess,
   safeEnv,
   validateProjectPath,
   folderPickerStartPath,

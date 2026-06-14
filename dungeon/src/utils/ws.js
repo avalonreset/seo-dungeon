@@ -117,6 +117,15 @@ export class BridgeClient {
     return Boolean(window.selectedCharacter?.dangerousBypass ?? window.seoDungeonDangerousBypass);
   }
 
+  _activeTurnId() {
+    return this.activeLedgerId ||
+      this.activeAuditId ||
+      this.activeFixId ||
+      this.activeCommitId ||
+      this.activeNarrationId ||
+      null;
+  }
+
   /**
    * Neutral "talk to Codex" - used outside of battle (Demon Lodge /
    * Dungeon Hall / between fights). No demon context, no framing. The
@@ -255,6 +264,27 @@ export class BridgeClient {
         id,
         type: 'open-folder',
         projectPath,
+      }));
+    });
+  }
+
+  /**
+   * Steer the active agent turn without cancelling it or starting a new turn.
+   */
+  steer(text, targetId) {
+    return new Promise((resolve, reject) => {
+      try { this._ensureOpen(); } catch (e) { return reject(e); }
+      const clean = String(text || '').trim();
+      if (!clean) return reject(new Error('Nothing to steer.'));
+      const activeId = targetId || this._activeTurnId();
+      if (!activeId) return reject(new Error('No active turn to steer.'));
+      const id = ++this.requestId;
+      this.handlers.set(id, { resolve, reject });
+      this.ws.send(JSON.stringify({
+        id,
+        type: 'steer',
+        targetId: activeId,
+        command: clean,
       }));
     });
   }

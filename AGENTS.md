@@ -51,6 +51,15 @@ defaults to Codex CLI and can also launch local Claude Code or Gemini CLI
 runtimes, while the bundled SEO engine can be used by compatible terminal
 agents such as Cursor, Cline, Aider, and Antigravity.
 
+## Wiki Knowledge Base
+
+Path: `E:\claude-seo-dungeon-wiki`
+
+When project history, deployment context, audit credential setup, or release
+policy matters, read `NEXT.md` first, then `_index.md`, then the relevant note.
+For audit credential and Railway context, read
+`references/seo-audit-integrations.md`. Keep raw secret values out of the wiki.
+
 ## Overview
 
 The project combines a 16-bit dungeon crawler UI with a Codex-compatible SEO
