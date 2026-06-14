@@ -19,7 +19,7 @@ export class BridgeClient {
   }
 
   _configuredUrl() {
-    const fallback = 'ws://127.0.0.1:3001';
+    const fallback = 'ws://127.0.0.1:3003';
     try {
       const params = new URLSearchParams(window.location.search);
       const fromQuery = params.get('bridge');
@@ -91,6 +91,15 @@ export class BridgeClient {
       this.ws.onmessage = (event) => {
         let data;
         try { data = JSON.parse(event.data); } catch (e) { console.warn('WS: bad JSON', e); return; }
+        if (data.type === 'status') {
+          this._emitAgentStatus(data.status || {}, data.id || null);
+          this.handlers.get(data.id)?.onStatus?.(data.status || {});
+          return;
+        }
+        if (data.type === 'session-event' && !data.id) {
+          this._emitSessionEvent(data.event || {});
+          return;
+        }
         const handler = this.handlers.get(data.id);
         if (handler) {
           if (data.type === 'stream') {
@@ -107,6 +116,22 @@ export class BridgeClient {
         }
       };
     });
+  }
+
+  _emitAgentStatus(status, id = null) {
+    try {
+      window.dispatchEvent(new CustomEvent('seo-dungeon-agent-status', {
+        detail: { ...(status || {}), id }
+      }));
+    } catch (_) {}
+  }
+
+  _emitSessionEvent(event) {
+    try {
+      window.dispatchEvent(new CustomEvent('seo-dungeon-session-event', {
+        detail: event || {}
+      }));
+    } catch (_) {}
   }
 
   _scheduleReconnect() {
@@ -229,10 +254,14 @@ export class BridgeClient {
    * Dungeon Hall / between fights). No demon context, no framing. The
    * message goes to Codex in the user's project directory.
    */
-  chat(text, projectPath, profile, runtime, onStream) {
+  chat(text, projectPath, profile, runtime, onStream, options = {}) {
     if (typeof runtime === 'function') {
       onStream = runtime;
       runtime = undefined;
+    }
+    if (onStream && typeof onStream === 'object') {
+      options = onStream;
+      onStream = undefined;
     }
     return new Promise((resolve, reject) => {
       try { this._ensureOpen(); } catch (e) { return reject(e); }
@@ -247,9 +276,37 @@ export class BridgeClient {
         profile,
         model: profile,
         runtime: this._runtimeFallback(runtime),
-        dangerousBypass: this._dangerousBypassFallback(),
+        dangerousBypass: options.dangerousBypass ?? this._dangerousBypassFallback(),
+        source: options.source || undefined,
+        sourceCommandId: options.commandId || undefined,
       }));
     });
+  }
+
+  publishSessionEvent(event) {
+    return this._requestControl({
+      type: 'session-event',
+      event: event || {},
+    });
+  }
+
+  remoteCommand(command, options = {}) {
+    return this._requestControl({
+      type: 'remote-command',
+      command,
+      ...options,
+    });
+  }
+
+  claimRemoteCommand(commandId) {
+    return this._requestControl({
+      type: 'remote-command-claim',
+      commandId,
+    });
+  }
+
+  sessionState() {
+    return this._requestControl({ type: 'session-state' });
   }
 
   /**

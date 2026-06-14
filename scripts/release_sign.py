@@ -33,7 +33,7 @@ Output schema
 ::
 
     {
-      "version": "v2.0.0",                      # plugin.json version
+      "version": "v2.0.0",                      # .codex-plugin/plugin.json version
       "tag":     "v2.0.0",                      # git tag or "(uncommitted)"
       "commit":  "abc123…",                     # git HEAD
       "generated_at": "2026-05-17T14:32:00Z",
@@ -90,6 +90,10 @@ def _tracked_files() -> list[str]:
     return sorted(line for line in out.splitlines() if line)
 
 
+def _working_tree_dirty() -> bool:
+    return bool(_git_or_none("status", "--porcelain"))
+
+
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
@@ -99,7 +103,7 @@ def _sha256(path: Path) -> str:
 
 
 def _read_plugin_version() -> str:
-    manifest = REPO_ROOT / ".claude-plugin" / "plugin.json"
+    manifest = REPO_ROOT / ".codex-plugin" / "plugin.json"
     try:
         with manifest.open() as fh:
             return json.load(fh).get("version", "unknown")
@@ -127,9 +131,13 @@ def build_manifest(files: Iterable[str] | None = None) -> dict:
     tree_input = "".join(f"{sha}  {path}\n" for path, sha in sorted(hashes.items()))
     tree_sha = hashlib.sha256(tree_input.encode("utf-8")).hexdigest()
 
+    tag = "(uncommitted)" if _working_tree_dirty() else (
+        _git_or_none("describe", "--tags", "--exact-match") or "(uncommitted)"
+    )
+
     return {
         "version": _read_plugin_version(),
-        "tag": _git_or_none("describe", "--tags", "--exact-match") or "(uncommitted)",
+        "tag": tag,
         "commit": _git_or_none("rev-parse", "HEAD") or "(uncommitted)",
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "files": hashes,

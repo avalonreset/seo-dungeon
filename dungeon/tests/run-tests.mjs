@@ -5,14 +5,29 @@
 //   1. Demon manifest - assignment, hierarchy, theme matching, no collisions
 //   2. Battle prompt shape - demon focus header contains every expected field
 //   3. Neutral chat prompt shape - zero framing
-//   4. Asset reachability - every demon frame served from :3000
+//   4. Asset reachability - every demon frame served from :3002
 //   5. Bridge routing - the `chat` type is accepted, `fix` payload validated
 //   6. Playwright smoke - the game page loads, canvas mounts, no JS errors
 
 import { assignAllDemons, POOLS, pickDemonForIssue, getAllDemons } from '../src/demons-manifest.js';
 import http from 'node:http';
+import net from 'node:net';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { chromium } from 'playwright';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const dungeonRoot = path.resolve(__dirname, '..');
+const { appPort, bridgePort } = await resolveSmokePorts();
+const appUrl = `http://127.0.0.1:${appPort}`;
+const bridgeUrl = `http://127.0.0.1:${bridgePort}`;
+const bridgeWs = `ws://127.0.0.1:${bridgePort}`;
+const appOutput = [];
+const bridgeOutput = [];
+let appServer;
+let bridgeServer;
 
 // ───────── harness plumbing ─────────
 let passed = 0, failed = 0;
@@ -24,6 +39,102 @@ function assert(cond, msg) {
   console.log(`  FAIL  ${msg}`);
 }
 function section(name) { console.log(`\n── ${name} ──`); }
+
+async function reserveFreePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      const freePort = typeof address === 'object' && address ? address.port : null;
+      probe.close(() => {
+        if (!freePort) reject(new Error('Unable to allocate a free smoke test port.'));
+        else resolve(freePort);
+      });
+    });
+  });
+}
+
+async function resolveSmokePorts() {
+  const requestedApp = process.env.SEO_DUNGEON_SMOKE_APP_PORT
+    ? Number(process.env.SEO_DUNGEON_SMOKE_APP_PORT)
+    : null;
+  const requestedBridge = process.env.SEO_DUNGEON_SMOKE_BRIDGE_PORT
+    ? Number(process.env.SEO_DUNGEON_SMOKE_BRIDGE_PORT)
+    : null;
+  const app = requestedApp || await reserveFreePort();
+  let bridge = requestedBridge || await reserveFreePort();
+  while (bridge === app && !requestedBridge) bridge = await reserveFreePort();
+  if (bridge === app) throw new Error('Smoke app and bridge ports must be different.');
+  return { appPort: app, bridgePort: bridge };
+}
+
+function spawnNode(args, options) {
+  return spawn(process.execPath, args, {
+    ...options,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+}
+
+async function killTree(child) {
+  if (!child || child.killed || child.exitCode !== null) return;
+  if (process.platform === 'win32') {
+    await new Promise((resolve) => {
+      const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      killer.on('exit', resolve);
+      killer.on('error', resolve);
+    });
+    return;
+  }
+  child.kill('SIGTERM');
+}
+
+async function waitForHttp(url, label, output, proc, timeoutMs = 20000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (proc && proc.exitCode !== null) throw new Error(`${label} exited early:\n${output.join('').slice(-4000)}`);
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(800) });
+      if (res.ok) return res;
+    } catch (_) {}
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error(`Timed out waiting for ${label}:\n${output.join('').slice(-4000)}`);
+}
+
+async function startSmokeServers() {
+  bridgeServer = spawnNode(['server/index.js'], {
+    cwd: dungeonRoot,
+    env: {
+      ...process.env,
+      SEO_DUNGEON_BRIDGE_PORT: String(bridgePort),
+      SEO_DUNGEON_ALLOWED_ORIGINS: appUrl,
+    },
+  });
+  bridgeServer.stdout.on('data', (chunk) => bridgeOutput.push(chunk.toString()));
+  bridgeServer.stderr.on('data', (chunk) => bridgeOutput.push(chunk.toString()));
+
+  const viteBin = path.join(dungeonRoot, 'node_modules', 'vite', 'bin', 'vite.js');
+  appServer = spawnNode([viteBin, '--host', '127.0.0.1', '--port', String(appPort), '--strictPort'], {
+    cwd: dungeonRoot,
+    env: { ...process.env },
+  });
+  appServer.stdout.on('data', (chunk) => appOutput.push(chunk.toString()));
+  appServer.stderr.on('data', (chunk) => appOutput.push(chunk.toString()));
+
+  await waitForHttp(`${bridgeUrl}/health`, 'bridge', bridgeOutput, bridgeServer);
+  await waitForHttp(appUrl, 'app', appOutput, appServer);
+}
+
+async function stopSmokeServers() {
+  await killTree(appServer);
+  await killTree(bridgeServer);
+}
 
 // ───────── 1. Demon manifest ─────────
 section('1. Demon manifest');
@@ -187,19 +298,21 @@ import('node:fs').then(async (fs) => {
   assert(serverSrc.includes("ALLOWED_TYPES") && serverSrc.match(/'chat'/), 'chat should be in allowed types');
 
   // ───────── 3. Asset reachability ─────────
-  section('3. Asset reachability (game server :3000)');
+  await startSmokeServers();
+
+  section(`3. Asset reachability (game server :${appPort})`);
   const chars = ['big_demon', 'ogre', 'orc_warrior', 'big_zombie', 'skelet',
     'chort', 'masked_orc', 'pumpkin_dude', 'orc_shaman', 'imp', 'wogol',
     'goblin', 'tiny_zombie'];
   for (const c of chars) {
     for (let f = 0; f < 4; f++) {
-      const url = `http://localhost:3000/assets/0x72/frames/${c}_idle_anim_f${f}.png`;
+      const url = `${appUrl}/assets/0x72/frames/${c}_idle_anim_f${f}.png`;
       const code = await httpCode(url);
       assert(code === 200, `${c} frame ${f} should serve 200, got ${code}`);
     }
   }
   // The old DCSS assets should NO LONGER be served
-  const deadUrl = 'http://localhost:3000/assets/demons-new/boss/cerebov.png';
+  const deadUrl = `${appUrl}/assets/demons-new/boss/cerebov.png`;
   const deadCode = await httpCode(deadUrl);
   assert(deadCode === 404 || deadCode === 200 /* SPA fallback */, `dead DCSS asset reachable-or-SPA-404: got ${deadCode}`);
   // (serve -s falls back to index.html for unknowns, so 200 is expected
@@ -207,7 +320,7 @@ import('node:fs').then(async (fs) => {
   // why we removed the refs entirely.)
 
   // ───────── 4. Bridge routing: chat type accepted ─────────
-  section('4. Bridge routing (ws://127.0.0.1:3001)');
+  section(`4. Bridge routing (${bridgeWs})`);
   await testBridgeType('chat',   /chat/i,   'chat handler should accept the type');
   await testBridgeType('fix',    /fix/i,    'fix handler should accept the type');
   await testBridgeType('audit',  /audit/i,  'audit handler should accept the type');
@@ -224,9 +337,11 @@ import('node:fs').then(async (fs) => {
   if (failed > 0) {
     console.log('\n  Failures:');
     for (const f of fails) console.log('    ✗ ' + f);
+    await stopSmokeServers();
     process.exit(1);
   } else {
     console.log(`  All clear.`);
+    await stopSmokeServers();
     process.exit(0);
   }
 });
@@ -242,7 +357,7 @@ function httpCode(url) {
 
 function testBridgeType(type, expectHandlerLog, msg) {
   return new Promise((resolve) => {
-    const ws = new WebSocket('ws://127.0.0.1:3001', { origin: 'http://localhost:3000' });
+    const ws = new WebSocket(bridgeWs, { origin: appUrl });
     let gotReply = false;
     const timeout = setTimeout(() => {
       if (!gotReply) { assert(false, `${msg} - timeout waiting for reply`); }
@@ -275,7 +390,7 @@ function testBridgeType(type, expectHandlerLog, msg) {
 
 function testBridgeRejects(type, msg) {
   return new Promise((resolve) => {
-    const ws = new WebSocket('ws://127.0.0.1:3001', { origin: 'http://localhost:3000' });
+    const ws = new WebSocket(bridgeWs, { origin: appUrl });
     const timeout = setTimeout(() => {
       assert(false, `${msg} - timeout`);
       try { ws.terminate(); } catch {}
@@ -305,7 +420,7 @@ async function smokeTest() {
     const pageErrors = [];
     page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
     page.on('pageerror', (e) => { pageErrors.push(e.message); });
-    await page.goto('http://localhost:3000/', { waitUntil: 'networkidle', timeout: 15000 });
+    await page.goto(`${appUrl}/?bridge=${encodeURIComponent(bridgeWs)}`, { waitUntil: 'networkidle', timeout: 15000 });
     // Title screen is HTML, Phaser canvas mounts after a user clicks Start.
     // For smoke, just confirm the page rendered and bundle evaluated cleanly.
     const title = await page.title();
@@ -314,7 +429,7 @@ async function smokeTest() {
     assert(!!hasStart, 'title screen UI (start button or domain input) should be present');
     // Critical: no JS errors at boot
     const nonFatalNoise = consoleErrors.filter((t) =>
-      !/ws:\/\/127\.0\.0\.1:3001/i.test(t) &&         // bridge-not-yet-started ws noise is fine at early boot
+      !/ws:\/\/127\.0\.0\.1:\d+/i.test(t) &&         // bridge-not-yet-started ws noise is fine at early boot
       !/favicon/i.test(t) &&
       !/manifest\.json/i.test(t)
     );

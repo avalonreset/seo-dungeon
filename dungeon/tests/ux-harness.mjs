@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -8,9 +9,7 @@ import { chromium } from 'playwright';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dungeonRoot = path.resolve(__dirname, '..');
-const basePort = 5520 + (process.pid % 400);
-const bridgePort = Number(process.env.SEO_DUNGEON_UX_BRIDGE_PORT || basePort);
-const vitePort = Number(process.env.SEO_DUNGEON_UX_VITE_PORT || (basePort + 1));
+const { bridgePort, vitePort } = await resolveUxPorts();
 const origin = `http://127.0.0.1:${vitePort}`;
 const bridgeWs = `ws://127.0.0.1:${bridgePort}`;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-dungeon-ux-'));
@@ -21,6 +20,40 @@ const viteOutput = [];
 let bridge;
 let vite;
 let browser;
+
+async function reserveFreePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      const freePort = typeof address === 'object' && address ? address.port : null;
+      probe.close(() => {
+        if (!freePort) reject(new Error('Unable to allocate a free UX test port.'));
+        else resolve(freePort);
+      });
+    });
+  });
+}
+
+async function resolveUxPorts() {
+  const requestedBridge = process.env.SEO_DUNGEON_UX_BRIDGE_PORT
+    ? Number(process.env.SEO_DUNGEON_UX_BRIDGE_PORT)
+    : null;
+  const requestedVite = process.env.SEO_DUNGEON_UX_VITE_PORT
+    ? Number(process.env.SEO_DUNGEON_UX_VITE_PORT)
+    : null;
+  const bridge = requestedBridge || await reserveFreePort();
+  let vitePortCandidate = requestedVite || await reserveFreePort();
+  while (vitePortCandidate === bridge && !requestedVite) {
+    vitePortCandidate = await reserveFreePort();
+  }
+  if (vitePortCandidate === bridge) {
+    throw new Error('SEO_DUNGEON_UX_BRIDGE_PORT and SEO_DUNGEON_UX_VITE_PORT must be different.');
+  }
+  return { bridgePort: bridge, vitePort: vitePortCandidate };
+}
 
 fs.mkdirSync(projectPath, { recursive: true });
 fs.writeFileSync(path.join(projectPath, 'README.md'), '# SEO Dungeon UX Test\n', 'utf8');
@@ -78,8 +111,9 @@ rl.on('line', (line) => {
   if (msg.method === 'turn/start') {
     const turnId = 'turn_' + nextTurn++;
     const promptText = textFromInput(msg.params && msg.params.input);
-    const completeDelay = promptText.includes('Initial battle harness prompt.')
-      ? 12000
+    const completeDelay = promptText.includes('Initial battle harness prompt.') ||
+      promptText.includes('Second prompt that will be stopped.')
+      ? 30000
       : 6200;
     const turn = { id: turnId, completed: false, timers: [] };
     turns.set(turnId, turn);
@@ -193,6 +227,17 @@ async function queueTexts(page) {
   return page.locator('.prompt-queue-item .prompt-queue-text').evaluateAll((nodes) => nodes.map((node) => node.textContent || ''));
 }
 
+async function waitForQueueText(page, text, label, timeoutMs = 8000) {
+  await page.waitForFunction((expected) => {
+    const state = window.__seoDungeonDialogueState?.();
+    return state?.queue?.some((item) => item.text === expected);
+  }, text, { timeout: timeoutMs }).catch(async (err) => {
+    const state = await page.evaluate(() => window.__seoDungeonDialogueState?.()).catch(() => null);
+    const ledger = await ledgerTexts(page).catch(() => []);
+    throw new Error(`${label}: ${err.message}\nstate=${JSON.stringify(state)}\nledger=${ledger.join('\n')}`);
+  });
+}
+
 async function expectNoStreamWordSpam(page) {
   const texts = await ledgerTexts(page);
   const spamWords = new Set(["I'll", 'verify', 'this', 'against', 'the', 'live', 'repo', 'but', 'there', 'are', 'un', 'comm', 'itted']);
@@ -296,12 +341,12 @@ async function runBattleLedgerHarness(context) {
   assert.deepEqual(await queueTexts(page), [], 'steered prompt should leave the queue immediately');
 
   await fillAndSubmit(page, 'Queued after a successful steer.');
+  await waitForQueueText(page, 'Queued after a successful steer.', 'post-steer prompt should queue before stop');
   await page.locator('#log-stop').click();
   await page.waitForFunction(() => document.querySelector('#prompt-queue-title')?.textContent === 'Held');
   assert.deepEqual(await queueTexts(page), ['Queued after a successful steer.'], 'stop after steer should hold the later queued prompt only');
 
   await page.locator('#prompt-queue-steer').click();
-  await waitForLog(page, /Submitted held prompt\./i, 'post-steer held prompt submission');
   assert.deepEqual(await queueTexts(page), [], 'post-steer held prompt should leave queue when submitted');
   await waitForLog(page, /> Queued after a successful steer\./i, 'post-steer held prompt becomes active user line');
   await waitForLog(page, /I'll verify this against the live repo\./i, 'post-steer held coalesced stream');
@@ -312,12 +357,12 @@ async function runBattleLedgerHarness(context) {
   await waitForLog(page, /channels the agent/i, 'second battle fix started');
   await fillAndSubmit(page, 'Hold this prompt after stop.');
   await page.locator('#prompt-queue-panel.open').waitFor({ timeout: 5000 });
+  await waitForQueueText(page, 'Hold this prompt after stop.', 'second prompt should queue before stop');
   await page.locator('#log-stop').click();
   await page.waitForFunction(() => document.querySelector('#prompt-queue-title')?.textContent === 'Held');
   assert.deepEqual(await queueTexts(page), ['Hold this prompt after stop.'], 'stop should hold queued prompt instead of orphaning it');
 
   await page.locator('#prompt-queue-steer').click();
-  await waitForLog(page, /Submitted held prompt\./i, 'held prompt submission');
   assert.deepEqual(await queueTexts(page), [], 'submitted held prompt should leave queue');
   await waitForLog(page, /> Hold this prompt after stop\./i, 'held prompt becomes active user line');
   await waitForLog(page, /I'll verify this against the live repo\./i, 'second coalesced agent stream');

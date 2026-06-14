@@ -35,6 +35,29 @@ const envKeys = [
 const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-dungeon-cli-'));
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function cleanupTempDir(dir) {
+  let lastError;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      fs.rmSync(dir, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+      return;
+    } catch (err) {
+      lastError = err;
+      await delay(250);
+    }
+  }
+  console.warn(`Warning: could not remove temp test directory ${dir}: ${lastError.message}`);
+}
+
 function restoreEnv() {
   for (const [key, value] of Object.entries(savedEnv)) {
     if (value === undefined) delete process.env[key];
@@ -250,7 +273,7 @@ exit $LASTEXITCODE
   );
 
   delete process.env.SEO_DUNGEON_ALLOW_NO_ORIGIN;
-  assert.equal(bridge.isAllowedOrigin('http://localhost:3000'), true);
+  assert.equal(bridge.isAllowedOrigin('http://localhost:3002'), true);
   assert.equal(bridge.isAllowedOrigin('http://evil.test:3000'), false);
   assert.equal(bridge.isAllowedOrigin(undefined), false);
   process.env.SEO_DUNGEON_ALLOW_NO_ORIGIN = '1';
@@ -279,5 +302,5 @@ exit $LASTEXITCODE
   console.log('CLI launcher tests passed');
 } finally {
   restoreEnv();
-  fs.rmSync(tmp, { recursive: true, force: true });
+  await cleanupTempDir(tmp);
 }

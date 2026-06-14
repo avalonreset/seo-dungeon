@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -8,12 +9,42 @@ import { WebSocket } from 'ws';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dungeonRoot = path.resolve(__dirname, '..');
-const port = Number(process.env.SEO_DUNGEON_LIVE_BRIDGE_TEST_PORT || (5310 + (process.pid % 1000)));
-const origin = `http://127.0.0.1:${port + 1}`;
+const { port, appPort } = await resolveLiveBridgePorts();
+const origin = `http://127.0.0.1:${appPort}`;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-dungeon-live-bridge-'));
 const fakeCodexAppServer = path.join(tmp, 'fake-codex-app-server.cjs');
 const bridgeOutput = [];
 let bridge;
+
+async function reserveFreePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      const freePort = typeof address === 'object' && address ? address.port : null;
+      probe.close(() => {
+        if (!freePort) reject(new Error('Unable to allocate a free live bridge test port.'));
+        else resolve(freePort);
+      });
+    });
+  });
+}
+
+async function resolveLiveBridgePorts() {
+  const requestedBridge = process.env.SEO_DUNGEON_LIVE_BRIDGE_TEST_PORT
+    ? Number(process.env.SEO_DUNGEON_LIVE_BRIDGE_TEST_PORT)
+    : null;
+  const requestedApp = process.env.SEO_DUNGEON_LIVE_BRIDGE_TEST_APP_PORT
+    ? Number(process.env.SEO_DUNGEON_LIVE_BRIDGE_TEST_APP_PORT)
+    : null;
+  const bridge = requestedBridge || await reserveFreePort();
+  let app = requestedApp || await reserveFreePort();
+  while (app === bridge && !requestedApp) app = await reserveFreePort();
+  if (app === bridge) throw new Error('Live bridge and app origin ports must be different.');
+  return { port: bridge, appPort: app };
+}
 
 fs.writeFileSync(fakeCodexAppServer, `
 const readline = require('node:readline');
@@ -31,6 +62,10 @@ const textFromInput = (input) => {
   return input.map((item) => item && item.text ? item.text : '').join('\\n').trim();
 };
 const tinyDeltas = ["I'll", " verify", " this", " against", " the", " live", " repo", "."];
+const splitDeltas = [
+  " The quick npm exec probe did not expose Playwright as a requireable package, so I am checking whether craw",
+  "lers can see the FAQ text immediately."
+];
 
 rl.on('line', (line) => {
   const msg = JSON.parse(line);
@@ -58,9 +93,25 @@ rl.on('line', (line) => {
     }, 450);
     setTimeout(() => {
       if (completed) return;
+      send({ method: 'context/compaction/started', params: { message: 'Auto-compacting context' } });
+    }, 650);
+    setTimeout(() => {
+      if (completed) return;
+      send({ method: 'context/compaction/completed', params: { message: 'Context compaction complete' } });
+    }, 1100);
+    setTimeout(() => {
+      if (completed) return;
+      send({ method: 'item/agentMessage/delta', params: { delta: splitDeltas[0] } });
+    }, 850);
+    setTimeout(() => {
+      if (completed) return;
+      send({ method: 'item/agentMessage/delta', params: { delta: splitDeltas[1] } });
+    }, 2300);
+    setTimeout(() => {
+      if (completed) return;
       completed = true;
       send({ method: 'turn/completed', params: { turn: { id: 'turn_fake', status: 'completed' } } });
-    }, 2000);
+    }, 3000);
     return;
   }
   if (msg.method === 'turn/steer') {
@@ -213,6 +264,14 @@ try {
   const streamLines = messagesA
     .filter((msg) => msg.type === 'stream')
     .map((msg) => String(msg.content || ''));
+  const compactionStatuses = messagesA
+    .filter((msg) => msg.type === 'status' && msg.status?.kind === 'compaction')
+    .map((msg) => msg.status.phase);
+  assert.deepEqual(
+    compactionStatuses,
+    ['start', 'complete'],
+    `bridge should forward compaction status without transcript hacks: ${JSON.stringify(messagesA, null, 2)}`
+  );
   assert(
     streamLines.some((line) => line.includes("I'll verify this against the live repo.")),
     `tiny deltas should be coalesced into a readable line: ${JSON.stringify(streamLines)}`
@@ -220,6 +279,14 @@ try {
   assert(
     !streamLines.some((line) => /^(I'll|verify|this|against|the|live|repo)$/i.test(line.trim())),
     `stream should not render one-word ledger spam: ${JSON.stringify(streamLines)}`
+  );
+  assert(
+    streamLines.some((line) => line.includes('The quick npm exec probe did not expose Playwright as a requireable package, so I am checking whether crawlers can see the FAQ text immediately.')),
+    `paused partial words should remain one readable stream line: ${JSON.stringify(streamLines)}`
+  );
+  assert(
+    !streamLines.some((line) => /\bcraw$/i.test(line.trim()) || /^lers\b/i.test(line.trim())),
+    `stream should not split a paused partial word into separate ledger lines: ${JSON.stringify(streamLines)}`
   );
   assert(
     streamLines.some((line) => line.includes('STEERED_OK steered follow-up')),

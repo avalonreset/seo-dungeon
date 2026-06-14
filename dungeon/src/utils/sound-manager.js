@@ -262,6 +262,12 @@ const sounds = {
     setTimeout(() => osc('triangle', 880, 0.2, 0.08), 300);
   },
 
+  ledgerReady: () => {
+    osc('triangle', 392, 0.09, 0.07);
+    setTimeout(() => osc('sine', 523, 0.12, 0.06), 75);
+    setTimeout(() => osc('triangle', 659, 0.16, 0.05), 150);
+  },
+
   flee: () => {
     osc('square', 400, 0.06, 0.12);
     setTimeout(() => osc('square', 350, 0.06, 0.1), 60);

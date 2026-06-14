@@ -1,16 +1,36 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dungeonRoot = path.resolve(__dirname, '..');
-const port = Number(process.env.SEO_DUNGEON_DIALOGUE_TEST_PORT || (4175 + (process.pid % 1000)));
+const port = await resolveDialoguePort();
 const baseUrl = `http://127.0.0.1:${port}/`;
 
 let server;
 const serverOutput = [];
+
+async function resolveDialoguePort() {
+  if (process.env.SEO_DUNGEON_DIALOGUE_TEST_PORT) {
+    return Number(process.env.SEO_DUNGEON_DIALOGUE_TEST_PORT);
+  }
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      const freePort = typeof address === 'object' && address ? address.port : null;
+      probe.close(() => {
+        if (!freePort) reject(new Error('Unable to allocate a free dialogue test port.'));
+        else resolve(freePort);
+      });
+    });
+  });
+}
 
 function runServer() {
   const viteBin = path.join(dungeonRoot, 'node_modules', 'vite', 'bin', 'vite.js');
@@ -174,6 +194,7 @@ async function installBridgeHarness(page) {
 
     window.__dialogueHarness = harness;
     bridge._setConnected(true);
+    setTimeout(() => bridge._setConnected(true), 0);
   });
 }
 
@@ -184,19 +205,26 @@ async function submitPrompt(page, text) {
 }
 
 async function callTexts(page) {
+  await waitForHarness(page);
   return page.evaluate(() => window.__dialogueHarness.calls.map((call) => call.text));
 }
 
 async function cancelledIds(page) {
+  await waitForHarness(page);
   return page.evaluate(() => window.__dialogueHarness.cancelled.slice());
 }
 
 async function steeredTexts(page) {
+  await waitForHarness(page);
   return page.evaluate(() => window.__dialogueHarness.steered.map((entry) => entry.text));
 }
 
 async function queueCount(page) {
   return page.locator('.prompt-queue-item').count();
+}
+
+async function separatorCount(page) {
+  return page.locator('.log-separator').count();
 }
 
 async function waitForQueueCount(page, count) {
@@ -241,6 +269,11 @@ async function logTexts(page) {
   return page.locator('.log-line .log-text').evaluateAll((nodes) => nodes.map((node) => node.textContent || ''));
 }
 
+async function genericQueueLogCount(page) {
+  const texts = await logTexts(page);
+  return texts.filter((text) => /^(Prompt queued|Prompt returned|Submitted held|Submitted queued|Steered active turn|Queue cleared|Removed queued|Updated queued)/i.test(text.trim())).length;
+}
+
 async function waitForLog(page, matcher, label, timeoutMs = 5000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -255,35 +288,47 @@ async function waitForDialogueReady(page) {
   await page.waitForFunction(() => window.__seoDungeonDialogueReady === true);
 }
 
+async function waitForHarness(page) {
+  await page.waitForFunction(() => Boolean(window.__dialogueHarness), null, { timeout: 5000 });
+}
+
 async function resolveOldest(page, summary = 'done') {
+  await waitForHarness(page);
   return page.evaluate((value) => window.__dialogueHarness.resolveOldest(value), summary);
 }
 
 async function setConnected(page, value) {
+  await waitForHarness(page);
   await page.evaluate((next) => window.__dialogueHarness.setConnected(next), value);
 }
 
 async function setBusy(page, value) {
+  await waitForHarness(page);
   await page.evaluate((next) => window.__dialogueHarness.setBusy(next), value);
 }
 
 async function setNarrationBusy(page, value) {
+  await waitForHarness(page);
   await page.evaluate((next) => window.__dialogueHarness.setNarrationBusy(next), value);
 }
 
 async function failNextSteer(page) {
+  await waitForHarness(page);
   await page.evaluate(() => window.__dialogueHarness.setFailNextSteer());
 }
 
 async function setSteerSupport(page, value) {
+  await waitForHarness(page);
   await page.evaluate((next) => window.__dialogueHarness.setSteerSupport(next), value);
 }
 
 async function setFolderResult(page, result) {
+  await waitForHarness(page);
   await page.evaluate((next) => window.__dialogueHarness.setFolderResult(next), result);
 }
 
 async function setFolderFailure(page, message) {
+  await waitForHarness(page);
   await page.evaluate((next) => window.__dialogueHarness.setFolderFailure(next), message);
 }
 
@@ -301,10 +346,13 @@ try {
   await waitForServer();
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  await page.addInitScript(() => {
+    window.__SEO_DUNGEON_WATCHDOG_MS = 120;
+  });
   const consoleErrors = [];
   const pageErrors = [];
   page.on('console', (msg) => {
-    if (msg.type() === 'error' && !/ws:\/\/127\.0\.0\.1:3001|favicon/i.test(msg.text())) {
+    if (msg.type() === 'error' && !/ws:\/\/127\.0\.0\.1:3003|favicon/i.test(msg.text())) {
       consoleErrors.push(msg.text());
     }
   });
@@ -315,11 +363,56 @@ try {
   await waitForDialogueReady(page);
   await installBridgeHarness(page);
 
+  await page.evaluate(async () => {
+    const { addLog, flushLogQueue } = await import('/src/activity-log.js');
+    for (let i = 0; i < 15; i += 1) {
+      addLog(`[command: fixture ${i}]`, { immediate: true });
+    }
+    flushLogQueue();
+  });
+  assert.equal(await separatorCount(page), 0, 'ordinary command volume should not create arbitrary ledger separators');
+  await page.evaluate(async () => {
+    const { addLog, flushLogQueue } = await import('/src/activity-log.js');
+    addLog('[Complete]', { immediate: true });
+    flushLogQueue();
+  });
+  await page.waitForFunction(() => document.querySelectorAll('.log-separator').length === 1);
+  assert.equal(await separatorCount(page), 1, 'completion should create one logical ledger separator');
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('seo-dungeon-agent-status', {
+      detail: {
+        kind: 'compaction',
+        phase: 'start',
+        message: 'Compacting context. Preserving the trail before the hunt continues.'
+      }
+    }));
+  });
+  await page.locator('#compaction-overlay.open').waitFor({ timeout: 3000 });
+  assert.match(await page.locator('#compaction-overlay .compaction-title').textContent(), /Compressing the Scroll/i, 'compaction overlay should name the context compression state');
+  assert.equal(await page.locator('.log-line.compact').count(), 1, 'compaction should render as its own ledger category');
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('seo-dungeon-agent-status', {
+      detail: {
+        kind: 'compaction',
+        phase: 'complete',
+        message: 'Context compaction complete. The hunt continues.'
+      }
+    }));
+  });
+  await page.waitForFunction(() => !document.querySelector('#compaction-overlay')?.classList.contains('open'), null, { timeout: 3000 });
+  assert.equal(await separatorCount(page), 1, 'compaction completion should not create a fake turn separator');
+
   assert.equal(await page.locator('#danger-mode-toggle').getAttribute('aria-pressed'), 'false', 'YOLO should start disarmed on every fresh app boot');
   await page.locator('#domain-input').fill('seodungeon.com');
   await page.locator('#path-input').fill('E:\\seo-dungeon-website');
   assert.equal(await page.locator('#descend-btn').isDisabled(), true, 'launch should stay disabled until YOLO is armed');
   await page.locator('#danger-mode-toggle').click();
+  await page.evaluate(async () => {
+    const { bridge } = await import('/src/utils/ws.js');
+    bridge._setConnected(true);
+  });
+  await page.waitForFunction(() => !document.querySelector('#descend-btn')?.disabled, null, { timeout: 3000 });
   assert.equal(await page.locator('#descend-btn').isDisabled(), false, 'launch should enable when domain, path, bridge, and YOLO are ready');
   await page.locator('#danger-mode-toggle').click();
   assert.equal(await page.locator('#descend-btn').isDisabled(), true, 'launch should disable again if YOLO is disarmed');
@@ -393,6 +486,35 @@ try {
   assert.equal(await page.locator('#log-input-bar #log-stop').count(), 1, 'input bar should expose the stop button');
   assert.equal(await page.locator('#log-input-bar #log-submit').count(), 1, 'input bar should expose the send/queue button');
   assert.equal(await page.locator('#log-input-bar #prompt-queue-steer').count(), 0, 'input bar should not expose queue/steer buttons');
+  assert.equal(await page.locator('#ledger-remote-status').isHidden(), true, 'remote status chip should be hidden while idle');
+  assert.equal(await page.locator('#log-input-bar #ledger-remote-status').count(), 0, 'remote status chip should stay in the ledger header');
+  await page.setViewportSize({ width: 820, height: 720 });
+  const remoteHeaderBoxes = await page.evaluate(() => {
+    const panel = document.querySelector('#log-panel');
+    const chip = document.querySelector('#ledger-remote-status');
+    const title = document.querySelector('#log-header h2');
+    const toggle = document.querySelector('#ledger-toggle');
+    panel.style.width = '260px';
+    panel.style.minWidth = '260px';
+    panel.style.maxWidth = '260px';
+    chip.hidden = false;
+    chip.className = 'remote-running';
+    chip.querySelector('.ledger-remote-label').textContent = 'Remote';
+    const box = (node) => {
+      const rect = node.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    };
+    const result = { chip: box(chip), title: box(title), toggle: box(toggle) };
+    chip.hidden = true;
+    panel.style.width = '';
+    panel.style.minWidth = '';
+    panel.style.maxWidth = '';
+    return result;
+  });
+  const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  assert.equal(overlaps(remoteHeaderBoxes.chip, remoteHeaderBoxes.toggle), false, 'remote status chip should not overlap ledger toggle');
+  assert.equal(overlaps(remoteHeaderBoxes.chip, remoteHeaderBoxes.title), false, 'remote status chip should not overlap Guild Ledger title at narrow width');
+  await page.setViewportSize({ width: 1280, height: 720 });
   assert.equal(await page.locator('#log-stop').isVisible(), false, 'stop should be hidden while idle');
   assert.equal(await page.locator('#log-submit').isVisible(), false, 'send should be hidden until there is composer text');
 
@@ -406,12 +528,216 @@ try {
   await submitPrompt(page, 'Idle direct command');
   await waitForCalls(page, 1);
   await waitForUserLine(page, 'Idle direct command');
+  await page.waitForFunction(() => document.querySelectorAll('.log-line.latest.active-output').length === 1);
   assert.equal(await page.locator('#log-stop').isVisible(), true, 'stop should show while the agent is running');
   assert.equal(await page.locator('#prompt-queue-panel').isVisible(), false, 'queue panel should stay hidden while running with no queued prompts');
   assert.equal(await queueCount(page), 0, 'idle submit should not create a queued item');
+  await page.waitForTimeout(260);
+  assert.equal(await page.locator('#log-input-bar').evaluate((node) => node.classList.contains('running')), true, 'watchdog should not hide running state while a bridge request is still active');
+  assert.equal(await page.locator('.log-line.latest.active-output').count(), 1, 'watchdog should keep the active output glow while a bridge request is still active');
   await resolveOldest(page, 'idle complete');
   await waitForUiIdle(page);
+  assert.equal(await page.locator('.log-line.active-output').count(), 0, 'active read-glow marker should clear after the agent settles');
   assert.equal(await page.locator('#log-stop').isVisible(), false, 'stop should hide after the agent settles');
+
+  await page.evaluate(async () => {
+    const { addLog } = await import('/src/activity-log.js');
+    document.querySelector('#log-content')?.classList.remove('ledger-idle');
+    addLog('First active transition probe ' + 'alpha '.repeat(40));
+  });
+  await page.waitForFunction(() => {
+    const active = document.querySelector('.log-line.latest.active-output .log-text');
+    return active?.textContent.includes('First active transition probe');
+  });
+  await page.evaluate(async () => {
+    const { addLog } = await import('/src/activity-log.js');
+    addLog('Second active transition probe ' + 'beta '.repeat(180));
+  });
+  await page.waitForFunction(() => {
+    const activeLines = Array.from(document.querySelectorAll('.log-line.latest.active-output'));
+    const firstStillActive = Array.from(document.querySelectorAll('.log-line.active-output'))
+      .some((line) => line.textContent.includes('First active transition probe'));
+    const active = activeLines[0];
+    return activeLines.length === 1 &&
+      active?.classList.contains('typing') &&
+      active.textContent.includes('Second active transition probe') &&
+      !firstStillActive;
+  }, null, { timeout: 8000 });
+  assert.equal(await page.locator('.log-line.latest.active-output').count(), 1, 'only the newest printing ledger line should keep the active glow');
+  assert.equal(await page.locator('.log-line.active-output').filter({ hasText: 'First active transition probe' }).count(), 0, 'previous active line should lose the glow as soon as the next line begins');
+
+  const motionState = await page.evaluate(async () => {
+    const activeText = document.querySelector('.log-line.latest.active-output .log-text');
+    const before = getComputedStyle(activeText).backgroundPosition;
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const style = getComputedStyle(activeText);
+    const activeLine = document.querySelector('.log-line.latest.active-output');
+    return {
+      counts: {
+        latest: document.querySelectorAll('.log-line.latest').length,
+        activeOutput: document.querySelectorAll('.log-line.active-output').length,
+        latestActiveOutput: document.querySelectorAll('.log-line.latest.active-output').length,
+        dots: document.querySelectorAll('.log-dots').length,
+      },
+      vars: {
+        ink: getComputedStyle(activeLine).getPropertyValue('--ledger-ink').trim(),
+        soft: getComputedStyle(activeLine).getPropertyValue('--ledger-soft').trim(),
+        hot: getComputedStyle(activeLine).getPropertyValue('--ledger-hot').trim(),
+        glow: getComputedStyle(activeLine).getPropertyValue('--ledger-glow-rgb').trim(),
+      },
+      before,
+      after: style.backgroundPosition,
+      backgroundImage: style.backgroundImage,
+      backgroundSize: style.backgroundSize,
+      animationName: style.animationName,
+      animationIterationCount: style.animationIterationCount,
+      animations: activeText.getAnimations().map((animation) => ({
+        name: animation.animationName || '',
+        playState: animation.playState,
+        currentTime: animation.currentTime,
+        duration: animation.effect?.getTiming?.().duration ?? null,
+      })),
+      backgroundRepeat: style.backgroundRepeat,
+      textShadow: style.textShadow,
+      fillColor: style.webkitTextFillColor,
+    };
+  });
+  assert.deepEqual(motionState.counts, {
+    latest: 1,
+    activeOutput: 1,
+    latestActiveOutput: 1,
+    dots: 1,
+  }, 'active output should own exactly one latest marker, one glow marker, and one trailing dots marker');
+  for (const [name, value] of Object.entries(motionState.vars)) {
+    assert(value, `active glow should expose ${name} color variable`);
+  }
+  assert(motionState.backgroundImage.includes('linear-gradient'), 'active glow should use a visible text gradient');
+  assert.equal(motionState.backgroundSize, '340% 100%', 'active glow should use the intended sweep width');
+  assert(motionState.animationName.includes('activeReadGlow'), 'active output should run the glow sweep animation');
+  assert(motionState.animationName.includes('activeReadBreath'), 'active output should run the subtle breathing animation');
+  assert(motionState.animationIterationCount.includes('infinite'), 'active glow should loop continuously');
+  assert(motionState.animations.some((animation) => animation.name === 'activeReadGlow' && animation.playState === 'running'), 'Web Animations API should report the active glow as running');
+  assert(motionState.animations.some((animation) => animation.name === 'activeReadBreath' && animation.playState === 'running'), 'Web Animations API should report the active breath as running');
+  assert.notEqual(motionState.before, motionState.after, 'active glow background position should keep moving while output is live');
+  assert.equal(motionState.backgroundRepeat, 'no-repeat', 'active glow should sweep once across the text instead of tiling awkwardly');
+  assert.notEqual(motionState.textShadow, 'none', 'active glow should include a category-colored neon shadow');
+  assert(/transparent|rgba\(0, 0, 0, 0\)/i.test(motionState.fillColor), 'active glow should clip the gradient through transparent text fill');
+  const activeKeyframes = await page.evaluate(() => {
+    const names = [];
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules = [];
+      try {
+        rules = Array.from(sheet.cssRules || []);
+      } catch {
+        continue;
+      }
+      for (const rule of rules) {
+        if (rule.type === CSSRule.KEYFRAMES_RULE && /^activeRead(Glow|Breath)$/.test(rule.name)) {
+          names.push(rule.name);
+        }
+      }
+    }
+    return names.sort();
+  });
+  assert.deepEqual(activeKeyframes, ['activeReadBreath', 'activeReadGlow'], 'active glow keyframes should be defined exactly once');
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const reducedMotionState = await page.evaluate(async () => {
+    const { addLog } = await import('/src/activity-log.js');
+    document.querySelector('#log-content')?.classList.remove('ledger-idle');
+    addLog('[Read] reduced motion active probe', { immediate: true });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const activeText = document.querySelector('.log-line.latest.active-output .log-text');
+    const style = getComputedStyle(activeText);
+    return {
+      activeOutput: document.querySelectorAll('.log-line.latest.active-output').length,
+      backgroundImage: style.backgroundImage,
+      animationName: style.animationName,
+      textShadow: style.textShadow,
+      animations: activeText.getAnimations().map((animation) => ({
+        name: animation.animationName || '',
+        playState: animation.playState,
+      })),
+    };
+  });
+  assert.equal(reducedMotionState.activeOutput, 1, 'reduced motion should preserve the semantic active-output marker');
+  assert.equal(reducedMotionState.backgroundImage, 'none', 'reduced motion should disable the active glow gradient');
+  assert.equal(reducedMotionState.animationName, 'none', 'reduced motion should disable active text animation');
+  assert.equal(reducedMotionState.textShadow, 'none', 'reduced motion should disable active neon shadow');
+  assert.equal(reducedMotionState.animations.length, 0, 'reduced motion should not leave active glow animations running');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+  const activeStyleProbes = await page.evaluate(async () => {
+    const { addLog } = await import('/src/activity-log.js');
+    const probes = [
+      ['[Read] active color probe', true],
+      ['[Bash] active color probe', true],
+      ['[Agent] active color probe', true],
+      ['[Write] active color probe', true],
+      ['[WebFetch] active color probe', true],
+      ['Stopped active color probe', true],
+      ['vanquish active color probe', true],
+      ['> user color probe', false],
+      ['Queued prompt color probe', false],
+      ['System color probe', false],
+      ['ERROR color probe', false],
+      ['[Complete]', false],
+    ];
+    const rows = [];
+    for (const [text, expectedActive] of probes) {
+      document.querySelector('#log-content')?.classList.remove('ledger-idle');
+      addLog(text, { immediate: true });
+      const latest = document.querySelector('.log-line.latest');
+      rows.push({
+        text,
+        expectedActive,
+        className: latest?.className || '',
+        active: latest?.classList.contains('active-output') || false,
+        ink: latest ? getComputedStyle(latest).getPropertyValue('--ledger-ink').trim() : '',
+      });
+    }
+    return rows;
+  });
+  for (const row of activeStyleProbes) {
+    assert.equal(row.active, row.expectedActive, `${row.text} active-output eligibility should match its semantic class`);
+  }
+  const activeInks = activeStyleProbes.filter((row) => row.active).map((row) => row.ink);
+  assert(activeInks.length >= 6, 'active output probes should cover the main output classes');
+  assert(new Set(activeInks).size >= 5, 'active read-glow should inherit category-specific colors across output classes');
+
+  const cadence = await page.evaluate(async () => {
+    const { __activityLogTestHooks } = await import('/src/activity-log.js');
+    const batch = __activityLogTestHooks.typingTickBatchSize;
+    const classify = __activityLogTestHooks.classify;
+    return {
+      base: batch(120, 0, 0),
+      long: batch(600, 0, 0),
+      veryLong: batch(1000, 0, 0),
+      moderateBacklog: batch(120, 5, 800),
+      heavyBacklog: batch(120, 9, 1800),
+      charBacklog: batch(120, 2, 2600),
+      floodBacklog: batch(120, 15, 6000),
+      deliberateCompact: classify('Context compaction in progress'),
+      compactLayoutText: classify('Use a compact layout for this CSS panel'),
+    };
+  });
+  assert.deepEqual(cadence, {
+    base: 1,
+    long: 2,
+    veryLong: 4,
+    moderateBacklog: 5,
+    heavyBacklog: 8,
+    charBacklog: 8,
+    floodBacklog: 12,
+    deliberateCompact: 'compact',
+    compactLayoutText: 'text',
+  }, 'typing cadence should speed up predictably as line length or backlog pressure rises');
+  await page.evaluate(async () => {
+    const { hideLoadingIndicator, flushLogQueue } = await import('/src/activity-log.js');
+    flushLogQueue();
+    hideLoadingIndicator();
+  });
 
   await setNarrationBusy(page, true);
   await submitPrompt(page, 'Narration must not block direct command');
@@ -422,6 +748,20 @@ try {
   await resolveOldest(page, 'narration-safe complete');
   await setNarrationBusy(page, false);
   await waitForUiIdle(page);
+
+  await page.evaluate(async () => {
+    const { addLog } = await import('/src/activity-log.js');
+    document.querySelector('#log-content')?.classList.remove('ledger-idle');
+    for (let i = 0; i < 12; i += 1) {
+      addLog(`Drain pressure probe ${i + 1} ${'rune '.repeat(24)}`);
+    }
+  });
+  await waitForLog(page, /Drain pressure probe 12/, 'adaptive typewriter should drain a burst without manual flush', 7000);
+  await page.evaluate(async () => {
+    const { hideLoadingIndicator, flushLogQueue } = await import('/src/activity-log.js');
+    flushLogQueue();
+    hideLoadingIndicator();
+  });
 
   await addSlowAgentLog(page);
   await submitPrompt(page, 'After backlog command');
@@ -437,11 +777,13 @@ try {
   assert.equal((await callTexts(page)).length, 3, 'busy submit should wait in queue');
   assert.equal(await userLineCount(page, 'Queued while busy'), 0, 'queued text should not render as submitted user text');
   assert.equal(await queueStatusLeakCount(page, 'Queued while busy'), 0, 'queue status line should not leak queued prompt content');
+  assert.equal(await genericQueueLogCount(page), 0, 'generic queue bookkeeping should stay out of the permanent ledger transcript');
 
   await page.locator('#log-input').fill('Queued through send button');
   await page.locator('#log-submit').click();
   await waitForQueueCount(page, 2);
   assert.deepEqual(await queueTexts(page), ['Queued while busy', 'Queued through send button'], 'send button should queue while the agent is busy');
+  assert.equal(await genericQueueLogCount(page), 0, 'send-button queueing should not add generic queue bookkeeping to the ledger');
 
   await setSteerSupport(page, false);
   assert.equal(await page.locator('#prompt-queue-steer').isDisabled(), true, 'stale bridge without steering support should disable the steer action');

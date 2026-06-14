@@ -1,7 +1,86 @@
 // Verify the activity-log linkifier wraps URLs and backticked content
 // in clickable elements, and that clicking them triggers the expected
 // behaviour (open for URLs, copy+toast for backticked).
+import net from 'node:net';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const dungeonRoot = path.resolve(__dirname, '..');
+const appPort = process.env.SEO_DUNGEON_LINK_TEST_PORT
+  ? Number(process.env.SEO_DUNGEON_LINK_TEST_PORT)
+  : await reserveFreePort();
+const appUrl = `http://127.0.0.1:${appPort}`;
+const viteOutput = [];
+let vite;
+
+async function reserveFreePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      const freePort = typeof address === 'object' && address ? address.port : null;
+      probe.close(() => {
+        if (!freePort) reject(new Error('Unable to allocate a free link smoke test port.'));
+        else resolve(freePort);
+      });
+    });
+  });
+}
+
+function spawnNode(args, options) {
+  return spawn(process.execPath, args, {
+    ...options,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+}
+
+async function waitForHttp(url, label, output, proc, timeoutMs = 20000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (proc && proc.exitCode !== null) throw new Error(`${label} exited early:\n${output.join('').slice(-4000)}`);
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(800) });
+      if (res.ok) return;
+    } catch (_) {}
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error(`Timed out waiting for ${label}:\n${output.join('').slice(-4000)}`);
+}
+
+async function killTree(child) {
+  if (!child || child.killed || child.exitCode !== null) return;
+  if (process.platform === 'win32') {
+    await new Promise((resolve) => {
+      const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      killer.on('exit', resolve);
+      killer.on('error', resolve);
+    });
+    return;
+  }
+  child.kill('SIGTERM');
+}
+
+function runVite() {
+  const viteBin = path.join(dungeonRoot, 'node_modules', 'vite', 'bin', 'vite.js');
+  vite = spawnNode([viteBin, '--host', '127.0.0.1', '--port', String(appPort), '--strictPort'], {
+    cwd: dungeonRoot,
+    env: { ...process.env },
+  });
+  vite.stdout.on('data', (chunk) => viteOutput.push(chunk.toString()));
+  vite.stderr.on('data', (chunk) => viteOutput.push(chunk.toString()));
+}
+
+runVite();
+await waitForHttp(appUrl, 'vite', viteOutput, vite);
 
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext({
@@ -11,7 +90,7 @@ const ctx = await browser.newContext({
 const page = await ctx.newPage();
 
 try {
-  await page.goto('http://localhost:3000/', { waitUntil: 'networkidle', timeout: 20000 });
+  await page.goto(appUrl, { waitUntil: 'networkidle', timeout: 20000 });
   await page.waitForTimeout(1500);
 
   // Inject a line that contains every variety of linkable content
@@ -87,7 +166,8 @@ try {
   // All expected?
   const pass = linkInfo.urls.length >= 2 && linkInfo.codes.length >= 2;
   console.log(`\n  ${pass ? 'PASS' : 'FAIL'} - links rendered as expected`);
-  process.exit(pass ? 0 : 1);
+  if (!pass) process.exitCode = 1;
 } finally {
   await browser.close();
+  await killTree(vite);
 }

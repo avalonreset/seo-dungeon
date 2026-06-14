@@ -11,6 +11,7 @@ const ROW_GAP = 10;
 const LIST_TOP = 94;
 const LIST_BOTTOM = 518;
 const LIST_VISIBLE = LIST_BOTTOM - LIST_TOP; // 424px
+const HALL_SCROLL_KEY_PREFIX = 'seo_dungeon_hall_scroll';
 
 // Demon sprite scales per severity - bigger = scarier. All demons are
 // 0x72 4-frame idle animations at roughly 16x16 → 32x36 native px.
@@ -35,6 +36,22 @@ export class DungeonHallScene extends Phaser.Scene {
 
   create() {
     const dpr = this.game.dpr || window.GAME_DPR;
+    if (typeof window !== 'undefined') {
+      window.__seoDungeonHallScene = this;
+      window.__seoDungeonHallState = () => ({
+        scrollOffset: this.scrollOffset,
+        targetScrollOffset: this.targetScrollOffset,
+        maxScroll: this.maxHallScroll(),
+        savedScroll: this.game._dungeonHallScrollOffset,
+        storageKey: this._hallScrollKey
+      });
+      this.events.once('shutdown', () => {
+        if (window.__seoDungeonHallScene === this) {
+          window.__seoDungeonHallScene = null;
+          window.__seoDungeonHallState = null;
+        }
+      });
+    }
     this.cameras.main.setZoom(dpr);
     this.cameras.main.scrollX = 400 * (1 - dpr);
     this.cameras.main.scrollY = 300 * (1 - dpr);
@@ -76,6 +93,15 @@ export class DungeonHallScene extends Phaser.Scene {
     this.demonContainer = this.add.container(0, 0);
     this.demonContainer.setMask(geoMask);
 
+    // ---------- MOMENTUM SCROLLING ----------
+    this.scrollOffset = 0;
+    this.targetScrollOffset = 0;
+    this.scrollVelocity = 0;
+    this.isDragging = false;
+    this.lastPointerY = 0;
+    this._lastHallScrollSaveAt = 0;
+    this._hallScrollKey = this._hallScrollStorageKey();
+
     // Batch-assign demons to every issue with anti-clumping:
     //   - themed match first (prefer unused themed demon)
     //   - rank walk next (preserves hierarchy, starts at issue's rank)
@@ -90,6 +116,8 @@ export class DungeonHallScene extends Phaser.Scene {
 
     // ---------- FOOTER AREA (fixed) ----------
     this.drawFooter();
+    this.drawInputBlockers();
+    this.restoreHallScrollOffset();
 
     // ---------- Quest timer ----------
     // First entry into the hall stamps the start. Persists on this.game
@@ -109,21 +137,13 @@ export class DungeonHallScene extends Phaser.Scene {
       this.time.delayedCall(400, () => this._showDungeonClearedOverlay(issues));
     }
 
-    // ---------- MOMENTUM SCROLLING ----------
-    this.scrollOffset = 0;
-    this.targetScrollOffset = 0;
-    this.scrollVelocity = 0;
-    this.isDragging = false;
-    this.lastPointerY = 0;
-
-    const maxScroll = () => Math.max(0, (this.totalDemonListHeight || 0) - LIST_VISIBLE + 10);
-
     // Mouse wheel
     this.input.on('wheel', (_pointer, _gameObjects, _dx, dy) => {
       this.scrollVelocity = 0;
       this.targetScrollOffset = Phaser.Math.Clamp(
-        this.targetScrollOffset - dy * 1.2, -maxScroll(), 0
+        this.targetScrollOffset - dy * 1.2, -this.maxHallScroll(), 0
       );
+      this.saveHallScrollOffset();
       // Throttled scroll sound
       const now = Date.now();
       if (now - this._lastScrollSfxTime > 120) {
@@ -144,7 +164,7 @@ export class DungeonHallScene extends Phaser.Scene {
       if (this.isDragging && pointer.isDown) {
         const dy = pointer.worldY - this.lastPointerY;
         this.targetScrollOffset = Phaser.Math.Clamp(
-          this.targetScrollOffset + dy, -maxScroll(), 0
+          this.targetScrollOffset + dy, -this.maxHallScroll(), 0
         );
         this.scrollVelocity = dy;
         this.lastPointerY = pointer.worldY;
@@ -152,13 +172,14 @@ export class DungeonHallScene extends Phaser.Scene {
     });
     this.input.on('pointerup', () => {
       this.isDragging = false;
+      this.saveHallScrollOffset();
     });
 
     // Smooth scroll with momentum
     this.events.on('update', () => {
       if (!this.isDragging && Math.abs(this.scrollVelocity) > 0.5) {
         this.targetScrollOffset = Phaser.Math.Clamp(
-          this.targetScrollOffset + this.scrollVelocity, -maxScroll(), 0
+          this.targetScrollOffset + this.scrollVelocity, -this.maxHallScroll(), 0
         );
         this.scrollVelocity *= 0.92; // friction
       } else if (!this.isDragging) {
@@ -166,7 +187,90 @@ export class DungeonHallScene extends Phaser.Scene {
       }
       this.scrollOffset += (this.targetScrollOffset - this.scrollOffset) * 0.18;
       this.demonContainer.y = this.scrollOffset;
+      if (Math.abs(this.targetScrollOffset - (this._lastSavedHallScrollOffset ?? 0)) > 2) {
+        this.scheduleHallScrollSave();
+      }
     });
+
+    this.events.once('shutdown', () => this.saveHallScrollOffset());
+  }
+
+  maxHallScroll() {
+    return Math.max(0, (this.totalDemonListHeight || 0) - LIST_VISIBLE + 10);
+  }
+
+  _hallScrollStorageKey() {
+    const safe = (value) => String(value || 'default')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'default';
+    const domain = safe(this.game.domain || this.game.auditData?.domain || 'quest');
+    const runtime = safe(this.game.characterConfig?.runtime || 'codex');
+    const profile = safe(this.game.characterConfig?.profile || this.game.characterConfig?.model || 'balanced');
+    return `${HALL_SCROLL_KEY_PREFIX}_${domain}_${runtime}_${profile}`;
+  }
+
+  restoreHallScrollOffset() {
+    const maxScroll = this.maxHallScroll();
+    const memory = this.game._dungeonHallScrollOffsets || {};
+    let saved = Number(memory[this._hallScrollKey]);
+    if (!Number.isFinite(saved)) {
+      try { saved = Number(localStorage.getItem(this._hallScrollKey)); } catch (_) {}
+    }
+    if (!Number.isFinite(saved)) saved = 0;
+    const offset = Phaser.Math.Clamp(saved, -maxScroll, 0);
+    this.scrollOffset = offset;
+    this.targetScrollOffset = offset;
+    this.scrollVelocity = 0;
+    if (this.demonContainer) this.demonContainer.y = offset;
+    this.game._dungeonHallScrollOffset = offset;
+    this._lastSavedHallScrollOffset = offset;
+  }
+
+  saveHallScrollOffset() {
+    const offset = Phaser.Math.Clamp(
+      Number.isFinite(this.targetScrollOffset) ? this.targetScrollOffset : this.scrollOffset,
+      -this.maxHallScroll(),
+      0
+    );
+    this.game._dungeonHallScrollOffsets = this.game._dungeonHallScrollOffsets || {};
+    this.game._dungeonHallScrollOffsets[this._hallScrollKey] = offset;
+    this.game._dungeonHallScrollOffset = offset;
+    this._lastSavedHallScrollOffset = offset;
+    this._lastHallScrollSaveAt = Date.now();
+    try { localStorage.setItem(this._hallScrollKey, String(Math.round(offset))); } catch (_) {}
+  }
+
+  scheduleHallScrollSave() {
+    const now = Date.now();
+    if (now - this._lastHallScrollSaveAt < 250) return;
+    this.saveHallScrollOffset();
+  }
+
+  drawInputBlockers() {
+    // Phaser masks hide rows visually but do not clip input hit areas.
+    // Transparent blockers sit above scroll rows and below fixed header/footer
+    // controls so hidden row portions cannot be clicked through the chrome.
+    this.add.rectangle(400, LIST_TOP / 2, 800, LIST_TOP, 0x000000, 0)
+      .setDepth(99)
+      .setInteractive();
+    this.add.rectangle(400, LIST_BOTTOM + ((600 - LIST_BOTTOM) / 2), 800, 600 - LIST_BOTTOM, 0x000000, 0)
+      .setDepth(99)
+      .setInteractive();
+  }
+
+  normalizeDomainUrl(domain) {
+    const raw = String(domain || '').trim();
+    if (!raw) return '';
+    try {
+      const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+      const url = new URL(candidate);
+      if (!url.hostname.includes('.')) return '';
+      return url.href;
+    } catch (_) {
+      return '';
+    }
   }
 
   // =====================================================================
@@ -410,6 +514,18 @@ export class DungeonHallScene extends Phaser.Scene {
       },
       resolution: window.GAME_DPR
     }).setOrigin(0.5, 0).setDepth(101);
+    domainText.setInteractive({ useHandCursor: true });
+    domainText.on('pointerover', () => {
+      domainText.setShadow(0, 0, '#ffe680', 20, true, true);
+      SFX.play('menuHover');
+    });
+    domainText.on('pointerout', () => {
+      domainText.setShadow(0, 0, '#f0c040', 16, true, true);
+    });
+    domainText.on('pointerdown', () => {
+      const url = this.normalizeDomainUrl(data.domain);
+      if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    });
 
     // Decorative swords beside domain
     const hw = domainText.width * 0.5;
@@ -424,7 +540,7 @@ export class DungeonHallScene extends Phaser.Scene {
     const scoreColor = data.score >= 70 ? COLORS.green : data.score >= 40 ? COLORS.gold : COLORS.red;
     const scoreGlowHex = data.score >= 70 ? '#40c040' : data.score >= 40 ? '#f0c040' : '#e04040';
 
-    this.add.text(160, 56, 'SEO SCORE', {
+    this.add.text(160, 56, 'ORIGINAL SEO SCORE', {
       fontFamily: HEADER_FONT, fontSize: '10px', color: '#606080', resolution: window.GAME_DPR
     }).setOrigin(0.5, 0).setDepth(101);
 
@@ -855,6 +971,7 @@ export class DungeonHallScene extends Phaser.Scene {
       }
     });
     hitArea.on('pointerdown', () => {
+      this.saveHallScrollOffset();
       SFX.play('menuConfirm');
       this.cameras.main.flash(400, 255, 50, 50);
       this.cameras.main.shake(200, 0.006);
@@ -912,13 +1029,15 @@ export class DungeonHallScene extends Phaser.Scene {
         const frames = demon.anims.currentAnim.frames;
         const idx = Math.floor(H(7) * frames.length) % frames.length;
         demon.anims.stop();
-        const pick = frames[idx] && frames[idx].frame && frames[idx].frame.name;
+        const pick = frames[idx]?.textureKey || `${picked.framePrefix}${idx}`;
         if (pick) demon.setTexture(pick);
       }
 
-      // Blood drain: deep arterial tint + translucency + slump angle
-      demon.setTint(0x6a0a1a);
-      demon.setAlpha(0.72);
+      // Defeated demons stay visible in color. The red lower-corner tint,
+      // slump angle, blood pool, and slash layers sell the slain state
+      // without turning the sprite back into an unexplored silhouette.
+      demon.setTint(0xffffff, 0xf0d0d0, 0xb44a4a, 0x7a1822);
+      demon.setAlpha(0.82);
       const slumpDeg = (H(11) * 10) - 5;           // -5° to +5°
       demon.setRotation(slumpDeg * Math.PI / 180);
       shadow.setAlpha(0.12);                        // pool replaces it visually

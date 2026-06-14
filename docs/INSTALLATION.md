@@ -54,8 +54,8 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The bridge listens on
-`ws://127.0.0.1:3001`.
+Open [http://localhost:3002](http://localhost:3002). The bridge listens on
+`ws://127.0.0.1:3003`.
 
 The title screen requires YOLO Mode to be armed on every fresh app launch. The
 choice is intentionally not persisted. Once the dungeon is running, the Guild

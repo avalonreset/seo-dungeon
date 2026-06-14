@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# DataForSEO Extension Installer for Claude SEO
+# Optional DataForSEO MCP adapter installer for Claude Code users.
 # Wraps everything in main() to prevent partial execution on network failure
 
 main() {
@@ -12,7 +12,7 @@ main() {
 
     echo "════════════════════════════════════════"
     echo "║   DataForSEO Extension - Installer   ║"
-    echo "║   For Claude SEO                     ║"
+    echo "║   Optional Claude Code MCP adapter   ║"
     echo "════════════════════════════════════════"
     echo ""
 
@@ -31,11 +31,12 @@ main() {
 
     # Check prerequisites
     if [ ! -d "${SEO_SKILL_DIR}" ]; then
-        echo "✗ Claude SEO is not installed."
-        echo "  Install it first: curl -fsSL https://raw.githubusercontent.com/AgriciDaniel/claude-seo/main/install.sh | bash"
+        echo "✗ Claude Code SEO skill path was not found."
+        echo "  Normal SEO Dungeon audits do not require this installer."
+        echo "  Put DATAFORSEO_USERNAME and DATAFORSEO_PASSWORD in the selected project .env instead."
         exit 1
     fi
-    echo "✓ Claude SEO detected"
+    echo "✓ Claude Code SEO skill target detected"
 
     if ! command -v node >/dev/null 2>&1; then
         echo "✗ Node.js is required but not installed."
@@ -86,7 +87,7 @@ main() {
         SOURCE_DIR="${SCRIPT_DIR}/extensions/dataforseo"
     else
         echo "✗ Cannot find extension source files."
-        echo "  Run this script from the claude-seo repo: ./extensions/dataforseo/install.sh"
+        echo "  Run this script from the seo-dungeon repo: ./extensions/dataforseo/install.sh"
         exit 1
     fi
 
@@ -164,7 +165,7 @@ PY
     echo "✓ DataForSEO extension installed successfully!"
     echo ""
     echo "Usage:"
-    echo "  1. Start Claude Code:  claude"
+    echo "  1. Start Claude Code if you intentionally use the adapter:  claude"
     echo "  2. Run commands:"
     echo "     /seo dataforseo serp best coffee shops"
     echo "     /seo dataforseo keywords seo tools"

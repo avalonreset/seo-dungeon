@@ -4,7 +4,8 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 
-const PORT = Number(process.env.SEO_DUNGEON_BRIDGE_PORT || 3001);
+const DEFAULT_PORT = Number(process.env.SEO_DUNGEON_BRIDGE_PORT || 3003);
+let PORT = DEFAULT_PORT;
 
 // Project root: server/ -> dungeon/ -> seo-dungeon/
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
@@ -93,9 +94,31 @@ function logFailedAudit(domain, raw, note) {
 }
 
 // ── Security: Allowed message types and rate limits ──
-const ALLOWED_TYPES = ['audit', 'fix', 'commit', 'narrate', 'chat', 'cancel', 'steer', 'open-folder', 'capabilities'];
+const ALLOWED_TYPES = [
+  'audit',
+  'fix',
+  'commit',
+  'narrate',
+  'chat',
+  'cancel',
+  'steer',
+  'open-folder',
+  'capabilities',
+  'remote-command',
+  'remote-command-claim',
+  'session-event',
+  'session-state',
+];
 const MAX_CONCURRENT_PROCESSES = 5;
 const MAX_MESSAGES_PER_MINUTE = 30;
+const SESSION_EVENT_HISTORY_LIMIT = 200;
+let sessionEventSequence = 0;
+let sessionClientSequence = 0;
+const sessionEvents = [];
+const sessionClients = new Set();
+const sessionClientMeta = new Map();
+const remoteCommandClaims = new Map();
+const RESERVED_SESSION_EVENT_KINDS = new Set(['remote-command']);
 
 function getBridgeCapabilities() {
   const codexTransport = /^exec$/i.test(String(process.env.SEO_DUNGEON_CODEX_TRANSPORT || ''))
@@ -105,7 +128,10 @@ function getBridgeCapabilities() {
     version: PACKAGE_VERSION,
     protocol: 2,
     supportsSteer: codexTransport === 'app-server',
+    supportsRemoteControl: true,
+    supportsRemoteCommandClaim: true,
     steerMode: 'active-turn',
+    remoteControlMode: 'shared-session-events',
     defaultCodexTransport: codexTransport,
     allowedTypes: [...ALLOWED_TYPES]
   };
@@ -117,8 +143,8 @@ const EXTRA_ALLOWED_ORIGINS = (process.env.SEO_DUNGEON_ALLOWED_ORIGINS || '')
   .map(origin => origin.trim())
   .filter(Boolean);
 const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
+  'http://localhost:3002',
+  'http://127.0.0.1:3002',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   ...EXTRA_ALLOWED_ORIGINS
@@ -142,6 +168,8 @@ const wss = new WebSocketServer({
 // Track active child processes so they can be cancelled
 const activeProcesses = new Map(); // id -> ChildProcess
 const activeProcessOwners = new Map(); // id -> connection token
+const activeProcessMetadata = new Map(); // id -> public diagnostic metadata
+const pendingProcessMetadata = new Map(); // id -> metadata staged before child starts
 
 /**
  * Validate and resolve projectPath to prevent path traversal.
@@ -616,16 +644,27 @@ function safeEnv(cwd) {
   return env;
 }
 
-function trackProcess(requestId, proc, ownerToken = null) {
+function trackProcess(requestId, proc, ownerToken = null, metadata = {}) {
   if (requestId === undefined || requestId === null) return;
   activeProcesses.set(requestId, proc);
   if (ownerToken) activeProcessOwners.set(requestId, ownerToken);
+  const staged = pendingProcessMetadata.get(requestId) || {};
+  pendingProcessMetadata.delete(requestId);
+  activeProcessMetadata.set(requestId, {
+    ...staged,
+    ...metadata,
+    startedAt: staged.startedAt || metadata.startedAt || new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+    status: metadata.status || staged.status || 'running',
+  });
 }
 
 function untrackProcess(requestId) {
   if (requestId === undefined || requestId === null) return;
   activeProcesses.delete(requestId);
   activeProcessOwners.delete(requestId);
+  activeProcessMetadata.delete(requestId);
+  pendingProcessMetadata.delete(requestId);
 }
 
 function steerActiveProcess(targetId, text) {
@@ -655,6 +694,209 @@ function steerActiveProcess(targetId, text) {
   throw new Error('Active runtime cannot accept live steering. Prompt kept in queue.');
 }
 
+function trimEventText(value, max = 4000) {
+  const clean = String(value || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}...` : clean;
+}
+
+function publicClientMeta(meta) {
+  return {
+    id: meta.clientId,
+    role: meta.role,
+    origin: meta.origin,
+    connectedAt: meta.connectedAt,
+    lastSeenAt: meta.lastSeenAt,
+    lastType: meta.lastType || null,
+    lastSource: meta.lastSource || null,
+    messageCount: meta.messageCount || 0,
+  };
+}
+
+function publicConnectedClients() {
+  return [...sessionClientMeta.values()].map(publicClientMeta);
+}
+
+function inferClientRole(type, source, currentRole = 'unknown') {
+  const sourceKey = String(source || '').toLowerCase();
+  if (['remote-command-claim', 'audit', 'fix', 'chat', 'commit', 'narrate', 'open-folder'].includes(type)) return 'browser';
+  if (currentRole === 'browser') return 'browser';
+  if (['remote-command'].includes(type) || /^codex/.test(sourceKey)) return 'controller';
+  if (sourceKey === 'guild-ledger') return 'browser';
+  return currentRole || 'unknown';
+}
+
+function updateClientMeta(ws, msg = {}) {
+  const meta = sessionClientMeta.get(ws);
+  if (!meta) return;
+  const source = msg.source || msg.event?.source || null;
+  meta.lastSeenAt = new Date().toISOString();
+  meta.lastType = trimEventText(msg.type || 'unknown', 80);
+  meta.lastSource = source ? trimEventText(source, 80) : meta.lastSource;
+  meta.messageCount = (meta.messageCount || 0) + 1;
+  meta.role = inferClientRole(msg.type, source, meta.role);
+}
+
+function operationSummary(id, metadata = {}) {
+  return {
+    id,
+    type: metadata.type || 'operation',
+    status: metadata.status || 'running',
+    runtime: metadata.runtime || 'codex',
+    profile: metadata.profile || 'balanced',
+    source: metadata.source || 'guild-ledger',
+    projectPath: metadata.projectPath || null,
+    label: metadata.label || metadata.type || 'operation',
+    startedAt: metadata.startedAt,
+    lastSeenAt: metadata.lastSeenAt || metadata.startedAt,
+    lastStreamAt: metadata.lastStreamAt || null,
+    lastStream: metadata.lastStream || null,
+  };
+}
+
+function publicActiveOperations() {
+  return [...activeProcessMetadata.entries()].map(([id, metadata]) => operationSummary(id, metadata));
+}
+
+function stageProcessMetadata(requestId, metadata = {}) {
+  if (requestId === undefined || requestId === null) return;
+  pendingProcessMetadata.set(requestId, {
+    ...metadata,
+    startedAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+  });
+}
+
+function updateActiveProcessMetadata(requestId, updates = {}) {
+  const existing = activeProcessMetadata.get(requestId) || pendingProcessMetadata.get(requestId);
+  if (!existing) return;
+  const next = {
+    ...existing,
+    ...updates,
+    lastSeenAt: new Date().toISOString(),
+  };
+  if (activeProcessMetadata.has(requestId)) activeProcessMetadata.set(requestId, next);
+  else pendingProcessMetadata.set(requestId, next);
+}
+
+function updateActiveProcessStream(requestId, chunk) {
+  const clean = trimEventText(chunk, 300);
+  if (!clean) return;
+  updateActiveProcessMetadata(requestId, {
+    status: 'streaming',
+    lastStream: clean,
+    lastStreamAt: new Date().toISOString(),
+  });
+}
+
+function updateActiveProcessStatus(requestId, status = {}) {
+  if (!status || typeof status !== 'object') return;
+  const phase = [status.kind, status.phase].filter(Boolean).join(':') || status.message || 'status';
+  updateActiveProcessMetadata(requestId, {
+    status: trimEventText(phase, 120),
+  });
+}
+
+function publicSessionEvent(input = {}) {
+  const now = new Date().toISOString();
+  const sequence = ++sessionEventSequence;
+  const kind = trimEventText(input.kind || 'event', 80) || 'event';
+  const source = trimEventText(input.source || 'unknown', 80) || 'unknown';
+  const event = {
+    eventId: input.eventId || `evt_${sequence}`,
+    sequence,
+    at: input.at || now,
+    kind,
+    source,
+  };
+
+  for (const key of ['commandId', 'targetId', 'status', 'message']) {
+    if (input[key] != null) event[key] = trimEventText(input[key], 500);
+  }
+  if (input.command != null) event.command = trimEventText(input.command);
+  if (input.projectPath != null) event.projectPath = trimEventText(input.projectPath, 1000);
+  if (input.runtime != null) event.runtime = normalizeRuntime(input.runtime);
+  if (input.profile != null || input.model != null) event.profile = normalizeProfile(input.profile || input.model);
+  if (input.dangerousBypass != null) event.dangerousBypass = normalizeDangerousBypass(input.dangerousBypass);
+  if (input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)) {
+    event.metadata = {};
+    for (const [key, value] of Object.entries(input.metadata).slice(0, 20)) {
+      event.metadata[trimEventText(key, 80)] = trimEventText(value, 1000);
+    }
+  }
+  return event;
+}
+
+function recordSessionEvent(event) {
+  sessionEvents.push(event);
+  while (sessionEvents.length > SESSION_EVENT_HISTORY_LIMIT) {
+    const removed = sessionEvents.shift();
+    if (removed?.kind === 'remote-command' && removed.commandId) {
+      remoteCommandClaims.delete(removed.commandId);
+    }
+  }
+  return event;
+}
+
+function broadcastSessionEvent(event) {
+  const recorded = recordSessionEvent(event);
+  const payload = JSON.stringify({ type: 'session-event', event: recorded });
+  for (const client of sessionClients) {
+    if (client.readyState !== client.OPEN) continue;
+    try { client.send(payload); } catch (_) {}
+  }
+  return recorded;
+}
+
+function buildRemoteCommandEvent(msg, validatedPath) {
+  const command = trimEventText(msg.command);
+  if (!command) throw new Error('Remote command cannot be empty.');
+  if (normalizeRuntime(msg.runtime || 'codex') !== 'codex') {
+    throw new Error('Remote control mode is Codex-only in this release.');
+  }
+  const requestedCommandId = msg.commandId ? trimEventText(msg.commandId, 200) : '';
+  if (requestedCommandId && sessionEvents.some((entry) =>
+    entry.kind === 'remote-command' && entry.commandId === requestedCommandId
+  )) {
+    throw new Error('Duplicate remote command id rejected.');
+  }
+  return publicSessionEvent({
+    kind: 'remote-command',
+    source: msg.source || 'codex-app',
+    commandId: requestedCommandId || `cmd_${Date.now().toString(36)}_${sessionEventSequence + 1}`,
+    command,
+    projectPath: validatedPath || undefined,
+    runtime: msg.runtime || 'codex',
+    profile: msg.profile || msg.model,
+    dangerousBypass: msg.dangerousBypass,
+    metadata: msg.metadata,
+  });
+}
+
+function claimRemoteCommand(commandId, ownerToken) {
+  const clean = trimEventText(commandId, 200);
+  if (!clean) throw new Error('Remote command claim requires a command id.');
+  const event = sessionEvents.find((entry) =>
+    entry.kind === 'remote-command' && entry.commandId === clean
+  );
+  if (!event) throw new Error('Remote command is not available to claim.');
+  const existing = remoteCommandClaims.get(clean);
+  if (existing && existing.ownerToken !== ownerToken) {
+    return { claimed: false, commandId: clean, claimedAt: existing.claimedAt };
+  }
+  if (existing && existing.ownerToken === ownerToken) {
+    return { claimed: true, commandId: clean, claimedAt: existing.claimedAt };
+  }
+  const claimedAt = new Date().toISOString();
+  remoteCommandClaims.set(clean, { ownerToken, claimedAt });
+  return { claimed: true, commandId: clean, claimedAt };
+}
+
+function releaseClaimsForOwner(ownerToken) {
+  for (const [commandId, claim] of remoteCommandClaims.entries()) {
+    if (claim.ownerToken === ownerToken) remoteCommandClaims.delete(commandId);
+  }
+}
+
 function createSpawnError(runtime, err, launch) {
   const display = launch?.display || runtime;
   const hint = err && err.code === 'EPERM'
@@ -670,9 +912,21 @@ function summarizeCliFailure(runtime, code, stderr, stdout) {
   return `${runtime} CLI exited with code ${code}: ${firstLine}`;
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   console.log('Game client connected');
+  sessionClients.add(ws);
   const connectionToken = Symbol('seo-dungeon-client');
+  const clientMeta = {
+    clientId: `client_${++sessionClientSequence}`,
+    role: 'unknown',
+    origin: req?.headers?.origin || 'none',
+    connectedAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+    lastType: null,
+    lastSource: null,
+    messageCount: 0,
+  };
+  sessionClientMeta.set(ws, clientMeta);
 
   // Per-connection rate limiting
   const messageTimestamps = [];
@@ -710,6 +964,7 @@ wss.on('connection', (ws) => {
       safeSend(JSON.stringify({ id: 0, type: 'error', message: 'Invalid message format' }));
       return;
     }
+    updateClientMeta(ws, msg);
     const { id, command, type, projectPath, issue, userMessage, model, profile, runtime, dangerousBypass, targetId } = msg;
     const agentOptions = {
       runtime: normalizeRuntime(runtime),
@@ -717,6 +972,10 @@ wss.on('connection', (ws) => {
       dangerousBypass: normalizeDangerousBypass(dangerousBypass)
     };
     agentOptions.connectionToken = connectionToken;
+    agentOptions.onStatus = (status) => {
+      updateActiveProcessStatus(id, status);
+      safeSend({ id, type: 'status', status });
+    };
 
     // Validate message type against allowlist
     if (type && !ALLOWED_TYPES.includes(type)) {
@@ -730,11 +989,31 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    if (type === 'session-state') {
+      safeSend(JSON.stringify({
+        id,
+        type: 'result',
+        data: {
+          events: [...sessionEvents],
+          claimedCommandIds: [...remoteCommandClaims.keys()],
+          activeOperationIds: [...activeProcesses.keys()],
+          activeOperations: publicActiveOperations(),
+          connectedClients: publicConnectedClients(),
+          capabilities: getBridgeCapabilities()
+        }
+      }));
+      return;
+    }
+
     // Validate and resolve projectPath. Folder-open requests get their own
     // fallback path: if the saved folder is invalid, the bridge opens a
     // native folder picker instead of rejecting before the handler runs.
     const validatedPath = validateProjectPath(projectPath);
-    if (projectPath && !validatedPath && type !== 'open-folder' && type !== 'cancel' && type !== 'steer') {
+    if (
+      projectPath &&
+      !validatedPath &&
+      !['open-folder', 'cancel', 'steer', 'session-event'].includes(type)
+    ) {
       console.warn(`Rejected invalid projectPath: ${projectPath}`);
       safeSend(JSON.stringify({ id, type: 'error', message: 'Invalid project path' }));
       return;
@@ -747,6 +1026,72 @@ wss.on('connection', (ws) => {
     if (type !== 'cancel' && type !== 'steer' && type !== 'capabilities') console.log(`  Runtime: ${agentOptions.runtime}, profile: ${agentOptions.profile}`);
     if (type !== 'cancel' && type !== 'steer' && type !== 'capabilities' && agentOptions.runtime === 'codex') console.log(`  Codex dangerous bypass: ${agentOptions.dangerousBypass ? 'on' : 'off'}`);
     if (validatedPath && validatedPath !== PROJECT_ROOT) console.log(`  Project: ${validatedPath}`);
+
+    if (type === 'remote-command') {
+      try {
+        const event = buildRemoteCommandEvent(msg, validatedPath);
+        const recorded = broadcastSessionEvent(event);
+        safeSend(JSON.stringify({
+          id,
+          type: 'result',
+          data: {
+            accepted: true,
+            commandId: recorded.commandId,
+            event: recorded
+          }
+        }));
+        console.log(`Remote command queued: ${recorded.commandId}`);
+      } catch (err) {
+        safeSend(JSON.stringify({ id, type: 'error', message: err.message || 'Could not queue remote command' }));
+      }
+      return;
+    }
+
+    if (type === 'remote-command-claim') {
+      try {
+        const claim = claimRemoteCommand(msg.commandId || targetId || command, connectionToken);
+        safeSend(JSON.stringify({ id, type: 'result', data: claim }));
+      } catch (err) {
+        safeSend(JSON.stringify({ id, type: 'error', message: err.message || 'Could not claim remote command' }));
+      }
+      return;
+    }
+
+    if (type === 'session-event') {
+      const incoming = msg.event && typeof msg.event === 'object' && !Array.isArray(msg.event)
+        ? msg.event
+        : {};
+      const incomingKind = trimEventText(incoming.kind || 'event', 80) || 'event';
+      if (RESERVED_SESSION_EVENT_KINDS.has(incomingKind)) {
+        safeSend(JSON.stringify({
+          id,
+          type: 'error',
+          message: `${incomingKind} events must use the guarded command endpoint.`
+        }));
+        return;
+      }
+      const incomingProjectPath = incoming.projectPath || projectPath;
+      let eventProjectPath;
+      if (incomingProjectPath && String(incomingProjectPath).trim()) {
+        eventProjectPath = validateProjectPath(incomingProjectPath);
+        if (!eventProjectPath) {
+          safeSend(JSON.stringify({
+            id,
+            type: 'error',
+            message: 'Project folder does not exist or is not allowed.'
+          }));
+          return;
+        }
+      }
+      const event = publicSessionEvent({
+        ...incoming,
+        source: incoming.source || msg.source || 'guild-ledger',
+        projectPath: eventProjectPath || undefined,
+      });
+      const recorded = broadcastSessionEvent(event);
+      safeSend(JSON.stringify({ id, type: 'result', data: { accepted: true, event: recorded } }));
+      return;
+    }
 
     // Cancel - kill the child process for a given request
     if (type === 'cancel') {
@@ -794,7 +1139,16 @@ wss.on('connection', (ws) => {
           safeSend(JSON.stringify({ id, type: 'error', message: 'Invalid domain' }));
           return;
         }
+        stageProcessMetadata(id, {
+          type: 'audit',
+          runtime: agentOptions.runtime,
+          profile: agentOptions.profile,
+          source: 'guild-ledger',
+          projectPath: fixCwd,
+          label: `Audit ${domain}`,
+        });
         const result = await runAudit(domain, (chunk) => {
+          updateActiveProcessStream(id, chunk);
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, fixCwd, id, agentOptions);
         untrackProcess(id);
@@ -802,7 +1156,16 @@ wss.on('connection', (ws) => {
         console.log(`Audit done: ${result.issues.length} issues, score ${result.score}`);
 
       } else if (type === 'fix') {
+        stageProcessMetadata(id, {
+          type: 'fix',
+          runtime: agentOptions.runtime,
+          profile: agentOptions.profile,
+          source: 'guild-ledger',
+          projectPath: fixCwd,
+          label: trimEventText(issue?.title || command || 'Fix SEO issue', 160),
+        });
         const result = await runFix(issue, userMessage, fixCwd, (chunk) => {
+          updateActiveProcessStream(id, chunk);
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, id, agentOptions);
         untrackProcess(id);
@@ -812,7 +1175,16 @@ wss.on('connection', (ws) => {
       } else if (type === 'commit') {
         // Sanitize commit message: limit length, strip control characters
         const safeMessage = (command || 'SEO fix').replace(/[^\x20-\x7E\n]/g, '').slice(0, 500);
+        stageProcessMetadata(id, {
+          type: 'commit',
+          runtime: agentOptions.runtime,
+          profile: agentOptions.profile,
+          source: 'guild-ledger',
+          projectPath: fixCwd,
+          label: 'Commit SEO changes',
+        });
         const result = await runCommit(safeMessage, fixCwd, (chunk) => {
+          updateActiveProcessStream(id, chunk);
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, id, agentOptions);
         untrackProcess(id);
@@ -820,7 +1192,16 @@ wss.on('connection', (ws) => {
         console.log(`Commit done in ${fixCwd}`);
 
       } else if (type === 'narrate') {
+        stageProcessMetadata(id, {
+          type: 'narrate',
+          runtime: agentOptions.runtime,
+          profile: agentOptions.profile,
+          source: 'guild-ledger',
+          projectPath: null,
+          label: 'Narrate attack',
+        });
         const result = await runAgent(command, (chunk) => {
+          updateActiveProcessStream(id, chunk);
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, undefined, id, agentOptions);
         untrackProcess(id);
@@ -831,7 +1212,16 @@ wss.on('connection', (ws) => {
         // Neutral pass-through - used outside of battle (Hall, Lodge,
         // between fights). Zero framing, zero demon context. Codex sees
         // exactly what the user typed and runs in their project directory.
+        stageProcessMetadata(id, {
+          type: 'chat',
+          runtime: agentOptions.runtime,
+          profile: agentOptions.profile,
+          source: msg.source || 'guild-ledger',
+          projectPath: fixCwd,
+          label: 'Guild Ledger chat',
+        });
         const result = await runAgent(command, (chunk) => {
+          updateActiveProcessStream(id, chunk);
           safeSend(JSON.stringify({ id, type: 'stream', content: chunk }));
         }, fixCwd, id, agentOptions);
         untrackProcess(id);
@@ -839,6 +1229,7 @@ wss.on('connection', (ws) => {
         console.log(`Chat done`);
       }
     } catch (err) {
+      pendingProcessMetadata.delete(id);
       console.error(`Error on #${id}:`, err.message);
       safeSend(JSON.stringify({ id, type: 'error', message: err.message }));
     }
@@ -846,6 +1237,9 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     clearInterval(pingInterval);
+    sessionClients.delete(ws);
+    sessionClientMeta.delete(ws);
+    releaseClaimsForOwner(connectionToken);
     // Kill only the processes launched by this browser connection. Other
     // clients may probe the bridge, refresh, or close without owning the
     // user's active turn.
@@ -1155,17 +1549,68 @@ function normalizeProfile(profile) {
   return 'balanced';
 }
 
-function runAgent(prompt, onStream, cwd, requestId, options = {}) {
-  const runtime = normalizeRuntime(options.runtime);
-  const profile = normalizeProfile(options.profile);
-  const dangerousBypass = normalizeDangerousBypass(options.dangerousBypass);
+function delegationEffortPhrase(value) {
+  const raw = String(value || '').trim();
+  const key = raw.toLowerCase().replace(/[\s_]+/g, '-');
+  if (['xhigh', 'extra-high', 'extrahigh', 'maximum', 'max'].includes(key)) {
+    return 'xhigh / maximum comparable effort';
+  }
+  if (key === 'high') return 'high effort';
+  if (key === 'medium') return 'medium effort';
+  if (key === 'low') return 'low effort';
+  return raw ? `${raw} effort` : 'the selected profile effort';
+}
+
+function buildRuntimePolicy(runtime, profile) {
+  const normalizedRuntime = normalizeRuntime(runtime);
+  const normalizedProfile = normalizeProfile(profile);
+  const codexProfile = getCodexProfileConfig(normalizedProfile);
+  const textProfile = normalizedRuntime === 'codex'
+    ? null
+    : getTextCliProfileConfig(normalizedRuntime, normalizedProfile);
+  const strengthLabel = {
+    deep: 'Warrior / extra-high',
+    balanced: 'Samurai / high',
+    fast: 'Knight / medium'
+  }[normalizedProfile] || 'Samurai / high';
+  const effortLabel = normalizedRuntime === 'codex'
+    ? delegationEffortPhrase(codexProfile.effort)
+    : ({
+        deep: 'maximum comparable effort',
+        balanced: 'high comparable effort',
+        fast: 'medium comparable effort'
+      }[normalizedProfile] || 'high comparable effort');
+  const runtimeLine = normalizedRuntime === 'codex'
+    ? '- Codex is the packaged default runtime. Use Codex-native skills, TOML profiles, and worker/subagent delegation when available.'
+    : `- Codex is the packaged default runtime; this run is using ${normalizedRuntime} only because the user selected that local CLI. Stay grounded in the same skills, agents, and scripts.`;
+  const detailLine = normalizedRuntime === 'codex'
+    ? `- Selected strength: ${strengthLabel}; Codex effort is ${codexProfile.effort}.`
+    : `- Selected strength: ${strengthLabel}; ${normalizedRuntime} model is ${textProfile?.model || 'the CLI default'}.`;
+
   const policy = [
     'SEO Dungeon runtime policy:',
+    runtimeLine,
+    detailLine,
+    `- Delegation strength rule: instruct any spawned audit worker/subagent to use ${effortLabel}. Do not let deep/xhigh runs fall back to default medium worker effort; if the runtime cannot set worker effort explicitly, put the effort requirement in the delegated prompt and run equivalent-depth specialist passes.`,
+    '- Multi-agent audit default: for /seo audit or any substantial SEO audit, delegate in parallel where the runtime supports subagents/workers instead of doing one linear pass. Use the always-on audit workers seo-technical, seo-content, seo-schema, seo-sitemap, seo-performance, seo-visual, seo-geo, and seo-sxo, then add seo-google, seo-local, seo-maps, seo-backlinks, seo-cluster, seo-ecommerce, seo-drift, or extension agents when signals and credentials warrant.',
     '- Treat credentials in the selected project .env as the primary integration path.',
     '- Prefer direct scripts/APIs for DataForSEO, Firecrawl, Google Search Console, GA4, CrUX, and PageSpeed when credentials are present.',
     '- MCP servers are optional adapters. Use them quietly if already available, but do not require them, inventory them, or tell the user they are needed unless the user explicitly asks about MCP setup.',
     '- If an optional integration is unavailable, continue with available sources and mention the skipped data briefly only when it affects the result.'
-  ].join('\n');
+  ];
+
+  if (normalizedRuntime === 'codex') {
+    policy.push(`- Codex delegation rule: when launching Codex subagents from this turn, explicitly request reasoning_effort=${codexProfile.effort} and pass the relevant specialist scope.`);
+  }
+
+  return policy.join('\n');
+}
+
+function runAgent(prompt, onStream, cwd, requestId, options = {}) {
+  const runtime = normalizeRuntime(options.runtime);
+  const profile = normalizeProfile(options.profile);
+  const dangerousBypass = normalizeDangerousBypass(options.dangerousBypass);
+  const policy = buildRuntimePolicy(runtime, profile);
   const effectivePrompt = `${policy}\n\n${prompt}`;
   if (runtime === 'claude' || runtime === 'gemini') {
     return runTextCli(runtime, effectivePrompt, onStream, cwd, requestId, profile, {
@@ -1174,7 +1619,8 @@ function runAgent(prompt, onStream, cwd, requestId, options = {}) {
   }
   return runCodex(effectivePrompt, onStream, cwd, requestId, profile, {
     dangerousBypass,
-    connectionToken: options.connectionToken || null
+    connectionToken: options.connectionToken || null,
+    onStatus: options.onStatus
   });
 }
 
@@ -1229,6 +1675,43 @@ function codexRpcErrorMessage(error) {
   }
 }
 
+function detectCompactionPhaseFromText(value) {
+  const text = String(value || '').toLowerCase();
+  if (!/(auto[-\s]?compact|compaction|compacting|compressing context|context compression|summari[sz]ing context|context.*summari[sz])/i.test(text)) {
+    return null;
+  }
+  return /(complete|completed|done|finished|finish|summari[sz]ed|compressed)/i.test(text)
+    ? 'complete'
+    : 'start';
+}
+
+function detectCompactionPhase(method, params = {}) {
+  const parts = [
+    method,
+    params?.type,
+    params?.phase,
+    params?.state,
+    params?.status,
+    params?.event,
+    params?.item?.type,
+    params?.item?.status,
+    params?.item?.phase
+  ].filter(Boolean);
+  const marker = parts.join(' ').toLowerCase();
+  if (/(compact|compaction)/i.test(marker)) {
+    return /(complete|completed|done|finished|end|ended|success)/i.test(marker)
+      ? 'complete'
+      : 'start';
+  }
+  return detectCompactionPhaseFromText(marker);
+}
+
+function compactionStatusMessage(phase) {
+  return phase === 'complete'
+    ? 'Context compaction complete. The hunt continues.'
+    : 'Compacting context. Preserving the trail before the hunt continues.';
+}
+
 function summarizeCodexAppServerFailure(code, stderr) {
   const text = String(stderr || '').trim();
   if (!text) return `Codex app-server exited with code ${code}`;
@@ -1246,7 +1729,7 @@ function summarizeCodexAppServerFailure(code, stderr) {
   return `Codex app-server exited with code ${code}: ${(parsed[parsed.length - 1] || lines[lines.length - 1] || text).slice(0, 500)}`;
 }
 
-function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile, dangerousBypass, ownerToken = null }) {
+function createCodexAppServerRun({ prompt, onStream, onStatus, workDir, requestId, profile, dangerousBypass, ownerToken = null }) {
   const { execPath: cliExec, args: cliArgs } = resolveCodexCli();
   const launch = resolveCliLaunch(cliExec);
   const codexProfile = getCodexProfileConfig(profile);
@@ -1276,6 +1759,7 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
   let settled = false;
   let agentStreamBuffer = '';
   let agentStreamTimer = null;
+  let compactionActive = false;
   const pending = new Map();
 
   let settleResolve;
@@ -1347,8 +1831,10 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
   function shouldFlushAgentBuffer(text) {
     if (!text) return false;
     if (text.includes('\n') || text.includes('\r')) return true;
-    if (text.length >= 220) return true;
-    return /[.!?)]["']?\s$/.test(text) && text.length >= 70;
+    const cleanLength = text.replace(/\s+/g, ' ').trim().length;
+    if (cleanLength >= 1000) return true;
+    if (cleanLength >= 220 && /[\s,;:)}\]"']$/.test(text)) return true;
+    return /[.!?)]["']?\s$/.test(text);
   }
 
   function flushAgentStream({ force = false } = {}) {
@@ -1371,7 +1857,10 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
     agentStreamTimer = setTimeout(() => {
       agentStreamTimer = null;
       const cleanLength = agentStreamBuffer.replace(/\s+/g, ' ').trim().length;
-      if (cleanLength >= 80 || shouldFlushAgentBuffer(agentStreamBuffer)) {
+      if (
+        shouldFlushAgentBuffer(agentStreamBuffer) ||
+        (cleanLength >= 400 && /[\s,;:)}\]"']$/.test(agentStreamBuffer))
+      ) {
         flushAgentStream({ force: true });
       } else if (agentStreamBuffer) {
         scheduleAgentFlush();
@@ -1392,7 +1881,26 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
   }
 
   function streamText(text) {
+    const phase = detectCompactionPhaseFromText(text);
+    if (phase) emitCompactionStatus(phase);
     enqueueAgentDelta(text);
+  }
+
+  function emitCompactionStatus(phase) {
+    if (phase === 'start') {
+      if (compactionActive) return;
+      compactionActive = true;
+    } else {
+      if (!compactionActive) return;
+      compactionActive = false;
+    }
+    if (typeof onStatus === 'function') {
+      onStatus({
+        kind: 'compaction',
+        phase,
+        message: compactionStatusMessage(phase)
+      });
+    }
   }
 
   function handleItemCompleted(item) {
@@ -1420,6 +1928,10 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
   }
 
   function handleNotification(method, params = {}) {
+    const compactionPhase = detectCompactionPhase(method, params);
+    if (compactionPhase) {
+      emitCompactionStatus(compactionPhase);
+    }
     if (method === 'item/agentMessage/delta') {
       sawAgentDelta = true;
       streamText(params.delta || '');
@@ -1437,6 +1949,7 @@ function createCodexAppServerRun({ prompt, onStream, workDir, requestId, profile
       const completedTurn = params.turn || {};
       const status = completedTurn.status;
       flushAgentStream({ force: true });
+      if (compactionActive) emitCompactionStatus('complete');
       if (status === 'completed') {
         onStream('[Complete]');
         settle(settleResolve, { raw: fullText });
@@ -1594,6 +2107,7 @@ function runCodexAppServer(prompt, onStream, cwd, requestId, profile, options = 
   const run = createCodexAppServerRun({
     prompt,
     onStream,
+    onStatus: options.onStatus,
     workDir,
     requestId,
     profile,
@@ -1876,12 +2390,32 @@ function startBridge() {
   console.log('SEO Dungeon - Bridge Server');
   console.log('─'.repeat(40));
   console.log(`Bridge log: ${BRIDGE_LOG_FILE}`);
-  server.listen(PORT, '127.0.0.1', () => {
+  listenWithFallback(DEFAULT_PORT);
+}
+
+function listenWithFallback(port, attemptsLeft = 24) {
+  const onError = (err) => {
+    server.off('listening', onListening);
+    if (err.code === 'EADDRINUSE' && attemptsLeft > 0) {
+      const nextPort = port + 1;
+      console.warn(`Bridge port ${port} is busy; trying ${nextPort}.`);
+      setTimeout(() => listenWithFallback(nextPort, attemptsLeft - 1), 80);
+      return;
+    }
+    console.error(`Bridge failed to listen on port ${port}:`, err.message);
+    process.exitCode = 1;
+  };
+  const onListening = () => {
+    server.off('error', onError);
+    PORT = port;
     console.log(`Bridge listening on ws://127.0.0.1:${PORT} (localhost only)`);
     console.log(`Agent provider: ${resolveAgentProvider()}`);
     console.log(`Agent runs from: ${PROJECT_ROOT}`);
     console.log('─'.repeat(40));
-  });
+  };
+  server.once('error', onError);
+  server.once('listening', onListening);
+  server.listen(port, '127.0.0.1');
 }
 
 if (require.main === module) startBridge();
@@ -1898,6 +2432,7 @@ module.exports = {
   runCodex,
   getCodexProfileConfig,
   getTextCliProfileConfig,
+  buildRuntimePolicy,
   insertPromptArg,
   getBridgeCapabilities,
   steerActiveProcess,

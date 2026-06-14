@@ -1516,6 +1516,15 @@ export class SummoningScene extends Phaser.Scene {
           timestamp: Date.now(),
           auditData: auditData
         }));
+        const safe = (value) => String(value || 'default')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9.-]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'default';
+        const hallScrollKey = `seo_dungeon_hall_scroll_${safe(this.domain)}_${safe(runtime)}_${safe(modelKey)}`;
+        localStorage.removeItem(hallScrollKey);
+        if (this.game._dungeonHallScrollOffsets) delete this.game._dungeonHallScrollOffsets[hallScrollKey];
+        this.game._dungeonHallScrollOffset = 0;
       } catch (e) { /* localStorage full or unavailable */ }
     }
 

@@ -729,6 +729,56 @@
       line-height: 1;
     }
 
+    #ledger-remote-status {
+      position: absolute;
+      top: 17px;
+      right: 14px;
+      z-index: 3;
+      min-width: 82px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: 1px solid rgba(96, 96, 120, 0.28);
+      border-radius: 4px;
+      background: rgba(5, 5, 7, 0.74);
+      color: #707088;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      line-height: 1;
+      padding: 0 9px;
+    }
+
+    #ledger-remote-status[hidden] {
+      display: none;
+    }
+
+    .ledger-remote-icon {
+      color: currentColor;
+      line-height: 1;
+    }
+
+    #ledger-remote-status.remote-running,
+    #ledger-remote-status.remote-queued,
+    #ledger-remote-status.remote-done {
+      color: #d4af37;
+      border-color: rgba(212, 175, 55, 0.34);
+    }
+
+    #ledger-remote-status.remote-running {
+      color: #8ec9ff;
+      border-color: rgba(92, 184, 200, 0.36);
+    }
+
+    #ledger-remote-status.remote-error {
+      color: #ff5454;
+      border-color: rgba(204, 68, 68, 0.46);
+    }
+
     /* Scroll body - where the ledger lines live. A faint horizontal
        rule at the top creates the feeling of text continuing behind
        the header. Subtle top/bottom shadow inset gives depth. */
@@ -1375,6 +1425,14 @@
 
     @media (max-width: 900px) {
       #log-panel { width: 30%; min-width: 220px; }
+      #ledger-remote-status {
+        min-width: 0;
+        width: 34px;
+        padding: 0;
+      }
+      #ledger-remote-status .ledger-remote-label {
+        display: none;
+      }
     }
 
     @media (max-width: 700px) {
@@ -1486,12 +1544,23 @@
 
       #log-header {
         height: 46px;
-        padding: 0 48px;
+        padding: 0 78px 0 48px;
       }
 
       #log-header h2 {
         font-size: 11px;
         letter-spacing: 4px;
+      }
+
+      #ledger-remote-status {
+        right: 8px;
+        min-width: 0;
+        width: 34px;
+        padding: 0;
+      }
+
+      #ledger-remote-status .ledger-remote-label {
+        display: none;
       }
 
       #ledger-toggle {
@@ -1590,6 +1659,10 @@
     <div id="log-header">
       <button id="ledger-toggle" type="button" title="Hide Guild Ledger" aria-label="Hide Guild Ledger">›</button>
       <h2>Guild Ledger</h2>
+      <span id="ledger-remote-status" aria-live="polite" aria-atomic="true" hidden>
+        <span class="ledger-remote-icon" aria-hidden="true">↗</span>
+        <span class="ledger-remote-label">Remote</span>
+      </span>
     </div>
     <div id="log-content">
       <div class="log-line system">System ready</div>
@@ -1645,6 +1718,7 @@
     </div>
   </div>
 
+  <script src="/seo-dungeon-runtime-config.js"></script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

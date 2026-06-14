@@ -25,23 +25,23 @@ DATAFORSEO_PASSWORD=your-password
 ### Unix/macOS/Linux
 
 ```bash
-git clone https://github.com/AgriciDaniel/claude-seo.git
-cd claude-seo
+git clone https://github.com/avalonreset/seo-dungeon.git
+cd seo-dungeon
 ./extensions/dataforseo/install.sh
 ```
 
 ### Windows
 
 ```powershell
-git clone https://github.com/AgriciDaniel/claude-seo.git
-cd claude-seo
+git clone https://github.com/avalonreset/seo-dungeon.git
+cd seo-dungeon
 .\extensions\dataforseo\install.ps1
 ```
 
 The optional extension installer will:
 1. Prompt for your DataForSEO username and password
 2. Install the skill and agent files
-3. Configure the optional MCP adapter in `~/.claude/settings.json`
+3. Configure the optional MCP adapter in `~/.claude/settings.json` for Claude Code adapter users
 4. Pre-download the `dataforseo-mcp-server` npm package
 
 ## Commands

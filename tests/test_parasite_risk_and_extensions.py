@@ -7,6 +7,7 @@ Tests for the v2 Checkpoint 5 deliverables:
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import sys
@@ -168,6 +169,7 @@ def test_every_extension_install_and_uninstall_is_executable() -> None:
 def test_extension_skillmd_has_required_frontmatter(
     name: str, skill_dir: str,
 ) -> None:
+    plugin = json.loads((_REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
     skillmd = (_REPO_ROOT / "extensions" / name / "skills"
                / skill_dir / "SKILL.md")
     text = skillmd.read_text(encoding="utf-8")
@@ -175,7 +177,9 @@ def test_extension_skillmd_has_required_frontmatter(
     assert f"name: {skill_dir}" in head, f"{name}: frontmatter name must be {skill_dir}"
     assert "description:" in head, f"{name}: missing description"
     assert "metadata:" in head, f"{name}: missing metadata block"
-    assert 'version: "2.2.7"' in head, f"{name}: SKILL.md must declare version 2.2.7"
+    assert f'version: "{plugin["version"]}"' in head, (
+        f"{name}: SKILL.md must declare version {plugin['version']}"
+    )
 
 
 # ---------------------------------------------------------------------------

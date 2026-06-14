@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.7-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2.15-blue)](CHANGELOG.md)
 [![Runtime](https://img.shields.io/badge/runtime-Codex%20%7C%20Claude%20%7C%20Gemini-2ea44f)](dungeon/)
 
 SEO Dungeon turns SEO audits into a 16-bit dungeon crawler. Enter a domain,
@@ -58,6 +58,11 @@ The bundled v2.2 engine is synchronized with Daniel Agrici's public
 1 orchestrator + 1 framework integration + 2 extension mirrors), 18 portable
 sub-agents, 23 Codex agent profiles, and 50 Python execution scripts.
 
+Full audits are treated as multi-agent work by default. SEO Dungeon asks the
+selected runtime to fan out specialist audit workers in parallel whenever that
+runtime supports it, and delegated workers inherit the selected strength profile:
+Warrior stays extra-high, Samurai stays high, and Knight stays medium.
+
 | Area | Coverage |
 |------|----------|
 | Audit | Full-site audits, page audits, technical SEO, schema, sitemap, image SEO, hardened URL safety |
@@ -102,8 +107,8 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The bridge server starts on
-port `3001`.
+Open [http://localhost:3002](http://localhost:3002). The bridge server starts on
+port `3003`.
 
 For live development visibility, keep a second terminal open:
 
@@ -164,8 +169,8 @@ credentials directly first. MCP servers are optional adapters: if you already
 have one configured, an agent may use it quietly, but SEO Dungeon does not
 require MCP setup for audits.
 
-First audits can take 5-10 minutes because `/seo audit` fans out many tool
-calls. Cached audits are much faster.
+First audits can take 5-10 minutes because `/seo audit` fans out multiple
+specialist passes. Cached audits are much faster.
 
 ## Commands
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Firecrawl Extension Installer for Claude SEO
+# Optional Firecrawl MCP adapter installer for Claude Code users.
 # Wraps everything in main() to prevent partial execution on network failure
 
 main() {
@@ -12,17 +12,18 @@ main() {
 
     echo "════════════════════════════════════════"
     echo "║   Firecrawl Extension - Installer    ║"
-    echo "║   For Claude SEO                     ║"
+    echo "║   Optional Claude Code MCP adapter   ║"
     echo "════════════════════════════════════════"
     echo ""
 
     # Check prerequisites
     if [ ! -d "${SEO_SKILL_DIR}" ]; then
-        echo "x Claude SEO is not installed."
-        echo "  Install it first: curl -fsSL https://raw.githubusercontent.com/AgriciDaniel/claude-seo/main/install.sh | bash"
+        echo "x Claude Code SEO skill path was not found."
+        echo "  Normal SEO Dungeon audits do not require this installer."
+        echo "  Put FIRECRAWL_API_KEY in the selected project .env instead."
         exit 1
     fi
-    echo "v Claude SEO detected"
+    echo "v Claude Code SEO skill target detected"
 
     if ! command -v node >/dev/null 2>&1; then
         echo "x Node.js is required but not installed."
@@ -68,7 +69,7 @@ main() {
         SOURCE_DIR="${SCRIPT_DIR}/extensions/firecrawl"
     else
         echo "x Cannot find extension source files."
-        echo "  Run this script from the claude-seo repo: ./extensions/firecrawl/install.sh"
+        echo "  Run this script from the seo-dungeon repo: ./extensions/firecrawl/install.sh"
         exit 1
     fi
 
@@ -133,7 +134,7 @@ PY
     echo "v Firecrawl extension installed successfully!"
     echo ""
     echo "Usage:"
-    echo "  1. Start Claude Code:  claude"
+    echo "  1. Start Claude Code if you intentionally use the adapter:  claude"
     echo "  2. Run commands:"
     echo "     /seo firecrawl crawl https://example.com"
     echo "     /seo firecrawl map https://example.com"

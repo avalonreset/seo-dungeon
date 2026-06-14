@@ -5,6 +5,138 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.15] - 2026-06-14
+
+### Added
+- **Runtime port defaults**: local development now prefers app port `3002` and
+  bridge port `3003`, with launcher/runtime config keeping the browser bridge
+  URL aligned.
+- **Remote-control helper**: added a local WebSocket remote-control CLI for
+  status, session telemetry, and Codex-origin command intents.
+- **Expanded release gates**: added prompt policy, remote-control, remote UI,
+  remote CLI, live bridge, hall, dialogue, and UX harness coverage to the
+  bundled test suite.
+
+### Changed
+- **Guild Ledger active output**: the newest active output line now owns the
+  only living glow immediately when it starts typing. The shimmer inherits each
+  line's semantic color, loops continuously, and speeds up under backlog
+  pressure so large streams do not stall behind presentation effects.
+- **Multi-agent audit policy**: full audits now treat `seo-sxo` as part of the
+  always-on specialist set and instruct delegated workers to preserve the
+  selected strength profile.
+- **Development docs**: README, installation, troubleshooting, and command docs
+  now use the `3002`/`3003` local port convention and describe env-first,
+  optional-MCP audit behavior.
+
+### Fixed
+- **Queue and steering clarity**: generic queue bookkeeping no longer pollutes
+  the permanent Guild Ledger transcript, while queued prompts remain visible in
+  the queue panel until submitted, steered, edited, or removed.
+- **Reduced motion behavior**: active output shimmer and other decorative ledger
+  motion now shut down cleanly when the browser reports reduced-motion
+  preference.
+- **Dungeon Hall return state**: returning to or resuming the hall preserves the
+  user's scroll position and avoids hidden header/footer hit-target overlap.
+
+## [2.2.14] - 2026-06-14
+
+### Fixed
+- **Codex app-server schema**: text input payloads now match the installed
+  Codex app-server `text_elements` contract.
+- **Stress harness ports**: the stress harness probes usable ports before
+  launching repeated bridge and Vite cycles.
+
+### Quality
+- Validated with `npm run test:all`, `npm run build`, and a fresh 10-iteration
+  stress loop.
+
+## [2.2.13] - 2026-06-14
+
+### Fixed
+- **Dialogue harness hardening**: expanded queue, steer, stop, edit, reorder,
+  and stale-bridge handling coverage.
+- **Title hit targets**: tightened title-screen interaction targets used during
+  dialogue regression tests.
+
+### Quality
+- Validated with `npm run test:all`, `SEO_DUNGEON_STRESS_ITERATIONS=5 npm run
+  test:stress`, and `npm run build`.
+
+## [2.2.12] - 2026-06-14
+
+### Fixed
+- **Active-turn steering**: queued prompts are injected into the running Codex
+  app-server turn instead of being treated as a stop or cancel path.
+- **Stream rendering**: tiny Codex app-server deltas are coalesced before
+  rendering, preventing one-word-per-line Guild Ledger output.
+- **Bridge cleanup scope**: process cleanup is scoped to the owning browser
+  connection so probes, refreshes, or secondary clients cannot cancel another
+  active run.
+
+### Quality
+- Added isolated live bridge self-tests with a fake Codex app-server.
+- Added browser UX harness coverage for title launch, YOLO arming, battle
+  routing, queue, steer, stop-and-hold, held prompt submission, and stream
+  rendering.
+
+## [2.2.11] - 2026-06-14
+
+### Added
+- **Bridge health and capabilities**: added bridge `/health` and
+  `/capabilities` readbacks so the local bridge can prove its version and
+  steering support.
+- **Stale bridge detection**: frontend capability probing now explains when an
+  outdated bridge cannot support live steering.
+
+### Fixed
+- **Steering allowlist**: the bridge allowlist includes `steer` and
+  `capabilities`, with CLI regression coverage.
+
+## [2.2.10] - 2026-06-14
+
+### Fixed
+- **Input mechanics**: hardened idle send, busy queueing, selected steering,
+  held sends, queue clearing, and Stop behavior.
+- **Queue integrity**: failed steering keeps the prompt in its original queue
+  position, and queued prompts stay distinct until actually submitted or
+  steered.
+- **Escape handling**: a single Escape press can no longer accidentally stop an
+  active turn.
+
+### Quality
+- Added regression coverage for Tab queueing, send-button queueing, edit,
+  remove, reorder, steer failure, held queues, reconnect draining, and queue
+  clearing.
+
+## [2.2.9] - 2026-06-14
+
+### Changed
+- **Composer controls**: added a Codex-app-inspired composer button that sends
+  while idle and queues while an agent turn is active.
+- **Queue panel visibility**: the queue stack stays hidden when there are no
+  queued prompts instead of showing an empty running panel.
+- **Stop placement**: Stop remains a separate interrupt control in the composer
+  row.
+
+### Quality
+- Tightened browser regression coverage for composer controls and queued prompt
+  state labels.
+
+## [2.2.8] - 2026-06-14
+
+### Added
+- **App-server steering**: Codex mode routes through app-server by default so
+  steering uses turn/steer instead of cancelling active work.
+
+### Fixed
+- **Stop versus steer**: Stop remains a separate interrupt/cancel behavior and
+  is not used for steering.
+- **Queued prompt controls**: hardened queued prompt editing, selection,
+  removal, held queues, and auto-drain edge cases.
+- **Startup steering races**: added browser dialogue state coverage for startup
+  and steering timing.
+
 ## [2.2.7] - 2026-06-13
 
 ### Added

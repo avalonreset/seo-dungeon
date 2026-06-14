@@ -165,6 +165,179 @@ function initLedgerControls() {
   });
 }
 
+function initCompactionOverlay() {
+  let overlay = document.getElementById('compaction-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'compaction-overlay';
+    overlay.className = 'compaction-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.innerHTML = `
+      <div class="compaction-card" role="status" aria-live="polite">
+        <div class="compaction-rune" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="compaction-title">Compressing the Scroll</div>
+        <div class="compaction-message">Preserving the trail before the hunt continues.</div>
+        <div class="compaction-bar" aria-hidden="true"><span></span></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  if (!document.getElementById('compaction-overlay-style')) {
+    const style = document.createElement('style');
+    style.id = 'compaction-overlay-style';
+    style.textContent = `
+      .compaction-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 90000;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        background: rgba(2, 0, 2, 0.58);
+        backdrop-filter: blur(5px) saturate(0.78);
+        transition: opacity 180ms ease, visibility 180ms ease;
+      }
+      .compaction-overlay.open {
+        opacity: 1;
+        visibility: visible;
+      }
+      .compaction-card {
+        width: min(520px, calc(100vw - 48px));
+        border: 1px solid rgba(170, 16, 28, 0.78);
+        background:
+          radial-gradient(circle at 50% 0%, rgba(180, 0, 28, 0.2), transparent 58%),
+          linear-gradient(180deg, rgba(18, 4, 8, 0.98), rgba(5, 3, 7, 0.98));
+        box-shadow:
+          0 0 54px rgba(130, 0, 22, 0.32),
+          inset 0 0 34px rgba(0, 0, 0, 0.7);
+        padding: 28px 32px 30px;
+        text-align: center;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .compaction-rune {
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        margin-bottom: 12px;
+      }
+      .compaction-rune span {
+        width: 13px;
+        height: 13px;
+        border: 1px solid rgba(255, 45, 56, 0.86);
+        transform: rotate(45deg);
+        box-shadow: 0 0 14px rgba(255, 25, 45, 0.46);
+        animation: compactionRune 1.7s ease-in-out infinite;
+      }
+      .compaction-rune span:nth-child(2) {
+        width: 18px;
+        height: 18px;
+        border-color: rgba(244, 190, 62, 0.94);
+        box-shadow: 0 0 18px rgba(244, 190, 62, 0.5);
+        animation-delay: 160ms;
+      }
+      .compaction-rune span:nth-child(3) { animation-delay: 320ms; }
+      .compaction-title {
+        color: #f0c040;
+        text-transform: uppercase;
+        letter-spacing: 7px;
+        font-size: 14px;
+        font-weight: 800;
+        margin-bottom: 13px;
+        text-shadow: 0 0 18px rgba(240, 70, 40, 0.3);
+      }
+      .compaction-message {
+        color: #c8bfa8;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .compaction-bar {
+        width: 100%;
+        height: 4px;
+        margin-top: 22px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .compaction-bar span {
+        display: block;
+        width: 38%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, #ff2b3d, #f0c040, transparent);
+        animation: compactionBar 1.8s ease-in-out infinite;
+      }
+      .compaction-overlay.complete .compaction-card {
+        border-color: rgba(212, 175, 55, 0.65);
+      }
+      @keyframes compactionRune {
+        0%, 100% { opacity: 0.35; transform: rotate(45deg) scale(0.78); }
+        50% { opacity: 1; transform: rotate(45deg) scale(1.16); }
+      }
+      @keyframes compactionBar {
+        0% { transform: translateX(-115%); opacity: 0.4; }
+        50% { opacity: 1; }
+        100% { transform: translateX(265%); opacity: 0.4; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .compaction-overlay,
+        .compaction-rune span,
+        .compaction-bar span {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const messageEl = overlay.querySelector('.compaction-message');
+  let hideTimer = null;
+  let active = false;
+
+  const setMessage = (message) => {
+    if (messageEl && message) messageEl.textContent = message;
+  };
+
+  const show = (message) => {
+    active = true;
+    if (hideTimer) clearTimeout(hideTimer);
+    overlay.classList.remove('complete');
+    setMessage(message || 'Preserving the trail before the hunt continues.');
+    overlay.classList.add('open');
+    overlay.setAttribute('aria-hidden', 'false');
+  };
+
+  const hide = (message) => {
+    if (!active) return;
+    active = false;
+    overlay.classList.add('complete');
+    setMessage(message || 'Context compaction complete. The hunt continues.');
+    hideTimer = setTimeout(() => {
+      overlay.classList.remove('open', 'complete');
+      overlay.setAttribute('aria-hidden', 'true');
+    }, 850);
+  };
+
+  window.addEventListener('seo-dungeon-agent-status', (event) => {
+    const detail = event.detail || {};
+    if (detail.kind !== 'compaction') return;
+    if (detail.phase === 'complete') {
+      addLog(detail.message || 'Context compaction complete.', { immediate: true });
+      hide(detail.message);
+      return;
+    }
+    addLog(detail.message || 'Compacting context...', { immediate: true });
+    show(detail.message);
+  });
+
+  window.__seoDungeonCompactionOverlay = { show, hide };
+}
+
 // ── Bridge Connection ──────────────────────────
 function _createDisconnectBanner() {
   if (document.getElementById('bridge-disconnect-banner')) return;
@@ -406,6 +579,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Init animated systems
   initResponsiveTitleStage();
   initLedgerControls();
+  initCompactionOverlay();
   initActivityLog();
   initKnightSprite();
 
@@ -733,6 +907,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const promptEditSave = document.getElementById('prompt-edit-save');
   const promptEditCancel = document.getElementById('prompt-edit-cancel');
   const promptEditRemove = document.getElementById('prompt-edit-remove');
+  const remoteStatus = document.getElementById('ledger-remote-status');
+  const remoteStatusLabel = remoteStatus?.querySelector('.ledger-remote-label');
+  const remoteStatusIcon = remoteStatus?.querySelector('.ledger-remote-icon');
   let lastEscTime = 0;
   let ledgerRunning = false;
   let promptQueueId = 0;
@@ -743,20 +920,162 @@ document.addEventListener('DOMContentLoaded', () => {
   let editingPromptId = null;
   let draggedPromptId = null;
   let steeringPromptId = null;
+  let remoteStatusTimer = null;
+  let lastRemoteCommandId = null;
   const promptQueue = [];
+  const handledSessionEventIds = new Set();
 
   window.__seoDungeonDialogueState = () => ({
-    queue: promptQueue.map((item) => ({ id: item.id, text: item.text })),
+    queue: promptQueue.map((item) => ({ id: item.id, text: item.text, source: item.commandOptions?.source || 'guild-ledger' })),
     queueHold,
     hasQueueDrainTimer: Boolean(queueDrainTimer),
     selectedPromptId,
     steeringPromptId,
     ledgerRunning,
     busy: isAgentBusy(),
+    remoteStatus: remoteStatus?.hidden ? 'hidden' : remoteStatusLabel?.textContent || 'Remote',
   });
+
+  const setRemoteStatus = (mode = 'idle', label = 'Remote', title = '', icon = '↗') => {
+    if (!remoteStatus) return;
+    remoteStatus.classList.remove('remote-running', 'remote-queued', 'remote-done', 'remote-error');
+    if (mode === 'idle') {
+      remoteStatus.hidden = true;
+      return;
+    }
+    remoteStatus.hidden = false;
+    remoteStatus.classList.add(mode);
+    if (remoteStatusLabel) remoteStatusLabel.textContent = label;
+    if (remoteStatusIcon) remoteStatusIcon.textContent = icon;
+    const accessible = title || label;
+    remoteStatus.title = accessible;
+    remoteStatus.setAttribute('aria-label', accessible);
+  };
+
+  const settleRemoteStatus = (mode, label, title, delay = 4200, icon = '↗') => {
+    setRemoteStatus(mode, label, title, icon);
+    if (remoteStatusTimer) clearTimeout(remoteStatusTimer);
+    remoteStatusTimer = setTimeout(() => {
+      remoteStatusTimer = null;
+      setRemoteStatus('idle');
+    }, delay);
+  };
+
+  const updateRemoteStatusFromSession = (detail = {}) => {
+    if (detail.kind === 'remote-command') {
+      lastRemoteCommandId = detail.commandId || detail.eventId || lastRemoteCommandId;
+      if (remoteStatusTimer) {
+        clearTimeout(remoteStatusTimer);
+        remoteStatusTimer = null;
+      }
+      setRemoteStatus('remote-running', 'Remote', `Remote command from ${detail.source || 'controller'}`, '↗');
+      return;
+    }
+    if (detail.kind === 'ledger-command') {
+      const source = detail.source || 'guild-ledger';
+      if (source === 'guild-ledger') setRemoteStatus('idle');
+      return;
+    }
+    if (detail.kind === 'ledger-result') {
+      const isRemote = detail.commandId && detail.commandId === lastRemoteCommandId;
+      if (!isRemote && detail.source === 'guild-ledger') return;
+      if (detail.status === 'error') {
+        settleRemoteStatus('remote-error', 'Remote', detail.message || 'Remote command failed', 4200, '!');
+      } else {
+        settleRemoteStatus('remote-done', 'Done', detail.message || 'Remote command complete', 2200);
+      }
+      return;
+    }
+    if (detail.kind === 'codex-state') {
+      const status = String(detail.status || '').toLowerCase();
+      if (/error|fail/.test(status)) settleRemoteStatus('remote-error', 'Remote', detail.message || 'Codex state error', 4200, '!');
+      else if (/done|complete|idle/.test(status)) settleRemoteStatus('remote-done', 'Done', detail.message || 'Codex state complete', 2200);
+      else setRemoteStatus('remote-running', 'Remote', detail.message || 'Codex controller connected', '↗');
+    }
+  };
+
+  const rememberSessionEvent = (event) => {
+    const id = event?.eventId || event?.commandId;
+    if (!id) return false;
+    if (handledSessionEventIds.has(id)) return true;
+    handledSessionEventIds.add(id);
+    if (handledSessionEventIds.size > 500) {
+      const oldest = handledSessionEventIds.values().next().value;
+      handledSessionEventIds.delete(oldest);
+    }
+    return false;
+  };
+
+  const commandHasTerminalResult = (events, commandId) => {
+    if (!commandId) return false;
+    return events.some((event) =>
+      event?.kind === 'ledger-result' &&
+      event.commandId === commandId &&
+      ['complete', 'completed', 'done', 'error', 'failed', 'cancelled', 'canceled', 'interrupted']
+        .includes(String(event.status || '').toLowerCase())
+    );
+  };
+
+  const handleRemoteCommandEvent = async (detail = {}) => {
+    updateRemoteStatusFromSession(detail);
+    if (rememberSessionEvent(detail)) return false;
+    const text = String(detail.command || '').trim();
+    if (!text) return false;
+    try {
+      const claim = await bridge.claimRemoteCommand(detail.commandId || detail.eventId);
+      if (claim?.data?.claimed !== true) return false;
+    } catch (err) {
+      addLog('Could not claim remote command: ' + (err.message || 'unknown'));
+      return false;
+    }
+    const commandOptions = {
+      source: detail.source || 'remote-controller',
+      mirror: false,
+      commandId: detail.commandId || detail.eventId || null,
+      projectPathOverride: detail.projectPath || null,
+      profileOverride: detail.profile || null,
+      runtimeOverride: detail.runtime || 'codex',
+      dangerousBypassOverride: detail.dangerousBypass,
+    };
+    addLog(`Remote ${detail.source || 'controller'}: ${truncatePrompt(text)}`, { immediate: true });
+    if (isAgentBusy()) {
+      enqueuePrompt(text, { commandOptions });
+      setRemoteStatus('remote-queued', 'Queued', `Remote command queued from ${detail.source || 'controller'}`, '↗');
+      return true;
+    }
+    executeLedgerCommand(text, commandOptions);
+    return true;
+  };
+
+  const replayRemoteCommandsFromSession = async () => {
+    if (!bridge.connected || replayRemoteCommandsFromSession.running) return;
+    replayRemoteCommandsFromSession.running = true;
+    try {
+      const response = await bridge.sessionState();
+      const events = Array.isArray(response?.data?.events) ? response.data.events : [];
+      const claimed = new Set(response?.data?.claimedCommandIds || []);
+      const pending = events
+        .filter((event) => event?.kind === 'remote-command')
+        .filter((event) => {
+          const commandId = event.commandId || event.eventId;
+          return commandId &&
+            !claimed.has(commandId) &&
+            !commandHasTerminalResult(events, commandId);
+        })
+        .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+      for (const event of pending) {
+        await handleRemoteCommandEvent(event);
+      }
+    } catch (err) {
+      addLog('Could not replay remote session state: ' + (err.message || 'unknown'));
+    } finally {
+      replayRemoteCommandsFromSession.running = false;
+    }
+  };
 
   let interactiveTimeout = null;
   let lastStreamTime = 0;
+  const WATCHDOG_MS = Math.max(50, Number(window.__SEO_DUNGEON_WATCHDOG_MS || 30000));
 
   const resetLoadingState = () => {
     ledgerRunning = false;
@@ -767,15 +1086,32 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePromptControls();
   };
 
-  // Watchdog: if no stream data arrives for 30s, assume it's done/dead
+  const hasActiveBridgeRequest = () => Boolean(
+    bridge.activeLedgerId ||
+    bridge.activeAuditId ||
+    bridge.activeFixId ||
+    bridge.activeCommitId
+  );
+
+  // Watchdog: if no stream data arrives for 30s, settle only when the bridge
+  // no longer owns an active request. Otherwise keep the running affordances
+  // visible and check again so the UI never looks idle while prompts still
+  // queue or steer against a live turn.
   const startWatchdog = () => {
     if (interactiveTimeout) clearTimeout(interactiveTimeout);
     interactiveTimeout = setTimeout(() => {
       if (ledgerRunning) {
+        if (hasActiveBridgeRequest() || isBattleBusy()) {
+          logInputBar.classList.add('running');
+          showLoadingIndicator();
+          updatePromptControls();
+          startWatchdog();
+          return;
+        }
         resetLoadingState();
         scheduleQueueDrain();
       }
-    }, 30000);
+    }, WATCHDOG_MS);
   };
 
   const truncatePrompt = (text, max = 120) => {
@@ -801,19 +1137,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const isAgentBusy = () => Boolean(
     ledgerRunning ||
-    bridge.activeLedgerId ||
-    bridge.activeAuditId ||
-    bridge.activeFixId ||
-    bridge.activeCommitId ||
+    hasActiveBridgeRequest() ||
     isBattleBusy()
   );
 
-  const hasSteerableTurn = () => Boolean(
-    bridge.activeLedgerId ||
-    bridge.activeAuditId ||
-    bridge.activeFixId ||
-    bridge.activeCommitId
-  );
+  const hasSteerableTurn = () => hasActiveBridgeRequest();
 
   function findPromptIndex(id) {
     return promptQueue.findIndex((entry) => entry.id === id);
@@ -829,7 +1157,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function removeQueuedPrompt(id, { announce = true } = {}) {
+  function removeQueuedPrompt(id) {
     if (id === steeringPromptId) return null;
     const idx = findPromptIndex(id);
     if (idx < 0) return null;
@@ -837,7 +1165,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selectedPromptId === id) {
       selectedPromptId = promptQueue[idx]?.id || promptQueue[idx - 1]?.id || promptQueue[0]?.id || null;
     }
-    if (announce) addLog('Removed queued prompt.');
     renderPromptQueue();
     updatePromptControls();
     return removed;
@@ -855,7 +1182,7 @@ document.addEventListener('DOMContentLoaded', () => {
       promptQueueTitle.textContent = queueHold && hasQueue
         ? 'Held'
         : hasQueue
-          ? 'Queued'
+          ? (hasSteerableTurn() ? 'Ready to steer' : 'Waiting to send')
           : 'Queued';
     }
     logInputBar?.classList.toggle('agent-busy', busy);
@@ -981,32 +1308,38 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logStop) logStop.disabled = !busy;
     if (promptQueueSteer) {
       const shouldSteer = hasSteerableTurn();
+      const waitingToSend = !shouldSteer && busy;
       const actionLabel = shouldSteer ? 'Steer' : 'Send';
       const steerUnsupported = shouldSteer && bridge.supportsSteer === false;
-      promptQueueSteer.disabled = promptQueue.length === 0 || selectedPromptId == null || steeringPromptId != null || steerUnsupported;
+      promptQueueSteer.disabled = promptQueue.length === 0 ||
+        selectedPromptId == null ||
+        steeringPromptId != null ||
+        steerUnsupported ||
+        waitingToSend;
       promptQueueSteer.textContent = actionLabel;
       promptQueueSteer.title = steerUnsupported
         ? 'Restart the SEO Dungeon bridge to enable live steering'
-        : shouldSteer
-          ? 'Steer selected prompt into active turn'
-          : 'Send selected queued prompt';
+        : waitingToSend
+          ? 'Wait for the current turn to settle before sending queued prompt'
+          : shouldSteer
+            ? 'Steer selected prompt into active turn'
+            : 'Send selected queued prompt';
       promptQueueSteer.setAttribute('aria-label', promptQueueSteer.title);
     }
     if (promptQueueClear) promptQueueClear.disabled = promptQueue.length === 0 || steeringPromptId != null;
   }
 
-  function enqueuePrompt(text, { front = false } = {}) {
+  function enqueuePrompt(text, { front = false, commandOptions = null } = {}) {
     const clean = String(text || '').trim();
     if (!clean) return;
     if (queueDrainTimer) {
       clearTimeout(queueDrainTimer);
       queueDrainTimer = null;
     }
-    const item = { id: ++promptQueueId, text: clean, createdAt: Date.now() };
+    const item = { id: ++promptQueueId, text: clean, createdAt: Date.now(), commandOptions };
     if (front) promptQueue.unshift(item);
     else promptQueue.push(item);
     selectedPromptId = item.id;
-    addLog(front ? 'Prompt returned to front of queue.' : `Prompt queued. ${promptQueue.length} waiting.`);
     renderPromptQueue();
     updatePromptControls();
   }
@@ -1058,7 +1391,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     promptQueue[idx].text = clean;
     selectedPromptId = promptQueue[idx].id;
-    addLog('Updated queued prompt.');
     closePromptEditor();
     renderPromptQueue();
     updatePromptControls();
@@ -1125,7 +1457,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         queueHold = wasHeld && promptQueue.length > 0;
         addLog('> ' + selected.text, { immediate: true });
-        addLog('Steered active turn.');
       } catch (err) {
         const message = String(err.message || 'unknown');
         if (findPromptIndex(selected.id) < 0) {
@@ -1133,11 +1464,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         selectedPromptId = selected.id;
         queueHold = wasHeld && promptQueue.length > 0;
-        addLog('Could not steer active turn: ' + message);
-        addLog('Prompt stayed queued.');
+        addLog('Could not steer active turn: ' + message + '. Prompt kept in queue.');
       } finally {
         steeringPromptId = null;
       }
+      renderPromptQueue();
+      updatePromptControls();
+      return;
+    }
+    if (isAgentBusy()) {
       renderPromptQueue();
       updatePromptControls();
       return;
@@ -1147,8 +1482,11 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedPromptId = promptQueue[0]?.id || null;
     renderPromptQueue();
     updatePromptControls();
-    addLog(wasHeld ? 'Submitted held prompt.' : 'Submitted queued prompt.');
-    executeLedgerCommand(selected.text, { fromQueue: true, preserveQueueHold: queueHold });
+    executeLedgerCommand(selected.text, {
+      ...(selected.commandOptions || {}),
+      fromQueue: true,
+      preserveQueueHold: queueHold,
+    });
   }
 
   function scheduleQueueDrain() {
@@ -1168,7 +1506,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const item = promptQueue.shift();
     if (selectedPromptId === item.id) selectedPromptId = promptQueue[0]?.id || null;
     renderPromptQueue();
-    executeLedgerCommand(item.text, { fromQueue: true });
+    executeLedgerCommand(item.text, {
+      ...(item.commandOptions || {}),
+      fromQueue: true,
+    });
   }
 
   function clearInput() {
@@ -1179,16 +1520,67 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePromptControls();
   }
 
-  const executeLedgerCommand = (text, { fromQueue = false, preserveQueueHold = false } = {}) => {
+  const publishLedgerCommand = (payload) => {
+    bridge.publishSessionEvent({
+      kind: 'ledger-command',
+      source: payload.source || 'guild-ledger',
+      commandId: payload.commandId || undefined,
+      command: payload.text,
+      projectPath: payload.projectPath,
+      runtime: payload.runtime,
+      profile: payload.profile,
+      dangerousBypass: payload.dangerousBypass,
+    }).catch((err) => {
+      addLog('Session mirror unavailable: ' + (err.message || 'unknown'));
+    });
+  };
+
+  const executeLedgerCommand = (text, {
+    fromQueue = false,
+    preserveQueueHold = false,
+    source = 'guild-ledger',
+    mirror = true,
+    commandId = null,
+    projectPathOverride = null,
+    profileOverride = null,
+    runtimeOverride = null,
+    dangerousBypassOverride = undefined,
+  } = {}) => {
     if (!text.trim()) return;
+    const commandOptions = {
+      source,
+      mirror,
+      commandId,
+      projectPathOverride,
+      profileOverride,
+      runtimeOverride,
+      dangerousBypassOverride,
+    };
     if (queueDrainTimer) {
       clearTimeout(queueDrainTimer);
       queueDrainTimer = null;
     }
     if (!bridge.connected) {
       addLog('Bridge not connected. Prompt kept in queue.');
-      enqueuePrompt(text, { front: fromQueue });
+      enqueuePrompt(text, { front: fromQueue, commandOptions });
       return;
+    }
+
+    const projectPath = projectPathOverride || document.getElementById('path-input')?.value?.trim() || '.';
+    const profile = getProfileKey(profileOverride || window.selectedCharacter?.profile || window.selectedCharacter?.model);
+    const runtime = runtimeOverride || window.selectedCharacter?.runtime || getSelectedRuntime();
+    const dangerousBypass = dangerousBypassOverride ?? window.selectedCharacter?.dangerousBypass ?? getDangerousBypassEnabled();
+
+    if (mirror) {
+      publishLedgerCommand({
+        text,
+        source,
+        commandId,
+        projectPath,
+        runtime,
+        profile,
+        dangerousBypass,
+      });
     }
 
     // If we're in a battle, route through doAttack so everything is synchronized
@@ -1214,10 +1606,8 @@ document.addEventListener('DOMContentLoaded', () => {
     lastStreamTime = Date.now();
     startWatchdog();
 
-    const projectPath = document.getElementById('path-input')?.value?.trim() || '.';
-    const profile = getProfileKey(window.selectedCharacter?.profile || window.selectedCharacter?.model);
-    const runtime = window.selectedCharacter?.runtime || getSelectedRuntime();
     let ledgerRequestId = null;
+    let completedNormally = false;
 
     (async () => {
       try {
@@ -1227,18 +1617,46 @@ document.addEventListener('DOMContentLoaded', () => {
           startWatchdog();
           const clean = chunk.replace(/[\n\r]+/g, ' ').trim();
           if (clean.length > 0) addLog(clean);
+        }, {
+          dangerousBypass,
+          commandId,
+          source,
         });
         ledgerRequestId = bridge.activeLedgerId;
         const result = await pendingResult;
+        completedNormally = true;
+        bridge.publishSessionEvent({
+          kind: 'ledger-result',
+          source,
+          commandId: commandId || undefined,
+          status: 'complete',
+          message: result?.data?.summary || 'Ledger command completed.',
+          projectPath,
+          runtime,
+          profile,
+        }).catch(() => {});
         if (result?.data?.summary) addLog(result.data.summary);
       } catch (err) {
         if (err.message !== 'Cancelled by user') {
+          bridge.publishSessionEvent({
+            kind: 'ledger-result',
+            source,
+            commandId: commandId || undefined,
+            status: 'error',
+            message: err.message || 'unknown',
+            projectPath,
+            runtime,
+            profile,
+          }).catch(() => {});
           addLog('Error: ' + (err.message || 'unknown'));
-          if (fromQueue) enqueuePrompt(text, { front: true });
+          if (fromQueue) enqueuePrompt(text, { front: true, commandOptions });
         }
       } finally {
         flushLogQueue();
         resetLoadingState();
+        if (completedNormally && (!promptQueue.length || queueHold)) {
+          SFX.play('ledgerReady');
+        }
         if (ledgerRequestId && suppressedDrainIds.delete(ledgerRequestId)) {
           renderPromptQueue();
           updatePromptControls();
@@ -1259,6 +1677,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     executeLedgerCommand(text);
   };
+
+  window.addEventListener('seo-dungeon-session-event', async (event) => {
+    const detail = event.detail || {};
+    if (detail.kind === 'remote-command') {
+      await handleRemoteCommandEvent(detail);
+      return;
+    }
+    updateRemoteStatusFromSession(detail);
+    rememberSessionEvent(detail);
+  });
 
   // Auto-resize textarea as user types - push log content up
   const logContent = document.getElementById('log-content');
@@ -1328,7 +1756,6 @@ document.addEventListener('DOMContentLoaded', () => {
     promptQueue.splice(0, promptQueue.length);
     selectedPromptId = null;
     queueHold = false;
-    addLog('Queue cleared.');
     renderPromptQueue();
     updatePromptControls();
   });
@@ -1375,6 +1802,9 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePromptControls();
     if (connected && promptQueue.length && !queueHold) {
       scheduleQueueDrain();
+    }
+    if (connected) {
+      replayRemoteCommandsFromSession();
     }
   });
   window.__seoDungeonDialogueReady = true;

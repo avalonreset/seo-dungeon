@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude SEO — Ahrefs extension installer.
+# Optional Ahrefs MCP adapter installer for Claude Code users.
 #
 # Wires the official @ahrefs/mcp server into ~/.claude/settings.json and
 # copies the seo-ahrefs mirror skill into ~/.claude/skills/.
@@ -12,7 +12,7 @@ main() {
     SETTINGS_JSON="${HOME}/.claude/settings.json"
 
     echo "════════════════════════════════════════"
-    echo "║   Claude SEO — Ahrefs extension      ║"
+    echo "║   Optional Ahrefs MCP adapter        ║"
     echo "════════════════════════════════════════"
 
     command -v python3 >/dev/null 2>&1 || {
@@ -23,8 +23,9 @@ main() {
     }
 
     if [ ! -d "${SKILL_DIR}/seo" ]; then
-        echo "✗ claude-seo base plugin not installed."
-        echo "  Install it first: curl -fsSL https://raw.githubusercontent.com/AgriciDaniel/claude-seo/main/install.sh | bash"
+        echo "✗ Claude Code SEO skill path was not found."
+        echo "  Normal SEO Dungeon audits do not require this installer."
+        echo "  Put AHREFS_API_TOKEN in the selected project .env if your workflow needs it."
         exit 1
     fi
 
@@ -82,7 +83,7 @@ print(f"✓ Wrote mcpServers.ahrefs to {path}")
 PY
 
     echo
-    echo "Done. Open a new Claude Code session and run:"
+    echo "Done. Open a new Claude Code session if you intentionally use the adapter and run:"
     echo "  /seo ahrefs metrics https://example.com"
     echo
     echo "Full docs: extensions/ahrefs/docs/AHREFS-SETUP.md"

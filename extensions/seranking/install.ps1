@@ -1,4 +1,4 @@
-# Claude SEO — SE Ranking extension installer (Windows / PowerShell).
+# Optional SE Ranking credential installer for Claude Code users (Windows / PowerShell).
 $ErrorActionPreference = "Stop"
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
@@ -9,7 +9,7 @@ $SkillDir = Join-Path $HOME ".claude/skills"
 $SettingsJson = Join-Path $HOME ".claude/settings.json"
 
 if (-not (Test-Path (Join-Path $SkillDir "seo"))) {
-    throw "claude-seo base plugin not installed."
+    throw "Claude Code SEO skill path was not found. Normal SEO Dungeon audits do not require this installer."
 }
 
 $Key = Read-Host "SE Ranking API key" -AsSecureString

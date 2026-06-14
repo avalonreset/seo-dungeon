@@ -1,0 +1,1 @@
+window.SEO_DUNGEON_BRIDGE_URL = window.SEO_DUNGEON_BRIDGE_URL || 'ws://127.0.0.1:3003';

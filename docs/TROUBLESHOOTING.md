@@ -18,15 +18,15 @@ cd dungeon
 npm run dev
 ```
 
-The game runs on [http://localhost:3000](http://localhost:3000). The bridge
-listens on `ws://127.0.0.1:3001`.
+The game runs on [http://localhost:3002](http://localhost:3002). The bridge
+listens on `ws://127.0.0.1:3003`.
 
 ### The page loads but the bridge stays disconnected
 
-Check that no other process is already using port `3001`:
+Check that no other process is already using port `3003`:
 
 ```powershell
-netstat -ano | findstr :3001
+netstat -ano | findstr :3003
 ```
 
 Stop the conflicting process or set a different port in the bridge server before

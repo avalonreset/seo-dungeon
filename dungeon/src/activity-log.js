@@ -5,7 +5,9 @@
  * that makes it obvious work is still happening.
  */
 
-const CHAR_DELAY_BASE = 12;
+const CHAR_DELAY_BASE = 8;
+const CHAR_DELAY_FAST = 4;
+const CHAR_DELAY_FLOOD = 1;
 const GLOW_DURATION = 2000;
 
 let logEl = null;
@@ -15,7 +17,6 @@ let currentTyping = null;
 let loadingIndicator = null;
 let loadingFrame = 0;
 let loadingInterval = null;
-let lineCount = 0;
 
 // ── Track the current "latest" line ──
 let latestLine = null;
@@ -42,6 +43,7 @@ const ICONS = {
   score:    '\u2694\uFE0E',   // ⚔ crossed swords - scoring
   demon:    '\u2666',          // ♦ diamond suit - demon
   fix:      '\u2726',          // ✦ star - vanquished
+  compact:  '\u25C8',          // ◈ diamond - context compression
   text:     '\u203A',          // › single angle quote - generic text
 };
 
@@ -58,10 +60,11 @@ function classify(text) {
   if (text.startsWith('[Bash]')) return 'bash';
   if (text.startsWith('[Skill]')) return 'skill';
   if (text.startsWith('[TodoWrite]') || text.startsWith('[TaskCreate]')) return 'status';
-  if (text.startsWith('[')) return 'tool';
 
   if (text.startsWith('> ')) return 'user';
+  if (/^(\[Compact\]|\[Compaction\]|Context compaction|Compaction|Compacting context|Compressing context|Context compression|Auto-compact|Auto compact)/i.test(text)) return 'compact';
   if (text.includes('[Complete]') || text.includes('omplete')) return 'complete';
+  if (text.startsWith('[')) return 'tool';
   if (/^(Queued|Queue|Requeued|Prompt queued|Prompt returned|Returned prompt|Removed queued|Updated queued|Submitted queued)/i.test(text)) return 'queue';
 
   if (/^(Audit|Fix|Score|Found|Scanning|Initializing|Subagent|Stopped|Nothing active)/i.test(text)) return 'status';
@@ -86,13 +89,35 @@ function getIcon(cls) {
 // It gets a static gold left bar + soft trailing dots. No shimmer, no
 // pulse, no flicker. When a line loses .latest, it just drops those
 // affordances and becomes historical - ink already dried.
-function markAsLatest(line) {
-  if (latestLine && latestLine !== line) {
-    latestLine.classList.remove('latest');
-    if (latestDots && latestDots.parentNode) {
-      latestDots.remove();
-    }
+function clearLatestAffordances(preserveLine = null) {
+  if (logEl) {
+    logEl.querySelectorAll('.log-line.latest, .log-line.active-output').forEach((node) => {
+      if (node !== preserveLine) node.classList.remove('latest', 'active-output');
+    });
+    logEl.querySelectorAll('.log-dots').forEach((node) => {
+      if (!preserveLine || !preserveLine.contains(node)) node.remove();
+    });
   }
+  if (latestLine && latestLine !== preserveLine) latestLine.classList.remove('latest', 'active-output');
+  if (latestDots && latestDots.parentNode && (!preserveLine || !preserveLine.contains(latestDots))) {
+    latestDots.remove();
+    latestDots = null;
+  }
+}
+
+function isActiveOutputLine(line) {
+  if (!line) return false;
+  return !line.classList.contains('user') &&
+    !line.classList.contains('queue') &&
+    !line.classList.contains('system') &&
+    !line.classList.contains('error') &&
+    !line.classList.contains('complete');
+}
+
+function markAsLatest(line) {
+  clearLatestAffordances(line);
+  if (latestDots && latestDots.parentNode) latestDots.remove();
+  latestDots = null;
 
   latestLine = line;
 
@@ -102,11 +127,15 @@ function markAsLatest(line) {
 
   if (isIdle || isComplete) {
     // No "latest" class, no dots, no shimmer - completely static
+    line.classList.remove('latest', 'active-output');
     latestDots = null;
     return;
   }
 
   line.classList.add('latest');
+  if (isActiveOutputLine(line)) {
+    line.classList.add('active-output');
+  }
 
   latestDots = document.createElement('span');
   latestDots.className = 'log-dots';
@@ -117,15 +146,14 @@ function markAsLatest(line) {
   }
 }
 
-function addLineSeparatorIfNeeded() {
-  lineCount++;
-
-  if (lineCount % 12 === 0) {
-    const sep = document.createElement('div');
-    sep.className = 'log-separator';
-    sep.innerHTML = '<span class="sep-dot">\u25C7</span><span class="sep-dot">\u25C6</span><span class="sep-dot">\u25C7</span>';
-    logEl.appendChild(sep);
-  }
+function addTurnSeparatorIfNeeded(cls) {
+  if (cls !== 'complete') return;
+  if (logEl.lastElementChild?.classList.contains('log-separator')) return;
+  const sep = document.createElement('div');
+  sep.className = 'log-separator';
+  sep.innerHTML = '<span class="sep-dot">\u25C7</span><span class="sep-dot">\u25C6</span><span class="sep-dot">\u25C7</span>';
+  logEl.appendChild(sep);
+  scrollToBottom();
 }
 
 function createLogLine(text, cls, { typing = false } = {}) {
@@ -146,7 +174,6 @@ function createLogLine(text, cls, { typing = false } = {}) {
 
   logEl.appendChild(line);
   scrollToBottom();
-  addLineSeparatorIfNeeded();
 
   return { line, content };
 }
@@ -160,6 +187,7 @@ function finishTypingContext(ctx) {
   setTimeout(() => ctx.line.classList.remove('glow'), GLOW_DURATION);
   linkify(ctx.content);
   markAsLatest(ctx.line);
+  addTurnSeparatorIfNeeded(ctx.cls);
   if (currentTyping === ctx) currentTyping = null;
   ctx.resolve?.();
 }
@@ -170,6 +198,7 @@ function appendInstantLine(text, cls) {
   setTimeout(() => line.classList.remove('glow'), GLOW_DURATION);
   linkify(content);
   markAsLatest(line);
+  addTurnSeparatorIfNeeded(cls);
 }
 
 export function flushLogQueue() {
@@ -182,16 +211,34 @@ export function flushLogQueue() {
 }
 
 // ── Typewriter effect with icon prefix ──
+function queuedCharacterPressure() {
+  return queue.reduce((sum, item) => sum + (item?.text?.length || 0), 0);
+}
+
+function typingTickBatchSize(textLength, backlogCount = 0, backlogChars = 0) {
+  if (backlogCount > 14 || backlogChars > 5000) return 12;
+  if (backlogCount > 8 || backlogChars > 2500) return 8;
+  if (backlogCount > 4 || backlogChars > 1200) return 5;
+  if (textLength > 900) return 4;
+  if (textLength > 450) return 2;
+  return 1;
+}
+
+function charsPerTypingTick(textLength) {
+  return typingTickBatchSize(textLength, queue.length, queuedCharacterPressure());
+}
+
 function typewriterLine(text, cls) {
   return new Promise((resolve) => {
     const { line, content } = createLogLine(text, cls, { typing: true });
-    const ctx = { line, content, text, interval: null, resolve, done: false };
+    const ctx = { line, content, text, cls, interval: null, resolve, done: false };
     currentTyping = ctx;
+    markAsLatest(line);
 
     let i = 0;
-    const speed = queue.length > 10 ? 1 : queue.length > 5 ? 4 : queue.length > 2 ? 8 : CHAR_DELAY_BASE;
+    const speed = queue.length > 8 ? CHAR_DELAY_FLOOD : queue.length > 3 ? CHAR_DELAY_FAST : CHAR_DELAY_BASE;
     ctx.interval = setInterval(() => {
-      const charsPerTick = speed <= 2 ? 4 : speed <= 5 ? 2 : 1;
+      const charsPerTick = charsPerTypingTick(text.length);
       for (let c = 0; c < charsPerTick && i < text.length; c++) {
         content.textContent += text[i];
         i++;
@@ -469,6 +516,10 @@ export function initActivityLog() {
 
     /* ── Base line ── */
     .log-line {
+      --ledger-ink: #c8bfa8;
+      --ledger-hot: #f2e5bd;
+      --ledger-soft: #8a8270;
+      --ledger-glow-rgb: 200, 191, 168;
       opacity: 0;
       animation: fadeInLine 0.4s ease-out forwards;
       position: relative;
@@ -718,38 +769,113 @@ export function initActivityLog() {
        ═══════════════════════════════════════════════ */
 
     /* Parchment - default text, neutral chatter */
-    .log-line.text    { color: #c8bfa8; }
-    .log-line.system  { color: #8a8270; }
+    .log-line.text {
+      --ledger-ink: #c8bfa8;
+      --ledger-hot: #fff0ca;
+      --ledger-soft: #8a8270;
+      --ledger-glow-rgb: 200, 191, 168;
+      color: var(--ledger-ink);
+    }
+    .log-line.system {
+      --ledger-ink: #8a8270;
+      --ledger-hot: #c7bea8;
+      --ledger-soft: #5d574c;
+      --ledger-glow-rgb: 138, 130, 112;
+      color: var(--ledger-ink);
+    }
 
     /* Ink blue - cool system work (reading, searching, fetching) */
-    .log-line.tool    { color: #8ab6d2; }
-    .log-line.fetch   { color: #8ab6d2; }
-    .log-line.search  { color: #8ab6d2; }
-    .log-line.read    { color: #8ab6d2; }
-    .log-line.domain  { color: #8ab6d2; }
-    .log-line.queue   { color: #8ec9ff; }
+    .log-line.tool,
+    .log-line.fetch,
+    .log-line.search,
+    .log-line.read,
+    .log-line.domain {
+      --ledger-ink: #8ab6d2;
+      --ledger-hot: #d2f4ff;
+      --ledger-soft: #47799a;
+      --ledger-glow-rgb: 138, 182, 210;
+      color: var(--ledger-ink);
+    }
+    .log-line.queue {
+      --ledger-ink: #8ec9ff;
+      --ledger-hot: #d9f2ff;
+      --ledger-soft: #487aa8;
+      --ledger-glow-rgb: 142, 201, 255;
+      color: var(--ledger-ink);
+    }
+    .log-line.compact {
+      --ledger-ink: #8fcce6;
+      --ledger-hot: #e1f7ff;
+      --ledger-soft: #477f95;
+      --ledger-glow-rgb: 143, 204, 230;
+      color: var(--ledger-ink);
+    }
 
     /* Forge green - execution and success */
-    .log-line.bash    { color: #7fb890; }
-    .log-line.complete{ color: #9fd4a8; }
+    .log-line.bash {
+      --ledger-ink: #7fb890;
+      --ledger-hot: #d5ffd9;
+      --ledger-soft: #4d8c62;
+      --ledger-glow-rgb: 127, 184, 144;
+      color: var(--ledger-ink);
+    }
+    .log-line.complete {
+      --ledger-ink: #9fd4a8;
+      --ledger-hot: #e0ffe4;
+      --ledger-soft: #5d9a67;
+      --ledger-glow-rgb: 159, 212, 168;
+      color: var(--ledger-ink);
+    }
 
-    /* Hearth gold - significance (skills, user action, victories, writes) */
-    .log-line.skill   { color: #d4af37; }
-    .log-line.fix     { color: #d4af37; }
-    .log-line.user    { color: #d4af37; font-weight: 600; }
-    .log-line.score   { color: #d4af37; }
-    .log-line.write   { color: #c89a40; }
-    .log-line.status  { color: #b89230; }
+    /* Hearth gold - significance */
+    .log-line.skill,
+    .log-line.fix,
+    .log-line.score {
+      --ledger-ink: #d4af37;
+      --ledger-hot: #ffe88b;
+      --ledger-soft: #9b7b20;
+      --ledger-glow-rgb: 212, 175, 55;
+      color: var(--ledger-ink);
+    }
+    .log-line.user {
+      --ledger-ink: #d4af37;
+      --ledger-hot: #fff0a0;
+      --ledger-soft: #9b7b20;
+      --ledger-glow-rgb: 212, 175, 55;
+      color: var(--ledger-ink);
+      font-weight: 600;
+    }
+    .log-line.write,
+    .log-line.status {
+      --ledger-ink: #c89a40;
+      --ledger-hot: #ffda82;
+      --ledger-soft: #8f6828;
+      --ledger-glow-rgb: 200, 154, 64;
+      color: var(--ledger-ink);
+    }
 
     /* Agent purple - summoned entities, spawned subagents */
-    .log-line.agent   { color: #a794d6; }
+    .log-line.agent {
+      --ledger-ink: #a794d6;
+      --ledger-hot: #eadfff;
+      --ledger-soft: #7261a4;
+      --ledger-glow-rgb: 167, 148, 214;
+      color: var(--ledger-ink);
+    }
 
     /* Blood red - alarm */
-    .log-line.error   { color: #c85050; font-weight: 500; }
-    .log-line.demon   { color: #c85050; }
+    .log-line.error,
+    .log-line.demon {
+      --ledger-ink: #c85050;
+      --ledger-hot: #ff9999;
+      --ledger-soft: #8c292f;
+      --ledger-glow-rgb: 200, 80, 80;
+      color: var(--ledger-ink);
+    }
+    .log-line.error { font-weight: 500; }
 
     /* Icon colors mirror line family (grouped, not 1:1 recopied) */
-    .icon-tool, .icon-fetch, .icon-search, .icon-read, .icon-domain, .icon-queue { color: #8ab6d2; }
+    .icon-tool, .icon-fetch, .icon-search, .icon-read, .icon-domain, .icon-queue, .icon-compact { color: #8ab6d2; }
     .icon-bash, .icon-complete { color: #7fb890; }
     .icon-skill, .icon-fix, .icon-user, .icon-score { color: #d4af37; }
     .icon-write, .icon-status { color: #c89a40; }
@@ -799,11 +925,10 @@ export function initActivityLog() {
     /* ═══════════════════════════════════════════════
        LATEST LINE - the current reading position
 
-       The current quill. Two motions only: a static gold left bar and
-       a soft trailing dot wave. No text-shimmer, no brightness pulse,
-       no border flare, no icon bounce. The left bar is gold regardless
-       of category because it identifies "this is now," not "this is
-       what kind of work."
+       The current quill. The side bar, dot wave, and active text glow
+       inherit the entry category color so the newest command, read,
+       agent note, or status line feels alive without leaving stale
+       effects on older lines.
        ═══════════════════════════════════════════════ */
     .log-line.latest {
       position: relative;
@@ -817,14 +942,71 @@ export function initActivityLog() {
       bottom: 3px;
       width: 3px;
       border-radius: 1px 1px 1px 1px;
-      background: linear-gradient(180deg, #f0cc50 0%, #d4af37 40%, #a6892c 100%);
-      box-shadow: 0 0 6px rgba(212, 175, 55, 0.55),
-                  inset 0 0 2px rgba(255, 220, 120, 0.8);
+      background: linear-gradient(180deg, var(--ledger-hot) 0%, var(--ledger-ink) 44%, var(--ledger-soft) 100%);
+      box-shadow: 0 0 7px rgba(var(--ledger-glow-rgb), 0.58),
+                  inset 0 0 2px rgba(255, 255, 255, 0.72);
       opacity: 0.95;
     }
     .log-line.latest .log-icon {
       opacity: 1;
       filter: brightness(1.18);
+    }
+    .log-line.latest.active-output .log-text {
+      background-image: linear-gradient(102deg,
+        var(--ledger-ink) 0%,
+        var(--ledger-ink) 24%,
+        var(--ledger-soft) 38%,
+        var(--ledger-hot) 48%,
+        #ffffff 50%,
+        var(--ledger-hot) 52%,
+        var(--ledger-soft) 62%,
+        var(--ledger-ink) 76%,
+        var(--ledger-ink) 100%);
+      background-size: 340% 100%;
+      background-position: 145% 0;
+      background-repeat: no-repeat;
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      will-change: background-position, opacity, text-shadow;
+      text-shadow:
+        0 0 8px rgba(var(--ledger-glow-rgb), 0.16),
+        0 0 20px rgba(var(--ledger-glow-rgb), 0.08);
+      animation:
+        activeReadGlow 2.2s linear infinite,
+        activeReadBreath 1.65s ease-in-out infinite alternate;
+    }
+    @keyframes activeReadGlow {
+      0%   { background-position: 145% 0; }
+      100% { background-position: -145% 0; }
+    }
+    @keyframes activeReadBreath {
+      0% {
+        opacity: 0.86;
+        text-shadow:
+          0 0 6px rgba(var(--ledger-glow-rgb), 0.12),
+          0 0 14px rgba(var(--ledger-glow-rgb), 0.06);
+      }
+      100% {
+        opacity: 1;
+        text-shadow:
+          0 0 10px rgba(var(--ledger-glow-rgb), 0.30),
+          0 0 26px rgba(var(--ledger-glow-rgb), 0.18);
+      }
+    }
+    .ledger-idle .log-line.latest.active-output .log-text {
+      background-image: none;
+      background-clip: initial;
+      -webkit-background-clip: initial;
+      -webkit-text-fill-color: currentColor;
+      text-shadow: none;
+      animation: none;
+    }
+    .log-line.latest.active-output .log-link {
+      -webkit-text-fill-color: currentColor;
+      background-clip: initial;
+      -webkit-background-clip: initial;
+      animation: none;
     }
 
     /* Trailing dot wave - very soft, just enough to say "still writing" */
@@ -1159,6 +1341,14 @@ export function initActivityLog() {
         opacity: 0.45 !important;
         transform: none !important;
       }
+      .log-line.latest.active-output .log-text {
+        animation: none !important;
+        background-image: none !important;
+        background-clip: initial !important;
+        -webkit-background-clip: initial !important;
+        -webkit-text-fill-color: currentColor !important;
+        text-shadow: none !important;
+      }
       .loading-rune,
       .loading-rune::before {
         animation: none !important;
@@ -1217,5 +1407,11 @@ export function showLoadingIndicator() {
 
 export function hideLoadingIndicator() {
   hideLoading();
+  if (latestLine) latestLine.classList.remove('active-output');
   if (logEl) logEl.classList.add('ledger-idle');
 }
+
+export const __activityLogTestHooks = Object.freeze({
+  classify,
+  typingTickBatchSize,
+});

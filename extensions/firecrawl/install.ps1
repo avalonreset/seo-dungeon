@@ -1,9 +1,9 @@
-# Firecrawl Extension Installer for Claude SEO (Windows)
+# Optional Firecrawl MCP adapter installer for Claude Code users (Windows)
 $ErrorActionPreference = 'Stop'
 
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host "  Firecrawl Extension - Installer" -ForegroundColor Cyan
-Write-Host "  For Claude SEO" -ForegroundColor Cyan
+Write-Host "  Optional Claude Code MCP adapter" -ForegroundColor Cyan
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -13,11 +13,12 @@ $SettingsFile = "$env:USERPROFILE\.claude\settings.json"
 
 # Check prerequisites
 if (-not (Test-Path $SeoSkillDir)) {
-    Write-Host "x Claude SEO is not installed." -ForegroundColor Red
-    Write-Host "  Install it first: irm https://raw.githubusercontent.com/AgriciDaniel/claude-seo/main/install.ps1 | iex"
+    Write-Host "x Claude Code SEO skill path was not found." -ForegroundColor Red
+    Write-Host "  Normal SEO Dungeon audits do not require this installer."
+    Write-Host "  Put FIRECRAWL_API_KEY in the selected project .env instead."
     exit 1
 }
-Write-Host "v Claude SEO detected" -ForegroundColor Green
+Write-Host "v Claude Code SEO skill target detected" -ForegroundColor Green
 
 $nodeVersion = (node -v 2>$null) -replace 'v',''
 if (-not $nodeVersion) {
