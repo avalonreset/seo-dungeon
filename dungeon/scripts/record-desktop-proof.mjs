@@ -27,9 +27,16 @@ function parseArgs(argv) {
     browserWidth: Number(process.env.SEO_DUNGEON_DESKTOP_PROOF_BROWSER_WIDTH || 960),
     browserHeight: Number(process.env.SEO_DUNGEON_DESKTOP_PROOF_BROWSER_HEIGHT || 1040),
     keepOpenMs: Number(process.env.SEO_DUNGEON_DESKTOP_PROOF_KEEP_OPEN_MS || 1200),
+    commandTimeoutMs: Number(process.env.SEO_DUNGEON_DESKTOP_PROOF_COMMAND_TIMEOUT_MS || 120000),
+    browserCommand: process.env.SEO_DUNGEON_DESKTOP_PROOF_BROWSER_COMMAND || 'Desktop proof browser-origin command',
+    codexCommand: process.env.SEO_DUNGEON_DESKTOP_PROOF_CODEX_COMMAND || 'Desktop proof Codex helper command',
     fakeCodex: process.env.SEO_DUNGEON_DESKTOP_PROOF_REAL_CODEX !== '1',
     minimizeKnownBlockers: process.env.SEO_DUNGEON_DESKTOP_PROOF_MINIMIZE_BLOCKERS === '1',
     hideKnownBlockers: process.env.SEO_DUNGEON_DESKTOP_PROOF_HIDE_BLOCKERS === '1',
+    blockerProcesses: (process.env.SEO_DUNGEON_DESKTOP_PROOF_BLOCKER_PROCESSES || 'CapCut')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
     allowForegroundMismatch: process.env.SEO_DUNGEON_DESKTOP_PROOF_ALLOW_FOREGROUND_MISMATCH === '1',
   };
 
@@ -49,12 +56,20 @@ function parseArgs(argv) {
     else if (token === '--browser-width') options.browserWidth = Number(readValue());
     else if (token === '--browser-height') options.browserHeight = Number(readValue());
     else if (token === '--keep-open-ms') options.keepOpenMs = Number(readValue());
+    else if (token === '--command-timeout-ms') options.commandTimeoutMs = Number(readValue());
+    else if (token === '--browser-command') options.browserCommand = readValue();
+    else if (token === '--codex-command') options.codexCommand = readValue();
     else if (token === '--real-codex') options.fakeCodex = false;
     else if (token === '--fake-codex') options.fakeCodex = true;
     else if (token === '--minimize-known-blockers') options.minimizeKnownBlockers = true;
     else if (token === '--hide-known-blockers') {
       options.hideKnownBlockers = true;
       options.minimizeKnownBlockers = true;
+    }
+    else if (token === '--blocker-process') {
+      const processName = readValue().trim();
+      if (!processName) throw new Error('--blocker-process cannot be empty.');
+      options.blockerProcesses.push(processName);
     }
     else if (token === '--allow-foreground-mismatch') options.allowForegroundMismatch = true;
     else if (token === '--help' || token === '-h') options.help = true;
@@ -68,6 +83,7 @@ function parseArgs(argv) {
     browserWidth: options.browserWidth,
     browserHeight: options.browserHeight,
     keepOpenMs: options.keepOpenMs,
+    commandTimeoutMs: options.commandTimeoutMs,
   })) {
     if (!Number.isFinite(value) || value < 0) throw new Error(`--${name.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)} must be a non-negative number.`);
   }
@@ -75,6 +91,8 @@ function parseArgs(argv) {
   if (options.browserWidth < 400 || options.browserHeight < 400) {
     throw new Error('--browser-width and --browser-height must be at least 400.');
   }
+  if (!options.browserCommand.trim()) throw new Error('--browser-command cannot be empty.');
+  if (!options.codexCommand.trim()) throw new Error('--codex-command cannot be empty.');
   return options;
 }
 
@@ -83,7 +101,8 @@ function usage() {
     'Usage:',
     '  node scripts/record-desktop-proof.mjs [--output-dir path] [--domain seodungeon.com] [--project E:\\seo-dungeon-website]',
     '    [--browser-x 960] [--browser-y 0] [--browser-width 960] [--browser-height 1040] [--fake-codex|--real-codex]',
-    '    [--minimize-known-blockers] [--hide-known-blockers] [--allow-foreground-mismatch]',
+    '    [--browser-command "..."] [--codex-command "..."] [--command-timeout-ms 120000]',
+    '    [--minimize-known-blockers] [--hide-known-blockers] [--blocker-process CapCut] [--allow-foreground-mismatch]',
     '',
     'Records a full-desktop RC-008 rehearsal with SEO Dungeon in a headed browser window.',
     'This does not automate the Codex desktop UI. Put Codex on the left before running for side-by-side proof framing.',
@@ -161,12 +180,16 @@ async function waitForHttp(url, label, output, proc, timeoutMs = 20000) {
   throw new Error(`Timed out waiting for ${label}:\n${output.join('').slice(-5000)}`);
 }
 
-function writeFakeCodexAppServer(file) {
+function writeFakeCodexAppServer(file, options) {
+  const browserCommandJson = JSON.stringify(options.browserCommand);
+  const codexCommandJson = JSON.stringify(options.codexCommand);
   fs.writeFileSync(file, `
 const readline = require('node:readline');
 const rl = readline.createInterface({ input: process.stdin });
 let nextTurn = 1;
 const turns = new Map();
+const browserCommand = ${browserCommandJson};
+const codexCommand = ${codexCommandJson};
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n');
 const textFromInput = (input) => Array.isArray(input)
   ? input.map((item) => item && item.text ? item.text : '').join('\\n').trim()
@@ -194,8 +217,8 @@ rl.on('line', (line) => {
   if (msg.method === 'turn/start') {
     const prompt = textFromInput(msg.params && msg.params.input);
     const turnId = 'turn_' + nextTurn++;
-    const browserOrigin = prompt.includes('Desktop proof browser-origin command');
-    const helperOrigin = prompt.includes('Desktop proof Codex helper command');
+    const browserOrigin = prompt.includes(browserCommand);
+    const helperOrigin = prompt.includes(codexCommand);
     const turn = { done: false, timers: [] };
     turns.set(turnId, turn);
     turn.timers.push(setTimeout(() => {
@@ -257,6 +280,10 @@ function parseJsonLines(stdout) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function ledgerTexts(page) {
@@ -405,7 +432,8 @@ $process = Get-Process -Id $windowProcessId -ErrorAction SilentlyContinue
   return JSON.parse(result.stdout.trim());
 }
 
-async function minimizeKnownBlockers(logOutput = [], hide = false) {
+async function minimizeKnownBlockers(logOutput = [], hide = false, blockerProcesses = ['CapCut']) {
+  const blockerProcessesJson = JSON.stringify([...new Set(blockerProcesses)]).replace(/'/g, "''");
   const script = `
 Add-Type -Namespace SeoDungeon -Name WindowOps -MemberDefinition @'
 public delegate bool EnumWindowsProc(System.IntPtr hWnd, System.IntPtr lParam);
@@ -420,9 +448,15 @@ public static extern int GetWindowText(System.IntPtr hWnd, System.Text.StringBui
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern bool ShowWindowAsync(System.IntPtr hWnd, int nCmdShow);
 '@
-$names = @('CapCut')
+$names = '${blockerProcessesJson}' | ConvertFrom-Json
 $showCommand = ${hide ? 0 : 6}
 $targets = Get-Process | Where-Object { $names -contains $_.ProcessName }
+foreach ($p in $targets) {
+  if ($p.MainWindowHandle -ne 0) {
+    [SeoDungeon.WindowOps]::ShowWindowAsync($p.MainWindowHandle, $showCommand) | Out-Null
+    Write-Output ('{0}:{1}' -f $p.Id, $p.MainWindowTitle)
+  }
+}
 $pids = @($targets | ForEach-Object { [int]$_.Id })
 if ($pids.Count -gt 0) {
   $callback = [SeoDungeon.WindowOps+EnumWindowsProc]{
@@ -448,11 +482,21 @@ if ($pids.Count -gt 0) {
 
 async function assertBrowserForeground(options, logOutput = []) {
   if (options.minimizeKnownBlockers) {
-    await minimizeKnownBlockers(logOutput, options.hideKnownBlockers);
+    await minimizeKnownBlockers(logOutput, options.hideKnownBlockers, options.blockerProcesses);
   }
   await focusBrowserWindowByTitle('SEO Dungeon Desktop Proof', logOutput);
   await new Promise((resolve) => setTimeout(resolve, 350));
-  const foregroundInfo = await getForegroundWindowInfo(logOutput);
+  let foregroundInfo = await getForegroundWindowInfo(logOutput);
+  if (
+    options.minimizeKnownBlockers &&
+    foregroundInfo.processName &&
+    options.blockerProcesses.some((name) => name.toLowerCase() === foregroundInfo.processName.toLowerCase())
+  ) {
+    await minimizeKnownBlockers(logOutput, options.hideKnownBlockers, options.blockerProcesses);
+    await focusBrowserWindowByTitle('SEO Dungeon Desktop Proof', logOutput);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    foregroundInfo = await getForegroundWindowInfo(logOutput);
+  }
   if (!foregroundInfo.title?.includes('SEO Dungeon Desktop Proof') && !options.allowForegroundMismatch) {
     throw new Error([
       `Foreground window is "${foregroundInfo.title || '(empty)'}" from ${foregroundInfo.processName || 'unknown'}:${foregroundInfo.pid}, not the SEO Dungeon proof browser.`,
@@ -540,7 +584,7 @@ async function main() {
   fs.mkdirSync(outputDir, { recursive: true });
   fs.mkdirSync(fallbackProject, { recursive: true });
   fs.writeFileSync(path.join(fallbackProject, 'README.md'), '# SEO Dungeon Desktop Proof Fallback Project\n', 'utf8');
-  writeFakeCodexAppServer(fakeCodexAppServer);
+  writeFakeCodexAppServer(fakeCodexAppServer, options);
 
   const projectPath = fs.existsSync(options.projectPath)
     ? path.resolve(options.projectPath)
@@ -622,26 +666,28 @@ async function main() {
       '--count',
       '1',
       '--timeout',
-      '12000',
-    ], { bridgeWs, origin, timeoutMs: 15000 });
+      String(options.commandTimeoutMs),
+    ], { bridgeWs, origin, timeoutMs: options.commandTimeoutMs + 3000 });
     await page.waitForTimeout(600);
-    await page.locator('#log-input').fill('Desktop proof browser-origin command');
+    await page.locator('#log-input').fill(options.browserCommand);
     await page.locator('#log-input').press('Enter');
-    await waitForLedger(page, /> Desktop proof browser-origin command/i, 'desktop proof browser-origin command submitted');
-    await waitForLedger(page, /DESKTOP_PROOF_BROWSER_ORIGIN_STREAM/i, 'desktop proof browser-origin stream');
+    await waitForLedger(page, new RegExp(`> ${escapeRegExp(options.browserCommand)}`, 'i'), 'desktop proof browser-origin command submitted', options.commandTimeoutMs);
+    if (options.fakeCodex) {
+      await waitForLedger(page, /DESKTOP_PROOF_BROWSER_ORIGIN_STREAM/i, 'desktop proof browser-origin stream', options.commandTimeoutMs);
+    }
 
     const watchResult = await watch;
     fs.writeFileSync(watchOutputPath, watchResult.stdout, 'utf8');
     assert.equal(watchResult.code, 0, watchResult.stdout);
     const watchLines = parseJsonLines(watchResult.stdout);
     const watchedEvent = watchLines.find((line) => line.type === 'session-event');
-    assert.equal(watchedEvent?.event?.command, 'Desktop proof browser-origin command');
+    assert.equal(watchedEvent?.event?.command, options.browserCommand);
     assert.equal(watchedEvent?.event?.projectPath, projectPath);
 
     await page.waitForFunction(() => {
       const state = window.__seoDungeonDialogueState?.();
       return state && state.queue.length === 0 && state.busy === false;
-    }, null, { timeout: 15000 });
+    }, null, { timeout: options.commandTimeoutMs });
 
     const sendResult = await runCli([
       'send',
@@ -655,15 +701,17 @@ async function main() {
       'fast',
       '--dangerous-bypass',
       '--',
-      'Desktop proof Codex helper command',
-    ], { bridgeWs, origin, timeoutMs: 18000 });
+      options.codexCommand,
+    ], { bridgeWs, origin, timeoutMs: options.commandTimeoutMs + 3000 });
     fs.writeFileSync(sendOutputPath, sendResult.stdout, 'utf8');
     assert.equal(sendResult.code, 0, sendResult.stdout);
     const sendJson = JSON.parse(sendResult.stdout);
     assert.equal(sendJson.ok, true);
     assert.equal(sendJson.waitEvent?.status, 'complete');
-    await waitForLedger(page, /Remote codex-cli: Desktop proof Codex helper command/i, 'desktop proof helper command mirrored');
-    await waitForLedger(page, /DESKTOP_PROOF_CODEX_HELPER_STREAM/i, 'desktop proof helper stream');
+    await waitForLedger(page, new RegExp(`Remote codex-cli: ${escapeRegExp(options.codexCommand)}`, 'i'), 'desktop proof helper command mirrored', options.commandTimeoutMs);
+    if (options.fakeCodex) {
+      await waitForLedger(page, /DESKTOP_PROOF_CODEX_HELPER_STREAM/i, 'desktop proof helper stream', options.commandTimeoutMs);
+    }
 
     assert.deepEqual(pageErrors, [], `page errors:\n${pageErrors.join('\n')}`);
     const finalLedger = await ledgerTexts(page);
@@ -689,10 +737,13 @@ async function main() {
           bridgeWs,
           domain: options.domain,
           projectPath,
+          browserCommand: options.browserCommand,
+          codexCommand: options.codexCommand,
           usedFallbackProject: projectPath === fallbackProject,
           fakeCodex: options.fakeCodex,
           minimizedKnownBlockers: options.minimizeKnownBlockers,
           hiddenKnownBlockers: options.hideKnownBlockers,
+          blockerProcesses: options.blockerProcesses,
           allowForegroundMismatch: options.allowForegroundMismatch,
           foregroundBeforeCapture,
           browserWindow: {
@@ -739,10 +790,13 @@ async function main() {
     bridgeWs,
     domain: options.domain,
     projectPath,
+    browserCommand: options.browserCommand,
+    codexCommand: options.codexCommand,
     usedFallbackProject: projectPath === fallbackProject,
     fakeCodex: options.fakeCodex,
     minimizedKnownBlockers: options.minimizeKnownBlockers,
     hiddenKnownBlockers: options.hideKnownBlockers,
+    blockerProcesses: options.blockerProcesses,
     foregroundBeforeCapture,
     browserWindow: {
       x: options.browserX,
