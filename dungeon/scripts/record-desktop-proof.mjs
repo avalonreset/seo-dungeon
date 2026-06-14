@@ -505,7 +505,7 @@ if ($p.ProcessName -ne '${safeProcessName}') {
   Write-Error "PID ${safePid} is $($p.ProcessName), not ${safeProcessName}"
   exit 3
 }
-Stop-Process -Id ${safePid} -Force
+Stop-Process -Id ${safePid} -Force -ErrorAction Stop
 Write-Output "$($p.ProcessName):$($p.Id)"
 `;
   const result = await runTool('powershell', ['-NoProfile', '-Command', script], 8000);
