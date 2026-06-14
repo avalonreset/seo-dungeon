@@ -740,6 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedPromptId = null;
   let editingPromptId = null;
   let draggedPromptId = null;
+  let steeringPromptId = null;
   const promptQueue = [];
 
   let interactiveTimeout = null;
@@ -811,6 +812,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function removeQueuedPrompt(id, { announce = true } = {}) {
+    if (id === steeringPromptId) return null;
     const idx = findPromptIndex(id);
     if (idx < 0) return null;
     const [removed] = promptQueue.splice(idx, 1);
@@ -830,6 +832,7 @@ document.addEventListener('DOMContentLoaded', () => {
     promptQueuePanel?.classList.toggle('open', hasQueue);
     promptQueuePanel?.classList.toggle('running', busy && hasQueue);
     promptQueuePanel?.classList.toggle('holding', queueHold && hasQueue);
+    promptQueuePanel?.classList.toggle('steering', steeringPromptId != null && hasQueue);
     if (promptQueueTitle) {
       promptQueueTitle.textContent = queueHold && hasQueue
         ? 'Held'
@@ -842,14 +845,19 @@ document.addEventListener('DOMContentLoaded', () => {
     promptQueueList.innerHTML = '';
 
     promptQueue.forEach((item, index) => {
+      const isSelected = item.id === selectedPromptId;
+      const isSteering = item.id === steeringPromptId;
       const row = document.createElement('div');
-      row.className = `prompt-queue-item${item.id === selectedPromptId ? ' selected' : ''}`;
-      row.title = 'Click to select. Double-click to edit. Drag to reorder.';
+      row.className = `prompt-queue-item${isSelected ? ' selected' : ''}${isSteering ? ' steering' : ''}`;
+      row.title = isSteering
+        ? 'Steering this prompt into the active turn.'
+        : 'Click to select. Double-click to edit. Drag to reorder.';
       row.dataset.id = String(item.id);
-      row.draggable = true;
+      row.draggable = !isSteering;
       row.tabIndex = 0;
       row.setAttribute('role', 'button');
-      row.setAttribute('aria-selected', item.id === selectedPromptId ? 'true' : 'false');
+      row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      if (isSteering) row.setAttribute('aria-busy', 'true');
 
       const rank = document.createElement('span');
       rank.className = 'prompt-queue-rank';
@@ -867,6 +875,7 @@ document.addEventListener('DOMContentLoaded', () => {
       edit.className = 'prompt-queue-edit';
       edit.textContent = 'Edit';
       edit.title = 'Edit queued prompt';
+      edit.disabled = isSteering;
       edit.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -881,6 +890,7 @@ document.addEventListener('DOMContentLoaded', () => {
       remove.textContent = '×';
       remove.title = 'Remove queued prompt';
       remove.setAttribute('aria-label', 'Remove queued prompt');
+      remove.disabled = isSteering;
       remove.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -896,6 +906,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       row.addEventListener('dblclick', () => openPromptEditor(item.id));
       row.addEventListener('keydown', (event) => {
+        if (isSteering) return;
         if (event.key === 'Enter') {
           event.preventDefault();
           selectedPromptId = item.id;
@@ -909,6 +920,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
       row.addEventListener('dragstart', (event) => {
+        if (isSteering) {
+          event.preventDefault();
+          return;
+        }
         draggedPromptId = item.id;
         selectedPromptId = item.id;
         row.classList.add('dragging');
@@ -946,8 +961,14 @@ document.addEventListener('DOMContentLoaded', () => {
       logSubmit.setAttribute('aria-label', busy ? 'Queue prompt' : 'Send prompt');
     }
     if (logStop) logStop.disabled = !busy;
-    if (promptQueueSteer) promptQueueSteer.disabled = promptQueue.length === 0 || selectedPromptId == null;
-    if (promptQueueClear) promptQueueClear.disabled = promptQueue.length === 0;
+    if (promptQueueSteer) {
+      const actionLabel = busy ? 'Steer' : 'Send';
+      promptQueueSteer.disabled = promptQueue.length === 0 || selectedPromptId == null || steeringPromptId != null;
+      promptQueueSteer.textContent = actionLabel;
+      promptQueueSteer.title = busy ? 'Steer selected prompt into active turn' : 'Send selected queued prompt';
+      promptQueueSteer.setAttribute('aria-label', promptQueueSteer.title);
+    }
+    if (promptQueueClear) promptQueueClear.disabled = promptQueue.length === 0 || steeringPromptId != null;
   }
 
   function enqueuePrompt(text, { front = false } = {}) {
@@ -964,6 +985,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function reorderPrompt(draggedId, targetId) {
     if (!draggedId || !targetId || draggedId === targetId) return;
+    if (draggedId === steeringPromptId || targetId === steeringPromptId) return;
     const from = findPromptIndex(draggedId);
     const to = findPromptIndex(targetId);
     if (from < 0 || to < 0) return;
@@ -1052,30 +1074,42 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function steerSelectedPrompt() {
+    if (steeringPromptId != null) return;
     ensurePromptSelection();
     const idx = findPromptIndex(selectedPromptId);
     if (idx < 0) return;
-    const [selected] = promptQueue.splice(idx, 1);
+    const selected = promptQueue[idx];
     const wasHeld = queueHold;
     if (isAgentBusy()) {
-      queueHold = wasHeld && promptQueue.length > 0;
-      selectedPromptId = promptQueue[idx]?.id || promptQueue[idx - 1]?.id || promptQueue[0]?.id || null;
+      steeringPromptId = selected.id;
       renderPromptQueue();
       updatePromptControls();
       try {
         await bridge.steer(selected.text);
+        const currentIdx = findPromptIndex(selected.id);
+        if (currentIdx >= 0) {
+          promptQueue.splice(currentIdx, 1);
+          selectedPromptId = promptQueue[currentIdx]?.id || promptQueue[currentIdx - 1]?.id || promptQueue[0]?.id || null;
+        }
+        queueHold = wasHeld && promptQueue.length > 0;
         addLog('> ' + selected.text, { immediate: true });
         addLog('Steered active turn.');
       } catch (err) {
-        promptQueue.unshift(selected);
+        if (findPromptIndex(selected.id) < 0) {
+          promptQueue.splice(Math.min(idx, promptQueue.length), 0, selected);
+        }
         selectedPromptId = selected.id;
+        queueHold = wasHeld && promptQueue.length > 0;
         addLog('Could not steer active turn: ' + (err.message || 'unknown'));
-        addLog('Prompt returned to front of queue.');
+        addLog('Prompt stayed queued.');
+      } finally {
+        steeringPromptId = null;
       }
       renderPromptQueue();
       updatePromptControls();
       return;
     }
+    promptQueue.splice(idx, 1);
     queueHold = wasHeld && promptQueue.length > 0;
     selectedPromptId = promptQueue[0]?.id || null;
     renderPromptQueue();
@@ -1094,7 +1128,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function drainPromptQueue() {
     updatePromptControls();
-    if (!promptQueue.length || queueHold || isAgentBusy() || !bridge.connected) {
+    if (!promptQueue.length || queueHold || steeringPromptId != null || isAgentBusy() || !bridge.connected) {
       renderPromptQueue();
       return;
     }
@@ -1212,6 +1246,12 @@ document.addEventListener('DOMContentLoaded', () => {
   updatePromptControls();
 
   logInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' && !e.shiftKey && logInput.value.trim() && isAgentBusy()) {
+      e.preventDefault();
+      submitLedgerInput();
+      autoResize();
+      return;
+    }
     // Enter submits, Shift+Enter adds newline
     if (e.key === 'Enter' && !e.shiftKey && logInput.value.trim()) {
       e.preventDefault();
@@ -1219,6 +1259,7 @@ document.addEventListener('DOMContentLoaded', () => {
       autoResize();
     }
     if (e.key === 'Escape') {
+      e.stopPropagation();
       const now = Date.now();
       if (now - lastEscTime < 500 && isAgentBusy()) {
         stopActiveAgent({ announce: true });
@@ -1234,7 +1275,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   promptQueueSteer?.addEventListener('click', () => steerSelectedPrompt());
   promptQueueClear?.addEventListener('click', () => {
-    if (!promptQueue.length) return;
+    if (!promptQueue.length || steeringPromptId != null) return;
     promptQueue.splice(0, promptQueue.length);
     selectedPromptId = null;
     queueHold = false;
@@ -1286,6 +1327,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Global Escape handler - double-tap cancels any active agent operation
   document.addEventListener('keydown', (e) => {
+    if (e.target === logInput || e.target === promptEditText) return;
     if (e.key === 'Escape') {
       const now = Date.now();
       if (now - lastEscTime < 500) {

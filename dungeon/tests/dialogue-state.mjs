@@ -68,6 +68,8 @@ async function installBridgeHarness(page) {
       calls: [],
       steered: [],
       cancelled: [],
+      failedSteers: 0,
+      failNextSteer: false,
       pendingIds() {
         return Array.from(pending.keys());
       },
@@ -89,6 +91,9 @@ async function installBridgeHarness(page) {
       setBusy(value) {
         bridge.activeAuditId = value ? 777001 : null;
         window.dispatchEvent(new CustomEvent('seo-dungeon-agent-settled', { detail: { id: 777001 } }));
+      },
+      setFailNextSteer() {
+        this.failNextSteer = true;
       },
     };
 
@@ -124,6 +129,11 @@ async function installBridgeHarness(page) {
         bridge.activeNarrationId ||
         null;
       if (!activeId) return Promise.reject(new Error('No active turn to steer.'));
+      if (harness.failNextSteer) {
+        harness.failNextSteer = false;
+        harness.failedSteers += 1;
+        return Promise.reject(new Error('Injected steer failure'));
+      }
       harness.steered.push({ id: activeId, text });
       return Promise.resolve({ data: { targetId: activeId, mode: 'test' } });
     };
@@ -207,6 +217,14 @@ async function setConnected(page, value) {
   await page.evaluate((next) => window.__dialogueHarness.setConnected(next), value);
 }
 
+async function setBusy(page, value) {
+  await page.evaluate((next) => window.__dialogueHarness.setBusy(next), value);
+}
+
+async function failNextSteer(page) {
+  await page.evaluate(() => window.__dialogueHarness.setFailNextSteer());
+}
+
 async function addSlowAgentLog(page) {
   await page.evaluate(async () => {
     const { addLog } = await import('/src/activity-log.js');
@@ -261,12 +279,37 @@ try {
   await waitForUserLine(page, 'After backlog command');
   assert.equal(await queueCount(page), 0, 'idle submit during typewriter backlog should not become queued');
 
-  await submitPrompt(page, 'Queued while busy');
+  await page.locator('#log-input').fill('Queued while busy');
+  await page.locator('#log-input').press('Tab');
   await waitForQueueCount(page, 1);
   assert.equal(await page.locator('#prompt-queue-panel').isVisible(), true, 'queue panel should open only when queued prompts exist');
+  assert.equal((await page.locator('#prompt-queue-steer').textContent()).trim(), 'Steer', 'busy queue action should steer the selected prompt');
   assert.equal((await callTexts(page)).length, 2, 'busy submit should wait in queue');
   assert.equal(await userLineCount(page, 'Queued while busy'), 0, 'queued text should not render as submitted user text');
   assert.equal(await queueStatusLeakCount(page, 'Queued while busy'), 0, 'queue status line should not leak queued prompt content');
+
+  await page.locator('#log-input').fill('Queued through send button');
+  await page.locator('#log-submit').click();
+  await waitForQueueCount(page, 2);
+  assert.deepEqual(await queueTexts(page), ['Queued while busy', 'Queued through send button'], 'send button should queue while the agent is busy');
+
+  await failNextSteer(page);
+  await page.locator('.prompt-queue-item').first().click();
+  await page.locator('#prompt-queue-steer').click();
+  await page.waitForFunction(() => window.__dialogueHarness.failedSteers === 1);
+  assert.deepEqual(await queueTexts(page), ['Queued while busy', 'Queued through send button'], 'failed steer should keep the queue order intact');
+  assert.equal(await userLineCount(page, 'Queued while busy'), 0, 'failed steer should not render queued text as submitted user text');
+
+  await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('.prompt-queue-item'));
+    const data = new DataTransfer();
+    rows[1].dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: data }));
+    rows[0].dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: data }));
+    rows[0].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+    rows[1].dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
+  });
+  await page.waitForFunction(() => document.querySelector('.prompt-queue-text')?.textContent.includes('Queued through send button'));
+  assert.deepEqual(await queueTexts(page), ['Queued through send button', 'Queued while busy'], 'dragging a queued prompt should reorder the queue');
 
   await page.locator('.prompt-queue-edit').first().click();
   await page.locator('#prompt-edit-text').waitFor({ state: 'visible' });
@@ -274,6 +317,10 @@ try {
   await page.locator('#prompt-edit-text').fill('Edited queued command');
   await page.locator('#prompt-edit-save').click();
   await page.waitForFunction(() => document.querySelector('.prompt-queue-text')?.textContent.includes('Edited queued command'));
+
+  await page.locator('.prompt-queue-item').nth(1).locator('.prompt-queue-remove').click();
+  await waitForQueueCount(page, 1);
+  assert.deepEqual(await queueTexts(page), ['Edited queued command'], 'remove should drop the stale reordered row');
 
   await submitPrompt(page, 'Temporary queued prompt');
   await waitForQueueCount(page, 2);
@@ -283,6 +330,7 @@ try {
 
   await page.locator('#log-stop').click();
   await page.waitForFunction(() => document.querySelector('#prompt-queue-title')?.textContent === 'Held');
+  assert.equal((await page.locator('#prompt-queue-steer').textContent()).trim(), 'Send', 'held idle queue action should send the selected prompt');
   assert.equal((await callTexts(page)).length, 2, 'stop should not submit the held queue');
   await page.waitForTimeout(650);
   assert.equal((await callTexts(page)).length, 2, 'held queue should not auto-drain after stop');
@@ -298,6 +346,11 @@ try {
 
   await submitPrompt(page, 'Second direct after held stop');
   await waitForCalls(page, 4);
+  await page.waitForTimeout(650);
+  const cancelsBeforeSingleEscape = (await cancelledIds(page)).length;
+  await page.locator('#log-input').press('Escape');
+  await page.waitForTimeout(120);
+  assert.equal((await cancelledIds(page)).length, cancelsBeforeSingleEscape, 'single Escape in composer should not stop an active turn');
   const cancelsBeforeSteer = (await cancelledIds(page)).length;
   await page.locator('#prompt-queue-steer').click();
   await waitForSteers(page, 1);
@@ -325,6 +378,16 @@ try {
   await waitForCalls(page, 6);
   assert.equal((await callTexts(page)).at(-1), 'Disconnected direct command', 'reconnect should drain preserved prompt');
   await waitForQueueCount(page, 0);
+  await resolveOldest(page, 'disconnected complete');
+  await waitForUiIdle(page);
+
+  await setBusy(page, true);
+  await submitPrompt(page, 'Queue item to clear');
+  await waitForQueueCount(page, 1);
+  await page.locator('#prompt-queue-clear').click();
+  await waitForQueueCount(page, 0);
+  assert.equal(await queueCount(page), 0, 'clear should remove all queued prompts');
+  await setBusy(page, false);
 
   assert.equal(pageErrors.length, 0, `page errors: ${pageErrors.join(' | ')}`);
   assert.equal(consoleErrors.length, 0, `console errors: ${consoleErrors.join(' | ')}`);

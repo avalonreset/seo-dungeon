@@ -1,6 +1,6 @@
 {
   "name": "seo-dungeon",
-  "version": "2.2.9",
+  "version": "2.2.10",
   "description": "A 16-bit dungeon crawler interface for local AI SEO audits",
   "scripts": {
     "start": "node launch.js",
