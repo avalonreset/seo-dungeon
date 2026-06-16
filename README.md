@@ -14,7 +14,7 @@ inspect the issues as demons, and use a local AI CLI to analyze or fix them
 inside your project. The packaged bridge selects Codex by default and also
 supports Claude Code and Gemini CLI when those local tools are installed.
 
-## Screenshots
+## Screenshots & Key Art
 
 <table>
 <tr>
@@ -22,8 +22,12 @@ supports Claude Code and Gemini CLI when those local tools are installed.
 <td width="50%"><a href="screenshots/gate-scene-full.webp"><img src="screenshots/gate-scene-full.webp" alt="Gate scene showing quest continuation options"></a><br><em>Continue a previous quest or begin a new one</em></td>
 </tr>
 <tr>
+<td width="50%"><a href="screenshots/summoning-scene.webp"><img src="screenshots/summoning-scene.webp" alt="SEO Dungeon audit loading hallway with the hero descending"></a><br><em>Run a fresh audit while the hero descends</em></td>
 <td width="50%"><a href="screenshots/dungeon-hall.webp"><img src="screenshots/dungeon-hall.webp" alt="Dungeon hall showing SEO issue demons sorted by severity"></a><br><em>Browse SEO demons sorted by severity</em></td>
+</tr>
+<tr>
 <td width="50%"><a href="screenshots/battle-scene.webp"><img src="screenshots/battle-scene.webp" alt="Turn-based battle scene with real-time Guild Ledger"></a><br><em>Battle demons with agent-powered fixes</em></td>
+<td width="50%"><a href="assets/social-preview.png"><img src="assets/social-preview.png" alt="SEO Dungeon social preview key art"></a><br><em>Share-ready key art for the public repo</em></td>
 </tr>
 </table>
 
