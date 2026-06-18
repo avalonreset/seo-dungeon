@@ -69,6 +69,9 @@ export class DungeonHallScene extends Phaser.Scene {
     }
 
     const data = this.game.auditData || { issues: [] };
+    const issues = Array.isArray(data.issues) ? data.issues : [];
+    data.issues = issues;
+    this.issues = issues;
 
     // ---------- STONE WALL BACKGROUND ----------
     this.drawStoneWalls();
@@ -109,10 +112,10 @@ export class DungeonHallScene extends Phaser.Scene {
     // This stamps _demonKey / _demonName on each issue. Both the hall and
     // the Battle scene read those properties so the same demon shows in
     // both places.
-    assignAllDemons(data.issues);
+    assignAllDemons(issues);
 
     // ---------- Reveal demons one by one ----------
-    this.revealDemons(data.issues);
+    this.revealDemons(issues);
 
     // ---------- FOOTER AREA (fixed) ----------
     this.drawFooter();
@@ -131,7 +134,6 @@ export class DungeonHallScene extends Phaser.Scene {
     }
 
     // ---------- DUNGEON CLEARED overlay (all demons defeated) ----------
-    const issues = Array.isArray(data.issues) ? data.issues : [];
     const remaining = issues.filter(i => !i.defeated && !i.fixed).length;
     if (issues.length > 0 && remaining === 0) {
       this.time.delayedCall(400, () => this._showDungeonClearedOverlay(issues));
@@ -737,6 +739,83 @@ export class DungeonHallScene extends Phaser.Scene {
     });
   }
 
+  findIssueForIntent({
+    issueId = null,
+    issueIndex = null,
+    issueNumber = null,
+    titleContains = null,
+    severity = null,
+  } = {}) {
+    const issues = Array.isArray(this.issues)
+      ? this.issues
+      : (Array.isArray(this.game.auditData?.issues) ? this.game.auditData.issues : []);
+    const activeIssues = issues.filter((issue) => !issue.defeated && !issue.fixed);
+    const normalize = (value) => String(value ?? '').trim().toLowerCase();
+
+    if (issueId != null && String(issueId).trim()) {
+      const wanted = normalize(issueId);
+      return issues.find((issue) => normalize(issue.id) === wanted) || null;
+    }
+
+    if (issueIndex != null && String(issueIndex).trim() !== '') {
+      const index = Number(issueIndex);
+      if (Number.isInteger(index) && index >= 0 && index < issues.length) return issues[index];
+    }
+
+    if (issueNumber != null && String(issueNumber).trim() !== '') {
+      const number = Number(issueNumber);
+      const index = number - 1;
+      if (Number.isInteger(index) && index >= 0 && index < issues.length) return issues[index];
+    }
+
+    if (titleContains != null && String(titleContains).trim()) {
+      const wanted = normalize(titleContains);
+      const match = issues.find((issue) => normalize(issue.title).includes(wanted));
+      if (match) return match;
+    }
+
+    if (severity != null && String(severity).trim()) {
+      const wanted = normalize(severity);
+      const match = activeIssues.find((issue) => normalize(issue.severity) === wanted);
+      if (match) return match;
+    }
+
+    return activeIssues[0] || issues[0] || null;
+  }
+
+  startBattleForIssue(issue) {
+    if (!issue) throw new Error('No issue is available to battle.');
+    if (issue.defeated || issue.fixed) {
+      throw new Error('That issue has already been cleared.');
+    }
+    if (this._battleStartInFlight) return false;
+    this._battleStartInFlight = true;
+    const scheduleTransition = (delay, callback) => {
+      let fired = false;
+      let timer = null;
+      let fallbackId = null;
+      const run = () => {
+        if (fired) return;
+        fired = true;
+        if (fallbackId != null) window.clearTimeout(fallbackId);
+        if (timer?.remove) timer.remove(false);
+        callback();
+      };
+      timer = this.time.delayedCall(delay, run);
+      fallbackId = window.setTimeout(run, delay + 300);
+    };
+    this.saveHallScrollOffset();
+    SFX.play('menuConfirm');
+    this.cameras.main.flash(400, 255, 50, 50);
+    this.cameras.main.shake(200, 0.006);
+    scheduleTransition(500, () => {
+      SFX.play('encounterStart');
+      this.cameras.main.fadeOut(600, 0, 0, 0);
+      scheduleTransition(600, () => this.scene.start('Battle', { issue }));
+    });
+    return true;
+  }
+
   // =====================================================================
   // MATERIALIZE A SINGLE DEMON ROW (dynamic height)
   // =====================================================================
@@ -970,17 +1049,7 @@ export class DungeonHallScene extends Phaser.Scene {
         catBg.strokeRoundedRect(catBg._catX, catBg._catY, catBg._catW, 18, 9);
       }
     });
-    hitArea.on('pointerdown', () => {
-      this.saveHallScrollOffset();
-      SFX.play('menuConfirm');
-      this.cameras.main.flash(400, 255, 50, 50);
-      this.cameras.main.shake(200, 0.006);
-      this.time.delayedCall(500, () => {
-        SFX.play('encounterStart');
-        this.cameras.main.fadeOut(600, 0, 0, 0);
-        this.time.delayedCall(600, () => this.scene.start('Battle', { issue }));
-      });
-    });
+    hitArea.on('pointerdown', () => this.startBattleForIssue(issue));
 
     // Row background - instant
     rowBg.clear();

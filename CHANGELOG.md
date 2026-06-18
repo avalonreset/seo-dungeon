@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.16] - 2026-06-18
+
+### Added
+- **Structured Codex remote control**: Codex can now drive browser-owned setup,
+  Gate resume, Hall issue selection, Battle actions, queue steering, stop,
+  clear, and vanquish flows through waitable `ui-intent` events instead of
+  relying on manual browser clicks.
+- **Bidirectional session ledger**: the local bridge now persists bounded
+  session events so the browser Guild Ledger and CLI helper can share command
+  receipts, UI results, active operation state, and replayable session history.
+- **Recursive proof recorders**: added browser and Windows desktop structured
+  intent recorders that archive video, screenshots, manifests, session logs,
+  ledger transcripts, CLI receipts, bridge output, and ffprobe evidence.
+
+### Changed
+- **Codex steering readiness**: active operation summaries now expose
+  `canSteer` and `steerMode`, letting proof runs wait until a Codex app-server
+  turn is actually steerable before injecting a queued prompt.
+- **Remote helper ergonomics**: the helper now infers local app origins from
+  dynamic bridge ports, supports richer `event --wait` metadata, and can watch
+  buffered session history before subscribing to new events.
+- **Battle and setup mirroring**: title, Gate, Hall, and Battle scenes now emit
+  explicit UI result receipts so Codex-side automation can prove what the
+  browser accepted.
+
+### Fixed
+- **False-positive proof paths**: desktop proof manifests now assert required
+  actions, steer readiness, steered prompt visibility, absence of failed-steer
+  messages, foreground browser capture, Codex window positioning for real-Codex
+  runs, and drained active operations before reporting success.
+- **Desktop proof framing**: the full-desktop proof path can position the
+  visible Codex window beside SEO Dungeon without automating the Codex composer.
+- **Audit fixture caching**: structured proof runs seed all expected runtime
+  cache keys so remote browser flows do not unexpectedly fall back into a fresh
+  audit during deterministic proof recording.
+
+### Quality
+- Validated with focused remote-control, CLI, bidirectional UI/CLI, UX harness,
+  build, and diff hygiene gates before release preparation.
+
 ## [2.2.15] - 2026-06-14
 
 ### Added

@@ -79,6 +79,7 @@ let bridge = null;
   const appPort = await findOpenPort(Number(process.env.SEO_DUNGEON_APP_PORT || 3002));
   const bridgePort = await findOpenPort(Number(process.env.SEO_DUNGEON_BRIDGE_PORT || 3003));
   const bridgeUrl = `ws://127.0.0.1:${bridgePort}`;
+  const sessionLogPath = process.env.SEO_DUNGEON_SESSION_LOG || path.join(LOG_DIR, 'session-events.jsonl');
   const runtimeConfig = `window.SEO_DUNGEON_BRIDGE_URL = ${JSON.stringify(bridgeUrl)};\n`;
   try {
     fs.writeFileSync(path.join(DIST, 'seo-dungeon-runtime-config.js'), runtimeConfig);
@@ -100,7 +101,8 @@ let bridge = null;
         process.env.SEO_DUNGEON_ALLOWED_ORIGINS || '',
         `http://localhost:${appPort}`,
         `http://127.0.0.1:${appPort}`
-      ].filter(Boolean).join(',')
+      ].filter(Boolean).join(','),
+      SEO_DUNGEON_SESSION_LOG: sessionLogPath
     },
     stdio: ['ignore', bridgeLog, bridgeLog],
     detached: true,
@@ -111,6 +113,7 @@ let bridge = null;
   });
   bridge.unref();
   console.log(`  ✓ Bridge server started (port ${bridgePort}), logging to ${path.relative(ROOT, bridgeLogPath)}`);
+  console.log(`  ✓ Remote session ledger: ${path.relative(ROOT, sessionLogPath)}`);
 
   // Serve optimized production build
   const serve = spawn('npx', ['serve', 'dist', '-l', String(appPort), '-s'], {

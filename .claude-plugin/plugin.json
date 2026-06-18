@@ -1,6 +1,6 @@
 {
   "name": "seo-dungeon",
-  "version": "2.2.15",
+  "version": "2.2.16",
   "description": "SEO Dungeon skill suite for Claude Code compatibility. 25 sub-skills (21 core + 1 orchestrator + 1 framework integration + 2 extension mirrors) and 18 sub-agents cover technical SEO, content quality, schema, sitemaps, Core Web Vitals, local SEO, backlinks, GEO, and Google APIs.",
   "author": {
     "name": "Avalon Reset",

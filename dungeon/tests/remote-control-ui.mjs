@@ -16,6 +16,7 @@ const bridgeWs = `ws://127.0.0.1:${bridgePort}`;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-dungeon-remote-ui-'));
 const projectPath = path.join(tmp, 'project');
 const fakeCodexAppServer = path.join(tmp, 'fake-codex-app-server.cjs');
+const sessionLogPath = path.join(tmp, 'session-events.jsonl');
 const screenshotPath = process.env.SEO_DUNGEON_REMOTE_UI_SCREENSHOT || '';
 const bridgeOutput = [];
 const viteOutput = [];
@@ -126,6 +127,7 @@ function runBridge() {
       ...process.env,
       SEO_DUNGEON_BRIDGE_PORT: String(bridgePort),
       SEO_DUNGEON_ALLOWED_ORIGINS: origin,
+      SEO_DUNGEON_SESSION_LOG: sessionLogPath,
       SEO_DUNGEON_CODEX_CLI: process.execPath,
       SEO_DUNGEON_CODEX_ARGS: `"${fakeCodexAppServer}"`,
     },
@@ -249,9 +251,26 @@ try {
   const healthResponse = await waitForHttp(`http://127.0.0.1:${bridgePort}/health`, 'bridge', bridgeOutput, bridge);
   const health = await healthResponse.json();
   assert.equal(health.supportsRemoteControl, true, 'bridge should advertise remote control');
+  assert.equal(health.sessionEventPersistence, true, 'bridge should advertise session-event persistence for restart replay');
   await waitForHttp(origin, 'vite', viteOutput, vite);
-  const controller = await connectController();
-  const replayCommandId = await sendRemote(controller, 2999, 'Preload remote command before Guild Ledger connects');
+  let controller = await connectController();
+  const replayCommandId = await sendRemote(controller, 2999, 'Persist remote command before Guild Ledger connects');
+  assert(fs.existsSync(sessionLogPath), 'remote command should be persisted before bridge restart');
+  controller.ws.close();
+  await killTree(bridge);
+
+  runBridge();
+  await waitForHttp(`http://127.0.0.1:${bridgePort}/health`, 'restarted bridge', bridgeOutput, bridge);
+  controller = await connectController();
+  const restartState = await requestSessionState(controller, 2998);
+  assert(
+    restartState.data.events.some((event) =>
+      event.kind === 'remote-command' &&
+      event.commandId === replayCommandId &&
+      event.command === 'Persist remote command before Guild Ledger connects'
+    ),
+    'restarted bridge should reload pending remote command before browser connects'
+  );
 
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -265,8 +284,8 @@ try {
       document.querySelector('#bridge-status')?.classList.contains('connected');
   }, null, { timeout: 15000 });
 
-  await waitForLedger(page, /Remote codex-app: Preload remote command before Guild Ledger connects/i, 'pre-connect remote command replayed');
-  await waitForLedger(page, /> Preload remote command before Guild Ledger connects/i, 'pre-connect remote command submitted');
+  await waitForLedger(page, /Remote codex-app: Persist remote command before Guild Ledger connects/i, 'post-restart remote command replayed');
+  await waitForLedger(page, /> Persist remote command before Guild Ledger connects/i, 'post-restart remote command submitted');
   await waitForLedger(page, /REMOTE_STREAM/i, 'pre-connect remote stream');
   const replayComplete = await waitForControllerMessage(
     controller,

@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.15-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2.16-blue)](CHANGELOG.md)
 [![Runtime](https://img.shields.io/badge/runtime-Codex%20%7C%20Claude%20%7C%20Gemini-2ea44f)](dungeon/)
 
 SEO Dungeon turns SEO audits into a 16-bit dungeon crawler. Enter a domain,
@@ -124,14 +124,63 @@ npm run logs
 The bridge mirrors startup, runtime selection, CLI executable paths, child
 exits, and errors to `dungeon/.logs/bridge.log`.
 
+### Codex Remote Control
+
+When the app and bridge are running, Codex can use the local helper to drive the
+browser-owned setup and Guild Ledger paths:
+
+```powershell
+cd dungeon
+npm run remote -- status --json
+npm run remote -- event --wait --timeout 30000 --kind ui-intent --action launch --domain seodungeon.com --project E:\seo-dungeon-website --runtime codex --profile fast --character knight --dangerous-bypass --meta source=codex-helper
+npm run remote -- send --wait --timeout 120000 --project E:\seo-dungeon-website --profile fast --dangerous-bypass -- "/seo page https://seodungeon.com"
+npm run remote -- watch --kind ledger-result --filter-source guild-ledger --count 1 --timeout 30000
+```
+
+The helper talks to the localhost WebSocket bridge. It does not automate the
+Codex desktop composer; the browser applies `ui-intent` setup/start actions and
+the Guild Ledger claims `send` commands through the normal Codex app-server
+runtime. `event --wait` waits for a matching browser `ui-result`; `watch` remains
+available for passive session observation.
+
+To record a browser-side walkthrough of the structured intent path:
+
+```powershell
+cd dungeon
+npm run demo:remote-intents -- --keep-open-ms 100
+```
+
+The recorder uses isolated dynamic ports, drives `launch`, Gate resume, Hall
+issue selection, Battle attack, queue steer/stop/clear, and remote vanquish
+through `npm run remote -- event --wait`, then writes a WebM, screenshot,
+manifest, session log, ledger transcript, and CLI result receipts under
+`dungeon/.logs/remote-intents-demo/<timestamp>/`. This is the fast browser proof
+lane for recursive testing before a full desktop capture.
+
+To record the same structured intent path as a full Windows desktop capture:
+
+```powershell
+cd dungeon
+npm run proof:desktop-intents -- --fake-codex --keep-open-ms 100 --allow-foreground-mismatch
+```
+
+This writes an MP4 at the current desktop resolution, early and late frames,
+browser screenshot, manifest, session log, ledger transcript, and CLI receipts
+under `dungeon/.logs/desktop-intents-proof/<timestamp>/`. The default
+fake-Codex mode is for recursive smoke testing. Release/demo proof should use
+`--real-codex --position-codex-window`, Codex visible on the left, SEO Dungeon
+visible on the right, and no `--allow-foreground-mismatch`.
+
 Runtime environment:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `SEO_DUNGEON_RUNTIME` | `codex` | Bridge fallback runtime when the UI does not send one |
 | `SEO_DUNGEON_CODEX_CLI` | `codex` | Codex executable override |
+| `SEO_DUNGEON_CODEX_TRANSPORT` | `app-server` | Set to `exec` to use the older `codex exec --json` transport |
 | `SEO_DUNGEON_CODEX_DANGEROUS_BYPASS` | unset | Set to `1` to force Codex YOLO mode from the bridge when no UI setting is provided |
 | `SEO_DUNGEON_CODEX_BYPASS` | unset | Short alias for `SEO_DUNGEON_CODEX_DANGEROUS_BYPASS` |
+| `SEO_DUNGEON_SESSION_LOG` | `.logs/session-events.jsonl` from `npm start` | Local bounded remote session ledger; set to `0` to disable |
 | `SEO_DUNGEON_CLAUDE_CLI` | `claude` | Claude Code executable override |
 | `SEO_DUNGEON_GEMINI_CLI` | `gemini` | Gemini CLI executable override |
 | `SEO_DUNGEON_CODEX_MODEL` | Codex default | Optional Codex model override |

@@ -12,11 +12,17 @@ const dungeonRoot = path.resolve(__dirname, '..');
 const { bridgePort, appPort } = await resolveRemoteCliPorts();
 const bridgeWs = `ws://127.0.0.1:${bridgePort}`;
 const origin = `http://127.0.0.1:${appPort}`;
+const runtimeConfigPath = path.join(dungeonRoot, 'dist', 'seo-dungeon-runtime-config.js');
+const runtimeConfigDir = path.dirname(runtimeConfigPath);
+const runtimeConfigHadDir = fs.existsSync(runtimeConfigDir);
+const runtimeConfigHadFile = fs.existsSync(runtimeConfigPath);
+const runtimeConfigOriginal = runtimeConfigHadFile ? fs.readFileSync(runtimeConfigPath, 'utf8') : '';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-dungeon-remote-cli-'));
 const projectPath = path.join(tmp, 'project');
 const missingProject = path.join(tmp, 'missing-project');
 const bridgeOutput = [];
 let bridge;
+let runtimeConfigTouched = false;
 
 async function reserveFreePort() {
   return new Promise((resolve, reject) => {
@@ -42,8 +48,7 @@ async function resolveRemoteCliPorts() {
     ? Number(process.env.SEO_DUNGEON_REMOTE_CLI_TEST_APP_PORT)
     : null;
   const bridge = requestedBridge || await reserveFreePort();
-  let app = requestedApp || await reserveFreePort();
-  while (app === bridge && !requestedApp) app = await reserveFreePort();
+  let app = requestedApp || (bridge > 1 ? bridge - 1 : await reserveFreePort());
   if (app === bridge) throw new Error('Remote CLI bridge and app test ports must be different.');
   return { bridgePort: bridge, appPort: app };
 }
@@ -104,6 +109,33 @@ function cliEnv(extra = {}) {
   };
 }
 
+function runtimeConfigCliEnv(extra = {}) {
+  const env = { ...process.env, ...extra };
+  delete env.SEO_DUNGEON_BRIDGE_URL;
+  delete env.SEO_DUNGEON_BRIDGE_PORT;
+  delete env.SEO_DUNGEON_CONTROLLER_ORIGIN;
+  delete env.SEO_DUNGEON_APP_PORT;
+  return env;
+}
+
+function writeRuntimeConfigBridge(url) {
+  fs.mkdirSync(runtimeConfigDir, { recursive: true });
+  fs.writeFileSync(runtimeConfigPath, `window.SEO_DUNGEON_BRIDGE_URL = ${JSON.stringify(url)};\n`, 'utf8');
+  runtimeConfigTouched = true;
+}
+
+function restoreRuntimeConfig() {
+  if (!runtimeConfigTouched) return;
+  if (runtimeConfigHadFile) {
+    fs.writeFileSync(runtimeConfigPath, runtimeConfigOriginal, 'utf8');
+  } else {
+    fs.rmSync(runtimeConfigPath, { force: true });
+    if (!runtimeConfigHadDir) {
+      try { fs.rmdirSync(runtimeConfigDir); } catch (_) {}
+    }
+  }
+}
+
 function runCli(args, { env = cliEnv(), timeoutMs = 15000 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['scripts/remote-control.mjs', ...args], {
@@ -131,6 +163,45 @@ function runCli(args, { env = cliEnv(), timeoutMs = 15000 } = {}) {
       resolve({ code, stdout, stderr, json });
     });
   });
+}
+
+function startCli(args, { env = cliEnv(), timeoutMs = 15000 } = {}) {
+  const child = spawn(process.execPath, ['scripts/remote-control.mjs', ...args], {
+    cwd: dungeonRoot,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  let stdout = '';
+  let stderr = '';
+  const result = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`CLI timed out: ${args.join(' ')}\nstdout=${stdout}\nstderr=${stderr}`));
+    }, timeoutMs);
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      let json = null;
+      try { json = JSON.parse(stdout); } catch (_) {}
+      resolve({ code, stdout, stderr, json });
+    });
+  });
+  return { child, result };
+}
+
+async function waitForFile(filePath, label, timeoutMs = 5000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (fs.existsSync(filePath)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Timed out waiting for ${label}: ${filePath}`);
 }
 
 function parseJsonLines(stdout) {
@@ -166,6 +237,13 @@ runBridge();
 try {
   await waitForHealth();
   const browser = await connectClient('browser');
+
+  writeRuntimeConfigBridge(bridgeWs);
+  const runtimeConfigStatus = await runCli(['status', '--json'], { env: runtimeConfigCliEnv() });
+  assert.equal(runtimeConfigStatus.code, 0, runtimeConfigStatus.stdout);
+  assert.equal(runtimeConfigStatus.json?.ok, true);
+  assert.equal(runtimeConfigStatus.json?.bridgeUrl, new URL(bridgeWs).href);
+  assert.equal(runtimeConfigStatus.json?.origin, origin);
 
   const status = await runCli(['status', '--json']);
   assert.equal(status.code, 0, status.stdout);
@@ -222,6 +300,72 @@ try {
   assert.equal(browserEvent.event.source, 'codex-cli');
   assert.equal(browserEvent.event.status, 'running');
   assert.equal(browserEvent.event.message, 'Codex is inspecting the repo');
+
+  const waitableIntent = startCli([
+    'event',
+    '--json',
+    '--wait',
+    '--timeout',
+    '10000',
+    '--kind',
+    'ui-intent',
+    '--action',
+    'setup',
+    '--project',
+    projectPath,
+    '--runtime',
+    'codex',
+    '--profile',
+    'fast',
+    '--character',
+    'knight',
+    '--no-dangerous-bypass',
+    '--meta',
+    'ticket=RC-018',
+    '--meta',
+    'mode=contract',
+    '--message',
+    'Waitable UI setup intent',
+  ], { timeoutMs: 12000 });
+  const uiIntentEvent = await waitForMessage(
+    browser,
+    (msg) => msg.type === 'session-event' && msg.event?.kind === 'ui-intent' && msg.event?.action === 'setup',
+    'CLI waitable ui-intent event'
+  );
+  assert.equal(uiIntentEvent.event.source, 'codex-cli');
+  assert.equal(uiIntentEvent.event.projectPath, projectPath);
+  assert.equal(uiIntentEvent.event.profile, 'fast');
+  assert.equal(uiIntentEvent.event.character, 'knight');
+  assert.equal(uiIntentEvent.event.dangerousBypass, false);
+  assert.equal(uiIntentEvent.event.metadata?.ticket, 'RC-018');
+  assert.equal(uiIntentEvent.event.metadata?.mode, 'contract');
+
+  browser.ws.send(JSON.stringify({
+    id: 9701,
+    type: 'session-event',
+    event: {
+      kind: 'ui-result',
+      source: 'guild-ledger',
+      targetId: uiIntentEvent.event.eventId,
+      status: 'complete',
+      action: 'setup',
+      message: 'Waitable setup applied.',
+      metadata: {
+        ticket: 'RC-018',
+        scene: 'title',
+      },
+    },
+  }));
+  const uiResultAck = await waitForMessage(browser, (msg) => msg.id === 9701, 'waitable ui-result ack');
+  assert.equal(uiResultAck.type, 'result');
+  const waitableIntentResult = await waitableIntent.result;
+  assert.equal(waitableIntentResult.code, 0, waitableIntentResult.stdout);
+  assert.equal(waitableIntentResult.json?.ok, true);
+  assert.equal(waitableIntentResult.json?.data?.event?.eventId, uiIntentEvent.event.eventId);
+  assert.equal(waitableIntentResult.json?.waitEvent?.kind, 'ui-result');
+  assert.equal(waitableIntentResult.json?.waitEvent?.targetId, uiIntentEvent.event.eventId);
+  assert.equal(waitableIntentResult.json?.waitEvent?.status, 'complete');
+  assert.equal(waitableIntentResult.json?.waitEvent?.metadata?.ticket, 'RC-018');
 
   const state = await runCli(['state', '--json']);
   assert.equal(state.code, 0, state.stdout);
@@ -314,6 +458,7 @@ try {
   assert.equal(noReplayLines[0]?.reason, 'timeout');
   assert.equal(noReplayLines[0]?.events, 0);
 
+  const futureReadyFile = path.join(tmp, 'future-watch-ready.json');
   const futureWatchPromise = runCli([
     'watch',
     '--json',
@@ -326,8 +471,10 @@ try {
     '1',
     '--timeout',
     '8000',
+    '--ready-file',
+    futureReadyFile,
   ], { timeoutMs: 10000 });
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await waitForFile(futureReadyFile, 'future watch readiness');
   browser.ws.send(JSON.stringify({
     id: 9802,
     type: 'session-event',
@@ -424,5 +571,6 @@ try {
   console.log('Remote control CLI self-test passed');
 } finally {
   await stopBridge();
+  restoreRuntimeConfig();
   fs.rmSync(tmp, { recursive: true, force: true });
 }

@@ -38,7 +38,7 @@ bash install.sh
 Remote installs default to the current release tag:
 
 ```powershell
-$env:SEO_DUNGEON_REF='v2.2.7'
+$env:SEO_DUNGEON_REF='v2.2.16'
 .\install.ps1
 ```
 
@@ -68,7 +68,7 @@ The title screen includes a local CLI selector:
 
 | Runtime | Bridge command | Profile mapping |
 |---------|----------------|-----------------|
-| Codex | `codex exec --json` | Warrior `xhigh`, Samurai `high`, Knight `medium` |
+| Codex | `codex app-server --stdio` by default; `codex exec --json` only when `SEO_DUNGEON_CODEX_TRANSPORT=exec` | Warrior `xhigh`, Samurai `high`, Knight `medium` |
 | Claude | `claude --print` | Warrior `opus`, Samurai `sonnet`, Knight `haiku` |
 | Gemini | `gemini --prompt` | Warrior `pro`, Samurai `flash`, Knight `flash-lite` |
 
@@ -76,6 +76,7 @@ Useful overrides:
 
 ```powershell
 $env:SEO_DUNGEON_RUNTIME='codex'
+$env:SEO_DUNGEON_CODEX_TRANSPORT='app-server'
 $env:SEO_DUNGEON_CODEX_MODEL='gpt-5.1'
 $env:SEO_DUNGEON_CLAUDE_MODEL_BALANCED='sonnet'
 $env:SEO_DUNGEON_GEMINI_MODEL_BALANCED='flash'
@@ -83,6 +84,50 @@ $env:SEO_DUNGEON_GEMINI_MODEL_BALANCED='flash'
 
 Set a model variable to `default`, `auto`, or `none` to let that CLI use its own
 configured default.
+
+## Codex Remote Control Helper
+
+When the app and bridge are running, Codex can control setup and Guild Ledger
+work through the local helper:
+
+```powershell
+cd dungeon
+
+npm run remote -- status --json
+npm run remote -- event --wait --timeout 30000 --kind ui-intent --action launch --domain seodungeon.com --project E:\seo-dungeon-website --runtime codex --profile fast --character knight --dangerous-bypass --meta source=codex-helper
+npm run remote -- send --wait --timeout 120000 --project E:\seo-dungeon-website --profile fast --dangerous-bypass -- "/seo page https://seodungeon.com"
+npm run remote -- watch --kind ledger-result --filter-source guild-ledger --count 1 --timeout 30000
+```
+
+`ui-intent` is browser-owned: the browser applies title-screen controls and
+publishes `ui-result`. `event --wait` waits for that browser result. `send
+--wait` sends a command intent that the Guild Ledger claims and runs through the
+normal Codex app-server path. `watch` remains passive session observation.
+
+To record a browser-side structured remote-control walkthrough:
+
+```powershell
+npm run demo:remote-intents -- --keep-open-ms 100
+```
+
+This recorder uses isolated dynamic ports and drives title launch, Gate resume,
+Hall issue selection, Battle attack, queue controls, stop, clear, and vanquish
+through waitable `ui-intent` events. It writes a WebM, screenshot, manifest,
+session log, ledger transcript, and CLI receipts under
+`.logs/remote-intents-demo/<timestamp>/`.
+
+To record the same structured walkthrough as a full Windows desktop capture:
+
+```powershell
+npm run proof:desktop-intents -- --fake-codex --keep-open-ms 100 --allow-foreground-mismatch
+```
+
+This writes an MP4 at the current desktop resolution, frames, screenshot,
+manifest, session log, ledger transcript, and CLI receipts under
+`.logs/desktop-intents-proof/<timestamp>/`. The fake-Codex mode is for
+repeatable smoke proof. Release/demo proof should use
+`--real-codex --position-codex-window`, Codex visible on the left, SEO Dungeon
+visible on the right, and no `--allow-foreground-mismatch`.
 
 ## Portable Usage
 

@@ -5,13 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { WebSocket } from 'ws';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dungeonRoot = path.resolve(__dirname, '..');
+const require = createRequire(import.meta.url);
+const REMOTE_PROTOCOL = require('../shared/remote-protocol.cjs');
 const { port, appPort } = await resolveRemotePorts();
 const origin = `http://127.0.0.1:${appPort}`;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-dungeon-remote-control-'));
+const sessionLogPath = path.join(tmp, 'session-events.jsonl');
 const bridgeOutput = [];
 let bridge;
 
@@ -52,6 +56,7 @@ function runBridge() {
       ...process.env,
       SEO_DUNGEON_BRIDGE_PORT: String(port),
       SEO_DUNGEON_ALLOWED_ORIGINS: origin,
+      SEO_DUNGEON_SESSION_LOG: sessionLogPath,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -116,16 +121,28 @@ async function waitForMessage(client, predicate, label, timeoutMs = 5000) {
   throw new Error(`Timed out waiting for ${label} on ${client.label}. Messages: ${JSON.stringify(client.messages, null, 2)}`);
 }
 
+async function closeClient(client) {
+  if (!client?.ws || client.ws.readyState === WebSocket.CLOSED) return;
+  await new Promise((resolve) => {
+    client.ws.once('close', resolve);
+    client.ws.close();
+  });
+}
+
 runBridge();
 
 try {
   const health = await waitForHealth();
+  assert.equal(health.protocol, REMOTE_PROTOCOL.protocol, 'bridge health protocol should match shared remote protocol contract');
+  assert.deepEqual(health.allowedTypes, REMOTE_PROTOCOL.allowedTypes, 'bridge allowedTypes should match shared remote protocol contract');
   assert.equal(health.supportsRemoteControl, true, 'bridge health should advertise remote control support');
+  assert.equal(health.sessionEventPersistence, true, 'bridge health should advertise temp session-event persistence for this test');
+  assert.equal(health.sessionEventHistoryLimit, 200, 'bridge health should expose bounded session event history');
   assert(health.allowedTypes.includes('remote-command'), 'remote-command should be allowlisted');
   assert(health.allowedTypes.includes('remote-command-claim'), 'remote-command-claim should be allowlisted');
   assert(health.allowedTypes.includes('session-event'), 'session-event should be allowlisted');
 
-  const browser = await connectClient('browser');
+  let browser = await connectClient('browser');
   const controller = await connectClient('controller');
 
   controller.ws.send(JSON.stringify({
@@ -181,6 +198,45 @@ try {
   assert.equal(secondClaim.type, 'result');
   assert.equal(secondClaim.data?.claimed, false, 'second client should not claim the same remote command');
 
+  await closeClient(browser);
+  browser = await connectClient('browser-retry');
+
+  browser.ws.send(JSON.stringify({
+    id: 2010,
+    type: 'remote-command-claim',
+    commandId: ack.data.commandId,
+  }));
+  const retryClaim = await waitForMessage(browser, (msg) => msg.id === 2010, 'retry claim after browser disconnect');
+  assert.equal(retryClaim.type, 'result');
+  assert.equal(retryClaim.data?.claimed, true, 'a disconnected browser claim should be released for retry before terminal result');
+
+  browser.ws.send(JSON.stringify({
+    id: 2011,
+    type: 'session-event',
+    event: {
+      kind: 'ledger-result',
+      source: 'guild-ledger',
+      commandId: ack.data.commandId,
+      status: 'complete',
+      message: 'Retry completed',
+      projectPath: tmp,
+      runtime: 'codex',
+      profile: 'deep',
+    },
+  }));
+  const terminalAck = await waitForMessage(browser, (msg) => msg.id === 2011, 'terminal ledger-result ack');
+  assert.equal(terminalAck.type, 'result');
+  assert.equal(terminalAck.data?.accepted, true);
+
+  controller.ws.send(JSON.stringify({
+    id: 2012,
+    type: 'remote-command-claim',
+    commandId: ack.data.commandId,
+  }));
+  const terminalClaim = await waitForMessage(controller, (msg) => msg.id === 2012, 'post-terminal claim rejection');
+  assert.equal(terminalClaim.type, 'error');
+  assert.match(terminalClaim.message || '', /terminal ledger result/i);
+
   browser.ws.send(JSON.stringify({
     id: 2004,
     type: 'session-event',
@@ -204,6 +260,39 @@ try {
   assert.equal(mirroredToController.event.command, 'Browser-origin mirrored command');
   assert.equal(mirroredToController.event.source, 'guild-ledger');
   assert.equal(mirroredToController.event.projectPath, tmp);
+
+  browser.ws.send(JSON.stringify({
+    id: 2015,
+    type: 'session-event',
+    event: {
+      kind: 'ledger-command',
+      source: 'guild-ledger',
+      command: 'Browser-origin command with api_key=supersecret123456',
+      projectPath: tmp,
+      runtime: 'codex',
+      profile: 'fast',
+    },
+  }));
+  const secretMirrorAck = await waitForMessage(browser, (msg) => msg.id === 2015, 'secret-bearing browser session-event ack');
+  assert.equal(secretMirrorAck.type, 'result');
+
+  browser.ws.send(JSON.stringify({
+    id: 2016,
+    type: 'session-event',
+    event: {
+      kind: 'ledger-result',
+      source: 'guild-ledger',
+      commandId: 'unknown-remote-command-id',
+      status: 'complete',
+      message: 'This should not attach to an unknown command.',
+      projectPath: tmp,
+      runtime: 'codex',
+      profile: 'fast',
+    },
+  }));
+  const unknownResultAck = await waitForMessage(browser, (msg) => msg.id === 2016, 'unknown ledger-result rejection');
+  assert.equal(unknownResultAck.type, 'error');
+  assert.match(unknownResultAck.message || '', /unknown remote command/i);
 
   browser.ws.send(JSON.stringify({
     id: 2005,
@@ -264,8 +353,113 @@ try {
   assert.equal(duplicateId.type, 'error');
   assert.match(duplicateId.message || '', /duplicate remote command id/i);
 
-  browser.ws.close();
-  controller.ws.close();
+  controller.ws.send(JSON.stringify({
+    id: 2017,
+    type: 'remote-command',
+    source: 'codex-app',
+    command: 'Persist this pending command across bridge restart.',
+    projectPath: tmp,
+    runtime: 'codex',
+  }));
+  const pendingAck = await waitForMessage(controller, (msg) => msg.id === 2017, 'pending persisted remote command');
+  assert.equal(pendingAck.type, 'result');
+  assert(pendingAck.data?.commandId, 'pending persisted command should have an id');
+
+  await closeClient(browser);
+  await closeClient(controller);
+  await stopBridge();
+  assert(fs.existsSync(sessionLogPath), 'remote session log should be written when SEO_DUNGEON_SESSION_LOG is set');
+  const persistedBeforeRestart = fs.readFileSync(sessionLogPath, 'utf8');
+  assert(!persistedBeforeRestart.includes('supersecret123456'), 'remote session log should redact secret-shaped command text');
+  assert(persistedBeforeRestart.includes('api_key=supe****3456'), 'remote session log should persist a redacted secret marker');
+  fs.appendFileSync(sessionLogPath, '{"kind":"ledger-command","sequence":999\n', 'utf8');
+
+  runBridge();
+  await waitForHealth();
+  const resumed = await connectClient('resumed-browser');
+  resumed.ws.send(JSON.stringify({ id: 2013, type: 'session-state' }));
+  const resumedState = await waitForMessage(resumed, (msg) => msg.id === 2013, 'resumed session state after bridge restart');
+  assert.equal(resumedState.type, 'result');
+  assert(
+    resumedState.data.events.some((event) =>
+      event.kind === 'remote-command' &&
+      event.commandId === ack.data.commandId &&
+      event.command === 'Check the SEO Dungeon control bus.'
+    ),
+    'bridge should reload persisted remote-command events after restart'
+  );
+  assert(
+    resumedState.data.events.some((event) =>
+      event.kind === 'ledger-result' &&
+      event.commandId === ack.data.commandId &&
+      event.status === 'complete'
+    ),
+    'bridge should reload persisted terminal ledger-result events after restart'
+  );
+  assert(
+    resumedState.data.events.some((event) =>
+      event.kind === 'remote-command' &&
+      event.commandId === pendingAck.data.commandId &&
+      event.command === 'Persist this pending command across bridge restart.'
+    ),
+    'bridge should reload pending persisted remote-command events after restart'
+  );
+  resumed.ws.send(JSON.stringify({
+    id: 2014,
+    type: 'remote-command-claim',
+    commandId: ack.data.commandId,
+  }));
+  const resumedTerminalClaim = await waitForMessage(resumed, (msg) => msg.id === 2014, 'post-restart terminal claim rejection');
+  assert.equal(resumedTerminalClaim.type, 'error');
+  assert.match(resumedTerminalClaim.message || '', /terminal ledger result/i);
+  resumed.ws.send(JSON.stringify({
+    id: 2018,
+    type: 'remote-command-claim',
+    commandId: pendingAck.data.commandId,
+  }));
+  const resumedPendingClaim = await waitForMessage(resumed, (msg) => msg.id === 2018, 'post-restart pending command claim');
+  assert.equal(resumedPendingClaim.type, 'result');
+  assert.equal(resumedPendingClaim.data?.claimed, true, 'pending persisted commands should be claimable after restart');
+  await closeClient(resumed);
+  await stopBridge();
+
+  const bulkEvents = Array.from({ length: 200 }, (_, index) => ({
+    eventId: `bulk_${index + 1}`,
+    sequence: index + 1,
+    at: new Date(0).toISOString(),
+    kind: 'ledger-command',
+    source: 'guild-ledger',
+    command: `Bulk persisted event ${index + 1}`,
+    runtime: 'codex',
+    profile: 'fast',
+  }));
+  fs.writeFileSync(sessionLogPath, `${bulkEvents.map((event) => JSON.stringify(event)).join('\n')}\n`, 'utf8');
+  runBridge();
+  await waitForHealth();
+  const retention = await connectClient('retention-browser');
+  retention.ws.send(JSON.stringify({
+    id: 2019,
+    type: 'session-event',
+    event: {
+      kind: 'ledger-command',
+      source: 'guild-ledger',
+      command: 'Retention cap event',
+      projectPath: tmp,
+      runtime: 'codex',
+      profile: 'fast',
+    },
+  }));
+  const retentionAck = await waitForMessage(retention, (msg) => msg.id === 2019, 'retention cap event ack');
+  assert.equal(retentionAck.type, 'result');
+  const retainedEvents = fs.readFileSync(sessionLogPath, 'utf8')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.equal(retainedEvents.length, 200, 'remote session log should compact to the bounded history size after live trimming');
+  assert(!retainedEvents.some((event) => event.sequence === 1), 'remote session log should drop the oldest event after live trimming');
+  assert(retainedEvents.some((event) => event.command === 'Retention cap event'), 'remote session log should retain the new event after compaction');
+  await closeClient(retention);
   console.log('Remote control bridge self-test passed');
 } finally {
   await stopBridge();

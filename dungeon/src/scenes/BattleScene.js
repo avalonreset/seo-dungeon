@@ -2235,6 +2235,58 @@ Summary: ${fallbackSummary}`;
     });
   }
 
+  remoteVanquish() {
+    if (!this.isPlayerTurn || this.battleOver) return;
+    const startHall = () => {
+      const data = {
+        domain: this.game?.domain,
+        projectPath: this.game?.projectPath
+      };
+      const manager = this.game?.scene;
+      if (manager?.isActive?.('DungeonHall')) return;
+      try {
+        this.scene.start('DungeonHall', data);
+        if (manager?.isActive?.('DungeonHall')) return;
+      } catch (_) {}
+      try {
+        manager?.start?.('DungeonHall', data);
+        if (manager?.isActive?.('DungeonHall')) return;
+      } catch (_) {}
+      try {
+        manager?.launch?.('DungeonHall', data);
+        if (manager?.isActive?.('DungeonHall')) return;
+      } catch (_) {}
+      try {
+        manager?.run?.('DungeonHall', data);
+      } catch (_) {}
+      try {
+        const hall = manager?.getScene?.('DungeonHall');
+        hall?.scene?.setVisible?.(true);
+        hall?.scene?.setActive?.(true);
+      } catch (_) {}
+    };
+    this.isPlayerTurn = false;
+    this.battleOver = true;
+    this._disableMenu();
+    try { this._removeAttackOverlay(); } catch (_) {}
+    try {
+      SFX.play('vanquish');
+      this.cameras.main.flash(250, 255, 220, 80);
+      this.cameras.main.shake(180, 0.015);
+    } catch (_) {}
+    this.issue.defeated = true;
+    this._persistProgress();
+    const xp = (this.issue.hp || 10) * 10;
+    this.setLog(`Remote vanquish accepted. +${xp} XP earned.`);
+    if (this.game.addLog) this.game.addLog(`Demon vanquished! +${xp} XP`);
+    window.setTimeout(() => {
+      if (!this.game?.scene?.isActive('DungeonHall')) startHall();
+      window.setTimeout(() => {
+        if (!this.game?.scene?.isActive('DungeonHall')) startHall();
+      }, 800);
+    }, 300);
+  }
+
   // ═══════════════════════════════════════════════════
   //  DEFEND - brace for impact, demon gets a free hit
   // ═══════════════════════════════════════════════════

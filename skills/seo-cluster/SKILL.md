@@ -14,7 +14,7 @@ license: MIT
 metadata:
   author: AgriciDaniel
   original_author: "Lutfiya Miller (Pro Hub Challenge Winner)"
-  version: "2.2.15"
+  version: "2.2.16"
   category: seo
 ---
 

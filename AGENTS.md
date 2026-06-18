@@ -70,7 +70,9 @@ reporting, and SEO data integrations.
 
 ## Runtime Policy
 
-- Default dungeon runtime: Codex CLI through `codex exec --json`.
+- Default dungeon runtime: Codex CLI through `codex app-server --stdio`.
+  Set `SEO_DUNGEON_CODEX_TRANSPORT=exec` only when deliberately testing the
+  older `codex exec --json` transport.
 - Optional dungeon runtimes: local Claude Code CLI through `claude --print` and
   local Gemini CLI through `gemini --prompt`.
 - The bridge must only spawn local terminal CLIs. Do not add consumer-app browser

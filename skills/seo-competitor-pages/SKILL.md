@@ -11,7 +11,7 @@ argument-hint: "[url or generate] [competitor]"
 license: MIT
 metadata:
   author: AgriciDaniel
-  version: "2.2.15"
+  version: "2.2.16"
   category: seo
 ---
 

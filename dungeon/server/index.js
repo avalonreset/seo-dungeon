@@ -3,6 +3,7 @@ const { spawn, execFileSync } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const REMOTE_PROTOCOL = require('../shared/remote-protocol.cjs');
 
 const DEFAULT_PORT = Number(process.env.SEO_DUNGEON_BRIDGE_PORT || 3003);
 const STRICT_PORT = process.env.SEO_DUNGEON_BRIDGE_STRICT_PORT === '1';
@@ -95,31 +96,23 @@ function logFailedAudit(domain, raw, note) {
 }
 
 // ── Security: Allowed message types and rate limits ──
-const ALLOWED_TYPES = [
-  'audit',
-  'fix',
-  'commit',
-  'narrate',
-  'chat',
-  'cancel',
-  'steer',
-  'open-folder',
-  'capabilities',
-  'remote-command',
-  'remote-command-claim',
-  'session-event',
-  'session-state',
-];
+const ALLOWED_TYPES = [...REMOTE_PROTOCOL.allowedTypes];
 const MAX_CONCURRENT_PROCESSES = 5;
 const MAX_MESSAGES_PER_MINUTE = 30;
 const SESSION_EVENT_HISTORY_LIMIT = 200;
+const SESSION_EVENT_LOG_FILE = (() => {
+  const value = String(process.env.SEO_DUNGEON_SESSION_LOG || '').trim();
+  if (!value || value === '0') return null;
+  return path.resolve(value);
+})();
 let sessionEventSequence = 0;
 let sessionClientSequence = 0;
 const sessionEvents = [];
 const sessionClients = new Set();
 const sessionClientMeta = new Map();
 const remoteCommandClaims = new Map();
-const RESERVED_SESSION_EVENT_KINDS = new Set(['remote-command']);
+const TERMINAL_LEDGER_RESULT_STATUSES = new Set(REMOTE_PROTOCOL.terminalLedgerResultStatuses);
+const RESERVED_SESSION_EVENT_KINDS = new Set(REMOTE_PROTOCOL.reservedSessionEventKinds);
 
 function getBridgeCapabilities() {
   const codexTransport = /^exec$/i.test(String(process.env.SEO_DUNGEON_CODEX_TRANSPORT || ''))
@@ -127,12 +120,14 @@ function getBridgeCapabilities() {
     : 'app-server';
   return {
     version: PACKAGE_VERSION,
-    protocol: 2,
+    protocol: REMOTE_PROTOCOL.protocol,
     supportsSteer: codexTransport === 'app-server',
     supportsRemoteControl: true,
     supportsRemoteCommandClaim: true,
     steerMode: 'active-turn',
     remoteControlMode: 'shared-session-events',
+    sessionEventPersistence: Boolean(SESSION_EVENT_LOG_FILE),
+    sessionEventHistoryLimit: SESSION_EVENT_HISTORY_LIMIT,
     defaultCodexTransport: codexTransport,
     allowedTypes: [...ALLOWED_TYPES]
   };
@@ -696,7 +691,7 @@ function steerActiveProcess(targetId, text) {
 }
 
 function trimEventText(value, max = 4000) {
-  const clean = String(value || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean = String(value ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}...` : clean;
 }
 
@@ -737,7 +732,12 @@ function updateClientMeta(ws, msg = {}) {
   meta.role = inferClientRole(msg.type, source, meta.role);
 }
 
-function operationSummary(id, metadata = {}) {
+function operationSummary(id, metadata = {}, proc = null) {
+  const hasSteerFunction = typeof proc?.steer === 'function';
+  const hasWritableStdin = Boolean(proc?.stdin && proc.stdin.writable && !proc.stdin.destroyed);
+  const canSteer = hasSteerFunction
+    ? Boolean(proc.turnId)
+    : hasWritableStdin;
   return {
     id,
     type: metadata.type || 'operation',
@@ -751,11 +751,14 @@ function operationSummary(id, metadata = {}) {
     lastSeenAt: metadata.lastSeenAt || metadata.startedAt,
     lastStreamAt: metadata.lastStreamAt || null,
     lastStream: metadata.lastStream || null,
+    canSteer,
+    steerMode: hasSteerFunction ? 'app-server-turn' : (hasWritableStdin ? 'stdin' : 'none'),
   };
 }
 
 function publicActiveOperations() {
-  return [...activeProcessMetadata.entries()].map(([id, metadata]) => operationSummary(id, metadata));
+  return [...activeProcessMetadata.entries()]
+    .map(([id, metadata]) => operationSummary(id, metadata, activeProcesses.get(id)));
 }
 
 function stageProcessMetadata(requestId, metadata = {}) {
@@ -810,7 +813,7 @@ function publicSessionEvent(input = {}) {
     source,
   };
 
-  for (const key of ['commandId', 'targetId', 'status', 'message']) {
+  for (const key of ['commandId', 'targetId', 'status', 'message', 'action', 'domain', 'character']) {
     if (input[key] != null) event[key] = trimEventText(input[key], 500);
   }
   if (input.command != null) event.command = trimEventText(input.command);
@@ -827,13 +830,93 @@ function publicSessionEvent(input = {}) {
   return event;
 }
 
-function recordSessionEvent(event) {
-  sessionEvents.push(event);
+function redactSessionEventForPersistence(value) {
+  if (typeof value === 'string') return redactSensitiveText(value);
+  if (Array.isArray(value)) return value.map((item) => redactSessionEventForPersistence(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactSessionEventForPersistence(item)])
+    );
+  }
+  return value;
+}
+
+function trimSessionEventHistory() {
+  let trimmed = 0;
   while (sessionEvents.length > SESSION_EVENT_HISTORY_LIMIT) {
     const removed = sessionEvents.shift();
+    trimmed += 1;
     if (removed?.kind === 'remote-command' && removed.commandId) {
       remoteCommandClaims.delete(removed.commandId);
     }
+  }
+  return trimmed;
+}
+
+function persistSessionEvent(event) {
+  if (!SESSION_EVENT_LOG_FILE) return;
+  try {
+    fs.mkdirSync(path.dirname(SESSION_EVENT_LOG_FILE), { recursive: true });
+    fs.appendFileSync(SESSION_EVENT_LOG_FILE, `${JSON.stringify(redactSessionEventForPersistence(event))}\n`, 'utf8');
+  } catch (err) {
+    console.warn(`Could not persist session event: ${err.message}`);
+  }
+}
+
+function compactSessionEventLog() {
+  if (!SESSION_EVENT_LOG_FILE) return true;
+  try {
+    fs.mkdirSync(path.dirname(SESSION_EVENT_LOG_FILE), { recursive: true });
+    const body = sessionEvents
+      .map((event) => JSON.stringify(redactSessionEventForPersistence(event)))
+      .join('\n');
+    fs.writeFileSync(SESSION_EVENT_LOG_FILE, body ? `${body}\n` : '', 'utf8');
+    return true;
+  } catch (err) {
+    console.warn(`Could not compact session event log: ${err.message}`);
+    return false;
+  }
+}
+
+function loadPersistedSessionEvents() {
+  if (!SESSION_EVENT_LOG_FILE || !fs.existsSync(SESSION_EVENT_LOG_FILE)) return;
+  try {
+    const events = [];
+    let skipped = 0;
+    const lines = fs.readFileSync(SESSION_EVENT_LOG_FILE, 'utf8').split(/\r?\n/);
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      try {
+        const event = JSON.parse(line);
+        if (event && typeof event === 'object' && typeof event.kind === 'string') events.push(event);
+        else skipped += 1;
+      } catch (_) {
+        skipped += 1;
+      }
+    }
+    events.splice(0, Math.max(0, events.length - SESSION_EVENT_HISTORY_LIMIT));
+    sessionEvents.push(...events);
+    for (const event of events) {
+      const sequence = Number(event.sequence || 0);
+      if (Number.isFinite(sequence)) sessionEventSequence = Math.max(sessionEventSequence, sequence);
+    }
+    trimSessionEventHistory();
+    compactSessionEventLog();
+    console.log(`Loaded ${sessionEvents.length} persisted session events from ${SESSION_EVENT_LOG_FILE}`);
+    if (skipped) console.warn(`Skipped ${skipped} malformed persisted session event line(s).`);
+  } catch (err) {
+    console.warn(`Could not load persisted session events: ${err.message}`);
+  }
+}
+
+function recordSessionEvent(event) {
+  sessionEvents.push(event);
+  const trimmed = trimSessionEventHistory();
+  if (trimmed > 0) {
+    if (!compactSessionEventLog()) persistSessionEvent(event);
+  } else {
+    persistSessionEvent(event);
   }
   return event;
 }
@@ -873,13 +956,34 @@ function buildRemoteCommandEvent(msg, validatedPath) {
   });
 }
 
+function findRemoteCommandEvent(commandId) {
+  const clean = trimEventText(commandId, 200);
+  if (!clean) return null;
+  for (let index = sessionEvents.length - 1; index >= 0; index -= 1) {
+    const entry = sessionEvents[index];
+    if (entry?.kind === 'remote-command' && entry.commandId === clean) return entry;
+  }
+  return null;
+}
+
+function hasTerminalLedgerResult(commandId) {
+  const commandEvent = findRemoteCommandEvent(commandId);
+  if (!commandEvent) return false;
+  const commandSequence = Number(commandEvent.sequence || 0);
+  return sessionEvents.some((entry) =>
+    entry.kind === 'ledger-result' &&
+    entry.commandId === commandEvent.commandId &&
+    Number(entry.sequence || 0) >= commandSequence &&
+    TERMINAL_LEDGER_RESULT_STATUSES.has(String(entry.status || '').toLowerCase())
+  );
+}
+
 function claimRemoteCommand(commandId, ownerToken) {
   const clean = trimEventText(commandId, 200);
   if (!clean) throw new Error('Remote command claim requires a command id.');
-  const event = sessionEvents.find((entry) =>
-    entry.kind === 'remote-command' && entry.commandId === clean
-  );
+  const event = findRemoteCommandEvent(clean);
   if (!event) throw new Error('Remote command is not available to claim.');
+  if (hasTerminalLedgerResult(clean)) throw new Error('Remote command already has a terminal ledger result.');
   const existing = remoteCommandClaims.get(clean);
   if (existing && existing.ownerToken !== ownerToken) {
     return { claimed: false, commandId: clean, claimedAt: existing.claimedAt };
@@ -1080,6 +1184,17 @@ wss.on('connection', (ws, req) => {
             id,
             type: 'error',
             message: 'Project folder does not exist or is not allowed.'
+          }));
+          return;
+        }
+      }
+      if (incomingKind === 'ledger-result' && incoming.commandId) {
+        const resultCommandId = trimEventText(incoming.commandId, 200);
+        if (!findRemoteCommandEvent(resultCommandId)) {
+          safeSend(JSON.stringify({
+            id,
+            type: 'error',
+            message: 'Ledger result references an unknown remote command.'
           }));
           return;
         }
@@ -2379,6 +2494,7 @@ function runCodex(prompt, onStream, cwd, requestId, profile, options = {}) {
 
 function startBridge() {
   installConsoleFileLogger();
+  loadPersistedSessionEvents();
   // Catch crashes only in the live bridge. Tests import this module and should
   // fail normally instead of being swallowed by global handlers.
   process.on('uncaughtException', (err) => {

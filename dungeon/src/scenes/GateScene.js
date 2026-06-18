@@ -464,55 +464,67 @@ export class GateScene extends Phaser.Scene {
 
     // Resume (continue cached quest) - knight faces LEFT toward the card
     overlay.querySelectorAll('[data-action="resume"]').forEach(card => {
-      card.addEventListener('click', () => {
-        SFX.play('menuConfirm');
-        this._faceKnight('left');
-        this.game.auditData = this.cachedRun.auditData;
-        SFX.play('doorOpen');
-        SFX.play('sceneTransition');
-        this._transitionOut(() => {
-          this.scene.start('DungeonHall', {
-            domain: this.domain,
-            projectPath: this.projectPath
-          });
-        });
-      });
+      card.addEventListener('click', () => this.resumeCachedQuest());
     });
 
     // Re-run (wipe cache, run fresh) - knight faces RIGHT toward the card
     overlay.querySelectorAll('[data-action="rerun"]').forEach(card => {
-      card.addEventListener('click', () => {
-        SFX.play('menuConfirm');
-        this._faceKnight('right');
-        try {
-          const runtime = this.game.characterConfig?.runtime || getSelectedRuntime();
-          localStorage.removeItem(`seo_dungeon_audit_${this.domain}_${runtime}_${this.selectedModel.key}`);
-          localStorage.removeItem(`seo_dungeon_audit_${this.domain}_${this.selectedModel.key}`);
-        } catch (_) {}
-        SFX.play('sceneTransition');
-        this._transitionOut(() => {
-          this.scene.start('Summoning', {
-            domain: this.domain,
-            projectPath: this.projectPath
-          });
-        });
-      });
+      card.addEventListener('click', () => this.startFreshQuest());
     });
 
     // Abandon (return to title)
     const runeEl = document.getElementById('gate-rune');
     runeEl.addEventListener('mouseenter', () => SFX.play('menuHover'));
-    runeEl.addEventListener('click', () => {
-      SFX.play('menuConfirm');
-      if (this.game.addLog) this.game.addLog('The link is severed.');
-      SFX.play('sceneTransition');
-      this._transitionOut(() => {
-        window.returnToTitle();
-      });
-    });
+    runeEl.addEventListener('click', () => this.returnToTitleScreen());
 
     this._overlayEl = overlay;
     this._styleEl = style;
+  }
+
+  resumeCachedQuest() {
+    if (!this.cachedRun?.auditData) {
+      throw new Error('No cached quest is available to resume.');
+    }
+    SFX.play('menuConfirm');
+    this._faceKnight('left');
+    this.game.auditData = this.cachedRun.auditData;
+    SFX.play('doorOpen');
+    SFX.play('sceneTransition');
+    this._transitionOut(() => {
+      this.scene.start('DungeonHall', {
+        domain: this.domain,
+        projectPath: this.projectPath
+      });
+    });
+    return true;
+  }
+
+  startFreshQuest() {
+    SFX.play('menuConfirm');
+    this._faceKnight('right');
+    try {
+      const runtime = this.game.characterConfig?.runtime || getSelectedRuntime();
+      localStorage.removeItem(`seo_dungeon_audit_${this.domain}_${runtime}_${this.selectedModel.key}`);
+      localStorage.removeItem(`seo_dungeon_audit_${this.domain}_${this.selectedModel.key}`);
+    } catch (_) {}
+    SFX.play('sceneTransition');
+    this._transitionOut(() => {
+      this.scene.start('Summoning', {
+        domain: this.domain,
+        projectPath: this.projectPath
+      });
+    });
+    return true;
+  }
+
+  returnToTitleScreen() {
+    SFX.play('menuConfirm');
+    if (this.game.addLog) this.game.addLog('The link is severed.');
+    SFX.play('sceneTransition');
+    this._transitionOut(() => {
+      window.returnToTitle();
+    });
+    return true;
   }
 
   /**
@@ -543,7 +555,7 @@ export class GateScene extends Phaser.Scene {
       this._removeOverlay();
       SFX.play('sceneTransition');
       this.cameras.main.fadeOut(400, 0, 0, 0);
-      this.time.delayedCall(400, () => {
+      this._scheduleSceneDelay(400, () => {
         this.scene.start('Boot');
       });
     } else {
@@ -552,7 +564,7 @@ export class GateScene extends Phaser.Scene {
       SFX.play('doorOpen');
       SFX.play('sceneTransition');
       this.cameras.main.fadeOut(500, 0, 0, 0);
-      this.time.delayedCall(500, () => {
+      this._scheduleSceneDelay(500, () => {
         this.scene.start(destScene, {
           domain: this.domain,
           projectPath: this.projectPath,
@@ -576,6 +588,21 @@ export class GateScene extends Phaser.Scene {
     this._idleCyclePaused = true;
     if (direction === 'left') this.knight.setFlipX(true);
     else if (direction === 'right') this.knight.setFlipX(false);
+  }
+
+  _scheduleSceneDelay(delay, callback) {
+    let fired = false;
+    let timer = null;
+    let fallbackId = null;
+    const run = () => {
+      if (fired) return;
+      fired = true;
+      if (fallbackId != null) window.clearTimeout(fallbackId);
+      if (timer?.remove) timer.remove(false);
+      callback();
+    };
+    timer = this.time.delayedCall(delay, run);
+    fallbackId = window.setTimeout(run, delay + 300);
   }
 
   _transitionOut(callback) {
@@ -602,13 +629,13 @@ export class GateScene extends Phaser.Scene {
 
     // After cards vanish, fade the overlay background and fire callback
     const totalDelay = Math.min(cards.length * 50 + 300, 600);
-    this.time.delayedCall(totalDelay, () => {
+    this._scheduleSceneDelay(totalDelay, () => {
       if (this._overlayEl) {
         this._overlayEl.style.transition = 'opacity 0.3s ease-in';
         this._overlayEl.style.opacity = '0';
       }
       this.cameras.main.fadeOut(500, 0, 0, 0);
-      this.time.delayedCall(500, () => {
+      this._scheduleSceneDelay(500, () => {
         this._removeOverlay();
         callback();
       });

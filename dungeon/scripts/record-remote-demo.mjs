@@ -254,6 +254,7 @@ async function main() {
   const bridgeOutputPath = path.join(outputDir, 'bridge-output.txt');
   const viteOutputPath = path.join(outputDir, 'vite-output.txt');
   const controllerMessagesPath = path.join(outputDir, 'controller-messages.json');
+  const sessionLogPath = path.join(outputDir, 'session-events.jsonl');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-dungeon-demo-'));
   const fallbackProject = path.join(tmp, 'project');
   const fakeCodexAppServer = path.join(tmp, 'fake-codex-app-server.cjs');
@@ -283,6 +284,7 @@ async function main() {
         ...process.env,
         SEO_DUNGEON_BRIDGE_PORT: String(bridgePort),
         SEO_DUNGEON_ALLOWED_ORIGINS: origin,
+        SEO_DUNGEON_SESSION_LOG: sessionLogPath,
         SEO_DUNGEON_CODEX_CLI: process.execPath,
         SEO_DUNGEON_CODEX_ARGS: `"${fakeCodexAppServer}"`,
       },
@@ -397,6 +399,7 @@ async function main() {
       video: finalVideoPath,
       screenshot: screenshotPath,
       sessionState: sessionStatePath,
+      sessionLog: sessionLogPath,
       ledger: ledgerPath,
       controllerMessages: controllerMessagesPath,
       bridgeOutput: bridgeOutputPath,

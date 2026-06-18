@@ -231,6 +231,30 @@ async function waitForLedger(page, matcher, label, timeoutMs = 12000) {
   throw new Error(`Timed out waiting for ledger line: ${label}\n${(await ledgerTexts(page)).join('\n')}`);
 }
 
+async function sceneSnapshot(page) {
+  return page.evaluate(() => {
+    const game = window.__seoDungeonGame;
+    const names = ['Boot', 'Gate', 'Summoning', 'DungeonHall', 'Battle', 'Victory'];
+    const active = names.filter((name) => {
+      try { return game?.scene?.isActive(name); } catch (_) { return false; }
+    });
+    let battleIssue = null;
+    let hallState = null;
+    try {
+      const battle = game?.scene?.getScene('Battle');
+      battleIssue = battle?.issue ? { id: battle.issue.id, title: battle.issue.title } : null;
+    } catch (_) {}
+    try {
+      const hall = game?.scene?.getScene('DungeonHall');
+      hallState = hall ? {
+        inFlight: Boolean(hall._battleStartInFlight),
+        issueIds: Array.isArray(hall.issues) ? hall.issues.map((issue) => issue.id) : [],
+      } : null;
+    } catch (_) {}
+    return { active, battleIssue, hallState };
+  });
+}
+
 runBridge();
 runVite();
 
@@ -252,11 +276,120 @@ try {
       document.querySelector('#bridge-status')?.classList.contains('connected');
   }, null, { timeout: 15000 });
 
-  await page.locator('#domain-input').fill('seodungeon.com');
-  await page.locator('#path-input').fill(projectPath);
-  if (await page.locator('#danger-mode-toggle').getAttribute('aria-pressed') !== 'true') {
-    await page.locator('#danger-mode-toggle').click();
-  }
+  const cachedAudit = {
+    domain: 'seodungeon.com',
+    score: 82,
+    issues: [
+      {
+        id: 'remote-hall-1',
+        title: 'Robots directive needs review',
+        description: 'The robots policy should be checked before production indexing.',
+        severity: 'medium',
+        category: 'technical',
+        hp: 24,
+      },
+      {
+        id: 'remote-hall-2',
+        title: 'Canonical tag points at the wrong URL',
+        description: 'The canonical URL does not match the preferred SEO Dungeon page.',
+        severity: 'high',
+        category: 'technical',
+        hp: 36,
+      },
+    ],
+  };
+  await page.evaluate((auditData) => {
+    localStorage.setItem('seo_dungeon_audit_seodungeon.com_codex_fast', JSON.stringify({
+      domain: 'seodungeon.com',
+      runtime: 'codex',
+      profile: 'fast',
+      model: 'fast',
+      auditData,
+      createdAt: Date.now(),
+    }));
+  }, cachedAudit);
+
+  const launchIntent = await runCli([
+    'event',
+    '--json',
+    '--wait',
+    '--timeout',
+    '10000',
+    '--kind',
+    'ui-intent',
+    '--action',
+    'launch',
+    '--domain',
+    'seodungeon.com',
+    '--project',
+    projectPath,
+    '--runtime',
+    'codex',
+    '--profile',
+    'fast',
+    '--character',
+    'knight',
+    '--dangerous-bypass',
+    '--meta',
+    'ticket=RC-018',
+    '--message',
+    'Launch SEO Dungeon from Codex helper',
+  ], { timeoutMs: 12000 });
+  assert.equal(launchIntent.code, 0, launchIntent.stdout);
+  const launchIntentJson = JSON.parse(launchIntent.stdout);
+  assert.equal(launchIntentJson.ok, true);
+  assert.equal(launchIntentJson.waitEvent?.kind, 'ui-result');
+  assert.equal(launchIntentJson.waitEvent?.targetId, launchIntentJson.data?.event?.eventId);
+  assert.equal(launchIntentJson.waitEvent?.status, 'complete');
+  assert.equal(launchIntentJson.waitEvent?.action, 'launch');
+  assert.equal(launchIntentJson.waitEvent?.metadata?.ticket, 'RC-018');
+
+  const launchResult = await runCli([
+    'watch',
+    '--json',
+    '--kind',
+    'ui-result',
+    '--filter-source',
+    'guild-ledger',
+    '--count',
+    '1',
+    '--timeout',
+    '10000',
+  ]);
+  assert.equal(launchResult.code, 0, launchResult.stdout);
+  const launchResultLines = parseJsonLines(launchResult.stdout);
+  const launchResultEvent = launchResultLines.find((line) => line.type === 'session-event')?.event;
+  assert.equal(launchResultEvent?.status, 'complete');
+  assert.equal(launchResultEvent?.action, 'launch');
+  assert.equal(launchResultEvent?.domain, 'seodungeon.com');
+  assert.equal(launchResultEvent?.projectPath, projectPath);
+  assert.equal(launchResultEvent?.runtime, 'codex');
+  assert.equal(launchResultEvent?.profile, 'fast');
+  assert.equal(launchResultEvent?.character, 'knight');
+  assert.equal(launchResultEvent?.dangerousBypass, true);
+  assert.equal(launchResultEvent?.targetId, launchIntentJson.data?.event?.eventId);
+  assert.equal(launchResultEvent?.metadata?.ticket, 'RC-018');
+  assert.equal(launchResultEvent?.metadata?.scene, 'title');
+
+  await page.waitForFunction(() =>
+    window.__seoDungeonGame?.domain === 'seodungeon.com' &&
+    window.__seoDungeonGame?.projectPath &&
+    document.querySelector('#title-screen')?.style.display === 'none'
+  , null, { timeout: 8000 });
+  const launchedState = await page.evaluate(() => ({
+    domain: window.__seoDungeonGame?.domain,
+    projectPath: window.__seoDungeonGame?.projectPath,
+    profile: window.__seoDungeonGame?.characterConfig?.profile,
+    runtime: window.__seoDungeonGame?.characterConfig?.runtime,
+    dangerousBypass: window.__seoDungeonGame?.characterConfig?.dangerousBypass,
+  }));
+  assert.deepEqual(launchedState, {
+    domain: 'seodungeon.com',
+    projectPath,
+    profile: 'fast',
+    runtime: 'codex',
+    dangerousBypass: true,
+  });
 
   const browserWatch = runCli([
     'watch',
@@ -314,6 +447,67 @@ try {
   await waitForLedger(page, /Remote codex-cli: Codex helper command into Guild Ledger/i, 'Codex helper command mirrored to ledger');
   await waitForLedger(page, /> Codex helper command into Guild Ledger/i, 'Codex helper command submitted through browser');
   await waitForLedger(page, /CODEX_HELPER_STREAM/i, 'Codex helper fake stream visible');
+
+  const gateResume = await runCli([
+    'event',
+    '--json',
+    '--wait',
+    '--timeout',
+    '10000',
+    '--kind',
+    'ui-intent',
+    '--action',
+    'gate-resume',
+    '--meta',
+    'ticket=RC-018',
+    '--message',
+    'Resume cached quest from Codex helper',
+  ], { timeoutMs: 12000 });
+  assert.equal(gateResume.code, 0, gateResume.stdout);
+  const gateResumeJson = JSON.parse(gateResume.stdout);
+  assert.equal(gateResumeJson.ok, true);
+  assert.equal(gateResumeJson.waitEvent?.kind, 'ui-result');
+  assert.equal(gateResumeJson.waitEvent?.targetId, gateResumeJson.data?.event?.eventId);
+  assert.equal(gateResumeJson.waitEvent?.status, 'complete');
+  assert.equal(gateResumeJson.waitEvent?.action, 'gate-resume');
+  assert.equal(gateResumeJson.waitEvent?.metadata?.scene, 'Gate');
+  await page.waitForFunction(() => window.__seoDungeonGame?.scene?.isActive('DungeonHall'), null, { timeout: 12000 });
+
+  const hallSelect = await runCli([
+    'event',
+    '--json',
+    '--wait',
+    '--timeout',
+    '10000',
+    '--kind',
+    'ui-intent',
+    '--action',
+    'hall-select-issue',
+    '--meta',
+    'ticket=RC-018',
+    '--meta',
+    'issueId=remote-hall-2',
+    '--message',
+    'Select canonical issue from Codex helper',
+  ], { timeoutMs: 12000 });
+  assert.equal(hallSelect.code, 0, hallSelect.stdout);
+  const hallSelectJson = JSON.parse(hallSelect.stdout);
+  assert.equal(hallSelectJson.ok, true);
+  assert.equal(hallSelectJson.waitEvent?.kind, 'ui-result');
+  assert.equal(hallSelectJson.waitEvent?.targetId, hallSelectJson.data?.event?.eventId);
+  assert.equal(hallSelectJson.waitEvent?.status, 'complete');
+  assert.equal(hallSelectJson.waitEvent?.action, 'hall-select-issue');
+  assert.equal(hallSelectJson.waitEvent?.metadata?.scene, 'DungeonHall');
+  assert.equal(hallSelectJson.waitEvent?.metadata?.issueId, 'remote-hall-2');
+  try {
+    await page.waitForFunction(() => {
+      const game = window.__seoDungeonGame;
+      const battle = game?.scene?.getScene('Battle');
+      return game?.scene?.isActive('Battle') && battle?.issue?.id === 'remote-hall-2';
+    }, null, { timeout: 12000 });
+  } catch (err) {
+    throw new Error(`${err.message}\nscene=${JSON.stringify(await sceneSnapshot(page))}\npageErrors=${pageErrors.join('\n')}`);
+  }
 
   assert.deepEqual(pageErrors, [], `page errors:\n${pageErrors.join('\n')}`);
   console.log('Remote control bidirectional UI/CLI self-test passed');

@@ -177,6 +177,64 @@ function runVite() {
   vite.stderr.on('data', (chunk) => viteOutput.push(chunk.toString()));
 }
 
+function runCli(args, { timeoutMs = 15000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['scripts/remote-control.mjs', ...args], {
+      cwd: dungeonRoot,
+      env: {
+        ...process.env,
+        SEO_DUNGEON_BRIDGE_URL: bridgeWs,
+        SEO_DUNGEON_CONTROLLER_ORIGIN: origin,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`CLI timed out: ${args.join(' ')}\nstdout=${stdout}\nstderr=${stderr}`));
+    }, timeoutMs);
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
+async function runRemoteUiIntent(action, { command = '', meta = [], timeoutMs = 15000 } = {}) {
+  const args = [
+    'event',
+    '--json',
+    '--wait',
+    '--timeout',
+    String(timeoutMs),
+    '--kind',
+    'ui-intent',
+    '--action',
+    action,
+    '--meta',
+    'ticket=RC-018',
+  ];
+  for (const entry of meta) args.push('--meta', entry);
+  if (command) args.push('--', command);
+  const result = await runCli(args, { timeoutMs: timeoutMs + 3000 });
+  assert.equal(result.code, 0, result.stdout || result.stderr);
+  const json = JSON.parse(result.stdout);
+  assert.equal(json.ok, true, result.stdout);
+  assert.equal(json.waitEvent?.kind, 'ui-result');
+  assert.equal(json.waitEvent?.targetId, json.data?.event?.eventId);
+  assert.equal(json.waitEvent?.status, 'complete', result.stdout);
+  assert.equal(json.waitEvent?.action, action);
+  return json;
+}
+
 async function killTree(child) {
   if (!child || child.killed || child.exitCode !== null) return;
   if (process.platform === 'win32') {
@@ -266,6 +324,50 @@ async function waitForIdle(page) {
   }, null, { timeout: 12000 });
 }
 
+async function battleSnapshot(page) {
+  return page.evaluate(() => {
+    const game = window.__seoDungeonGame;
+    const names = ['Boot', 'Gate', 'Summoning', 'DungeonHall', 'Battle', 'Victory'];
+    const active = names.filter((name) => {
+      try { return game?.scene?.isActive(name); } catch (_) { return false; }
+    });
+    let battle = null;
+    try {
+      const scene = game?.scene?.getScene('Battle');
+      battle = scene ? {
+        active: game?.scene?.isActive('Battle') === true,
+        issueId: scene.issue?.id,
+        issueDefeated: scene.issue?.defeated === true,
+        isPlayerTurn: scene.isPlayerTurn === true,
+        battleOver: scene.battleOver === true,
+      } : null;
+    } catch (_) {}
+    return {
+      active,
+      scenes: names.map((name) => {
+        try {
+          const scene = game?.scene?.getScene(name);
+          return scene ? {
+            name,
+            status: scene.scene?.settings?.status,
+            active: game?.scene?.isActive(name) === true,
+            visible: game?.scene?.isVisible(name) === true,
+          } : { name, missing: true };
+        } catch (err) {
+          return { name, error: err.message };
+        }
+      }),
+      battle,
+      auditIssues: game?.auditData?.issues?.map((issue) => ({
+        id: issue.id,
+        defeated: issue.defeated === true,
+        fixed: issue.fixed === true,
+      })) || [],
+      dialogue: window.__seoDungeonDialogueState?.() || null,
+    };
+  });
+}
+
 async function fillAndSubmit(page, text) {
   const input = page.locator('#log-input');
   await input.fill(text);
@@ -298,7 +400,13 @@ async function runTitleLaunchSmoke(context) {
 async function runBattleLedgerHarness(context) {
   const page = await context.newPage();
   const errors = [];
+  const consoleMessages = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (['error', 'warning'].includes(message.type())) {
+      consoleMessages.push(`${message.type()}: ${message.text()}`);
+    }
+  });
   await page.addInitScript(({ projectPath: injectedProjectPath }) => {
     window.seoDungeonDangerousBypass = true;
     localStorage.setItem('seo_dungeon_last_domain', 'seodungeon.com');
@@ -329,6 +437,47 @@ async function runBattleLedgerHarness(context) {
   await page.locator('#game-container canvas').first().waitFor({ timeout: 15000 });
   await waitForLog(page, /DEV: jumping to battle/i, 'dev battle jump');
   await page.waitForFunction(() => window.__seoDungeonGame?.scene?.isActive('Battle'), null, { timeout: 15000 });
+
+  const openAttack = await runRemoteUiIntent('battle-open-attack-prompt');
+  assert.equal(openAttack.waitEvent?.metadata?.scene, 'Battle');
+  await page.waitForFunction(() => Boolean(document.getElementById('attack-prompt-overlay')), null, { timeout: 5000 });
+
+  const remoteAttack = await runRemoteUiIntent('battle-attack', {
+    command: 'Initial battle harness prompt.',
+    timeoutMs: 15000,
+  });
+  assert.equal(remoteAttack.waitEvent?.metadata?.scene, 'Battle');
+  await page.waitForFunction(() => !document.getElementById('attack-prompt-overlay'), null, { timeout: 5000 });
+  await waitForLog(page, /channels the agent/i, 'remote battle attack started');
+
+  const remoteQueue = await runRemoteUiIntent('queue-add', {
+    command: 'Remote queued prompt for steer.',
+    meta: ['hold=false'],
+  });
+  assert.equal(remoteQueue.waitEvent?.metadata?.queueLength, '1');
+  await waitForQueueText(page, 'Remote queued prompt for steer.', 'remote queue-add should add prompt');
+
+  const remoteSteer = await runRemoteUiIntent('queue-steer', {
+    meta: ['promptIndex=0'],
+  });
+  assert.equal(remoteSteer.waitEvent?.metadata?.queueLength, '0');
+  await page.waitForFunction(() => document.querySelectorAll('.prompt-queue-item').length === 0);
+  await waitForLog(page, /> Remote queued prompt for steer\./i, 'remote queue-steer should log steered prompt');
+
+  await runRemoteUiIntent('queue-add', {
+    command: 'Remote queued prompt for stop.',
+  });
+  await waitForQueueText(page, 'Remote queued prompt for stop.', 'remote queue-add should add prompt before stop');
+
+  const remoteStop = await runRemoteUiIntent('agent-stop');
+  assert.equal(remoteStop.waitEvent?.metadata?.scene, 'Battle');
+  await page.waitForFunction(() => document.querySelector('#prompt-queue-title')?.textContent === 'Held');
+  assert.deepEqual(await queueTexts(page), ['Remote queued prompt for stop.'], 'remote agent-stop should hold queued prompt');
+
+  const remoteClear = await runRemoteUiIntent('queue-clear');
+  assert.equal(remoteClear.waitEvent?.metadata?.queueLength, '0');
+  await page.waitForFunction(() => document.querySelectorAll('.prompt-queue-item').length === 0);
+  await waitForIdle(page);
 
   await fillAndSubmit(page, 'Initial battle harness prompt.');
   await waitForLog(page, /channels the agent/i, 'battle fix started');
@@ -367,6 +516,23 @@ async function runBattleLedgerHarness(context) {
   await waitForLog(page, /> Hold this prompt after stop\./i, 'held prompt becomes active user line');
   await waitForLog(page, /I'll verify this against the live repo\./i, 'second coalesced agent stream');
   await expectNoStreamWordSpam(page);
+  await waitForIdle(page);
+
+  const remoteVanquish = await runRemoteUiIntent('battle-vanquish');
+  assert.equal(remoteVanquish.waitEvent?.metadata?.scene, 'Battle');
+  try {
+    await page.waitForFunction(() => {
+      const game = window.__seoDungeonGame;
+      const defeated = game?.auditData?.issues?.some((issue) => issue.id === 'ux-harness-demon' && issue.defeated === true);
+      return defeated && (
+        game?.scene?.isActive('DungeonHall') ||
+        game?.scene?.isVisible('DungeonHall')
+      );
+    }, null, { timeout: 15000 });
+  } catch (err) {
+    throw new Error(`${err.message}\nsnapshot=${JSON.stringify(await battleSnapshot(page))}\nconsole=${consoleMessages.join('\n')}\nledger=${(await ledgerTexts(page)).join('\n')}`);
+  }
+
   assert.deepEqual(errors, [], `battle ledger page errors:\\n${errors.join('\\n')}`);
   await page.close();
 }

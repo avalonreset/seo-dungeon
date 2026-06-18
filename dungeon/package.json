@@ -1,6 +1,6 @@
 {
   "name": "seo-dungeon",
-  "version": "2.2.15",
+  "version": "2.2.16",
   "description": "A 16-bit dungeon crawler interface for local AI SEO audits",
   "scripts": {
     "start": "node launch.js",
@@ -11,7 +11,10 @@
     "game": "vite",
     "remote": "node scripts/remote-control.mjs",
     "demo:remote-record": "node scripts/record-remote-demo.mjs",
+    "demo:remote-intents": "node scripts/record-remote-intents-demo.mjs",
+    "demo:desktop-intents": "node scripts/record-desktop-intents-proof.mjs",
     "demo:desktop-proof": "node scripts/record-desktop-proof.mjs",
+    "proof:desktop-intents": "node scripts/record-desktop-intents-proof.mjs",
     "proof:desktop": "node scripts/record-desktop-proof.mjs",
     "build": "vite build",
     "test:cli": "node tests/cli-launcher.mjs",

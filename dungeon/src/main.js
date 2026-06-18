@@ -875,6 +875,209 @@ document.addEventListener('DOMContentLoaded', () => {
     _sealTransition(() => launchGame(domain, path));
   };
 
+  const remoteCharacterForIntent = (detail = {}) => {
+    const requested = String(detail.character || '').trim().toLowerCase();
+    if (['warrior', 'samurai', 'knight'].includes(requested)) return requested;
+    const profile = getProfileKey(detail.profile || detail.model);
+    if (profile === 'deep') return 'warrior';
+    if (profile === 'fast') return 'knight';
+    return 'samurai';
+  };
+
+  const remoteBoolean = (value, fallback = false) => {
+    if (value == null) return fallback;
+    if (value === true || value === 1) return true;
+    if (value === false || value === 0) return false;
+    return ['1', 'true', 'yes', 'on', 'yolo', 'danger'].includes(String(value).trim().toLowerCase());
+  };
+
+  const applyRemoteTitleSetup = (detail = {}) => {
+    const runtime = String(detail.runtime || 'codex').trim().toLowerCase() || 'codex';
+    if (runtime !== 'codex') {
+      throw new Error('Remote UI intents are Codex-only in this release.');
+    }
+    const runtimeButton = document.querySelector('.runtime-option[data-runtime="codex"]');
+    if (runtimeButton && runtimeButton.getAttribute('aria-pressed') !== 'true') runtimeButton.click();
+
+    if (detail.domain != null) {
+      domainInput.value = String(detail.domain || '').trim();
+      domainInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (detail.projectPath != null) {
+      pathInput.value = String(detail.projectPath || '').trim();
+      pathInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    const characterKey = remoteCharacterForIntent(detail);
+    const characterCard = document.querySelector(`.char-option[data-char="${characterKey}"]`);
+    if (characterCard && !characterCard.classList.contains('selected')) characterCard.click();
+
+    const wantsDangerousBypass = remoteBoolean(detail.dangerousBypass, true);
+    const dangerButton = document.getElementById('danger-mode-toggle');
+    if (dangerButton && getDangerousBypassEnabled() !== wantsDangerousBypass) dangerButton.click();
+
+    updateButtonState();
+  };
+
+  const remoteMetadataValue = (detail = {}, key, fallback = null) => {
+    if (detail[key] != null) return detail[key];
+    if (detail.metadata && typeof detail.metadata === 'object' && detail.metadata[key] != null) {
+      return detail.metadata[key];
+    }
+    return fallback;
+  };
+
+  const remoteIntentText = (detail = {}) => {
+    for (const value of [
+      detail.command,
+      remoteMetadataValue(detail, 'prompt'),
+      remoteMetadataValue(detail, 'text'),
+      detail.message,
+    ]) {
+      const clean = String(value || '').trim();
+      if (clean) return clean;
+    }
+    return '';
+  };
+
+  const activeDungeonSceneName = () => {
+    if (!game?.scene) return 'title';
+    for (const sceneName of ['Battle', 'DungeonHall', 'Gate', 'Summoning', 'Victory', 'Boot']) {
+      try {
+        if (game.scene.isActive(sceneName)) return sceneName;
+      } catch (_) {}
+    }
+    return 'game';
+  };
+
+  const getActiveDungeonScene = (sceneName) => {
+    if (!game?.scene) return null;
+    try {
+      if (!game.scene.isActive(sceneName)) return null;
+      return game.scene.getScene(sceneName);
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const publishRemoteUiResult = (detail = {}, status = 'complete', message = '', metadataOverrides = {}) => {
+    const metadata = {
+      ...(detail.metadata && typeof detail.metadata === 'object' ? detail.metadata : {}),
+      scene: metadataOverrides.scene || 'title',
+      intentSource: detail.source || 'controller',
+      requestedAction: detail.action || 'setup',
+      ...metadataOverrides,
+    };
+    const characterConfig = game?.characterConfig || window.selectedCharacter || {};
+    bridge.publishSessionEvent({
+      kind: 'ui-result',
+      source: 'guild-ledger',
+      targetId: detail.eventId || detail.commandId || undefined,
+      status,
+      action: detail.action || 'setup',
+      message,
+      domain: game?.domain || cleanDomain(domainInput.value || ''),
+      projectPath: game?.projectPath || pathInput.value.trim(),
+      runtime: characterConfig.runtime || getSelectedRuntime(),
+      profile: characterConfig.profile || characterConfig.model || window.selectedCharacter?.profile || window.selectedCharacter?.model,
+      character: characterConfig.name || window.selectedCharacter?.name,
+      dangerousBypass: characterConfig.dangerousBypass ?? getDangerousBypassEnabled(),
+      metadata,
+    }).catch(() => {});
+  };
+
+  const handleRemoteGateIntent = (detail, action) => {
+    const gateScene = getActiveDungeonScene('Gate');
+    if (!gateScene) throw new Error('Gate scene is not active.');
+
+    if (['gate-resume', 'resume', 'continue'].includes(action)) {
+      gateScene.resumeCachedQuest();
+      publishRemoteUiResult(detail, 'complete', 'Remote gate resume intent accepted.', { scene: 'Gate' });
+      return true;
+    }
+
+    if (['gate-new-audit', 'gate-rerun', 'new-audit', 'rerun'].includes(action)) {
+      gateScene.startFreshQuest();
+      publishRemoteUiResult(detail, 'complete', 'Remote gate new-audit intent accepted.', { scene: 'Gate' });
+      return true;
+    }
+
+    if (['gate-title', 'gate-return', 'return-title'].includes(action)) {
+      gateScene.returnToTitleScreen();
+      publishRemoteUiResult(detail, 'complete', 'Remote gate return intent accepted.', { scene: 'Gate' });
+      return true;
+    }
+
+    throw new Error(`Unsupported Gate intent action: ${action}`);
+  };
+
+  const handleRemoteHallIntent = (detail, action) => {
+    const hallScene = getActiveDungeonScene('DungeonHall');
+    if (!hallScene) throw new Error('Dungeon Hall scene is not active.');
+    if (!['hall-select-issue', 'select-issue', 'hall-battle', 'battle-issue'].includes(action)) {
+      throw new Error(`Unsupported Dungeon Hall intent action: ${action}`);
+    }
+
+    const issue = hallScene.findIssueForIntent({
+      issueId: remoteMetadataValue(detail, 'issueId'),
+      issueIndex: remoteMetadataValue(detail, 'issueIndex', remoteMetadataValue(detail, 'index')),
+      issueNumber: remoteMetadataValue(detail, 'issueNumber'),
+      titleContains: remoteMetadataValue(detail, 'titleContains', remoteMetadataValue(detail, 'title')),
+      severity: remoteMetadataValue(detail, 'severity'),
+    });
+    if (!issue) throw new Error('No matching Dungeon Hall issue was found.');
+    const accepted = hallScene.startBattleForIssue(issue);
+    if (!accepted) throw new Error('Dungeon Hall is already starting a battle.');
+    const issueIndex = Array.isArray(hallScene.issues) ? hallScene.issues.indexOf(issue) : -1;
+    publishRemoteUiResult(detail, 'complete', 'Remote Dungeon Hall issue selection accepted.', {
+      scene: 'DungeonHall',
+      issueId: issue.id,
+      issueIndex,
+      issueTitle: issue.title,
+      severity: issue.severity,
+    });
+    return true;
+  };
+
+  const handleRemoteUiIntent = async (detail = {}) => {
+    const action = String(detail.action || 'setup').trim().toLowerCase() || 'setup';
+    try {
+      if (action.startsWith('gate-') || ['resume', 'continue', 'new-audit', 'rerun', 'return-title'].includes(action)) {
+        return handleRemoteGateIntent(detail, action);
+      }
+      if (action.startsWith('hall-') || ['select-issue', 'battle-issue'].includes(action)) {
+        return handleRemoteHallIntent(detail, action);
+      }
+      if (action.startsWith('battle-')) {
+        return handleRemoteBattleIntent(detail, action);
+      }
+      if (action.startsWith('queue-') || ['agent-stop', 'stop'].includes(action)) {
+        return handleRemoteQueueIntent(detail, action);
+      }
+      if (!['setup', 'configure', 'launch', 'start', 'enter'].includes(action)) {
+        throw new Error(`Unsupported UI intent action: ${action}`);
+      }
+      applyRemoteTitleSetup(detail);
+      const isLaunch = ['launch', 'start', 'enter'].includes(action);
+      addLog(isLaunch
+        ? `Remote ${detail.source || 'controller'}: launching SEO Dungeon`
+        : `Remote ${detail.source || 'controller'}: configured title screen`, { immediate: true });
+      if (isLaunch) {
+        if (btn.disabled) {
+          throw new Error(errorArea.textContent || 'Title screen is not ready to launch.');
+        }
+        btn.click();
+      }
+      publishRemoteUiResult(detail, 'complete', isLaunch ? 'Remote launch intent accepted.' : 'Remote setup intent applied.', { scene: 'title' });
+      return true;
+    } catch (err) {
+      const message = err.message || 'Remote UI intent failed.';
+      addLog(`Remote UI intent failed: ${message}`, { immediate: true });
+      publishRemoteUiResult(detail, 'error', message, { scene: activeDungeonSceneName() });
+      return false;
+    }
+  };
+
   btn.addEventListener('click', launch);
   btn.addEventListener('mouseenter', () => { if (!btn.disabled) SFX.play('menuHover'); });
   domainInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') launch(); });
@@ -1489,6 +1692,229 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function clearPromptQueue() {
+    if (steeringPromptId != null) throw new Error('Cannot clear the queue while a prompt is being steered.');
+    const cleared = promptQueue.length;
+    promptQueue.splice(0, promptQueue.length);
+    selectedPromptId = null;
+    queueHold = false;
+    renderPromptQueue();
+    updatePromptControls();
+    return cleared;
+  }
+
+  function selectQueuedPromptForIntent(detail = {}) {
+    if (!promptQueue.length) return null;
+    const promptId = remoteMetadataValue(detail, 'promptId', remoteMetadataValue(detail, 'queueId'));
+    if (promptId != null && String(promptId).trim()) {
+      const match = promptQueue.find((item) => String(item.id) === String(promptId).trim());
+      if (match) {
+        selectedPromptId = match.id;
+        renderPromptQueue();
+        updatePromptControls();
+        return match;
+      }
+    }
+
+    const promptIndex = remoteMetadataValue(detail, 'promptIndex', remoteMetadataValue(detail, 'index'));
+    if (promptIndex != null && String(promptIndex).trim() !== '') {
+      const index = Number(promptIndex);
+      if (Number.isInteger(index) && index >= 0 && index < promptQueue.length) {
+        selectedPromptId = promptQueue[index].id;
+        renderPromptQueue();
+        updatePromptControls();
+        return promptQueue[index];
+      }
+    }
+
+    const promptText = remoteMetadataValue(detail, 'textContains', remoteMetadataValue(detail, 'promptContains'));
+    if (promptText != null && String(promptText).trim()) {
+      const wanted = String(promptText).trim().toLowerCase();
+      const match = promptQueue.find((item) => item.text.toLowerCase().includes(wanted));
+      if (match) {
+        selectedPromptId = match.id;
+        renderPromptQueue();
+        updatePromptControls();
+        return match;
+      }
+    }
+
+    ensurePromptSelection();
+    return promptQueue[findPromptIndex(selectedPromptId)] || null;
+  }
+
+  function queueIntentMetadata(extra = {}) {
+    return {
+      scene: activeDungeonSceneName(),
+      queueLength: promptQueue.length,
+      queueHold,
+      selectedPromptId: selectedPromptId ?? '',
+      busy: isAgentBusy(),
+      ...extra,
+    };
+  }
+
+  function battleIntentMetadata(battleScene, extra = {}) {
+    return {
+      scene: 'Battle',
+      issueId: battleScene?.issue?.id ?? '',
+      issueTitle: battleScene?.issue?.title ?? '',
+      playerTurn: battleScene?.isPlayerTurn === true,
+      battleOver: battleScene?.battleOver === true,
+      overlayOpen: Boolean(battleScene?._attackOverlayOpen || document.getElementById('attack-prompt-overlay')),
+      ...extra,
+    };
+  }
+
+  function ensureDungeonHallAfterRemoteVanquish(battleScene) {
+    const startHall = () => {
+      if (!game?.scene || game.scene.isActive('DungeonHall')) return;
+      const data = {
+        domain: game.domain,
+        projectPath: game.projectPath,
+      };
+      try {
+        game.scene.start('DungeonHall', data);
+        if (game.scene.isActive('DungeonHall')) return;
+      } catch (_) {}
+      try {
+        game.scene.launch('DungeonHall', data);
+        if (game.scene.isActive('DungeonHall')) return;
+      } catch (_) {}
+      try { game.scene.run('DungeonHall', data); } catch (_) {}
+      try {
+        const hall = game.scene.getScene('DungeonHall');
+        hall?.scene?.setVisible?.(true);
+        hall?.scene?.setActive?.(true);
+      } catch (_) {}
+    };
+    window.setTimeout(() => {
+      if (battleScene?.issue?.defeated) startHall();
+    }, 1200);
+    window.setTimeout(() => {
+      if (battleScene?.issue?.defeated) startHall();
+    }, 7000);
+  }
+
+  function requireRemoteBattleScene() {
+    const battleScene = getBattleScene();
+    if (!battleScene) throw new Error('Battle scene is not active.');
+    if (battleScene.battleOver) throw new Error('Battle is already over.');
+    return battleScene;
+  }
+
+  function assertBattlePlayerTurn(battleScene) {
+    if (!battleScene.isPlayerTurn) throw new Error('Battle is not ready for a player action.');
+  }
+
+  function handleRemoteBattleIntent(detail, action) {
+    const battleScene = requireRemoteBattleScene();
+
+    if (action === 'battle-open-attack-prompt') {
+      assertBattlePlayerTurn(battleScene);
+      if (!battleScene._attackOverlayOpen && !document.getElementById('attack-prompt-overlay')) {
+        battleScene.showAttackPrompt();
+      }
+      publishRemoteUiResult(detail, 'complete', 'Remote battle attack prompt intent accepted.', battleIntentMetadata(battleScene));
+      return true;
+    }
+
+    if (action === 'battle-attack') {
+      assertBattlePlayerTurn(battleScene);
+      const text = remoteIntentText(detail);
+      if (!text) throw new Error('battle-attack requires prompt text in command, message, or metadata.');
+      if (battleScene._attackOverlayOpen || document.getElementById('attack-prompt-overlay')) {
+        battleScene._removeAttackOverlay?.();
+      }
+      executeLedgerCommand(text, {
+        source: detail.source || 'codex-cli',
+        mirror: false,
+        commandId: detail.eventId || detail.commandId || null,
+        projectPathOverride: detail.projectPath || game?.projectPath || null,
+        profileOverride: detail.profile || game?.characterConfig?.profile || game?.characterConfig?.model || null,
+        runtimeOverride: detail.runtime || game?.characterConfig?.runtime || 'codex',
+        dangerousBypassOverride: detail.dangerousBypass,
+      });
+      publishRemoteUiResult(detail, 'complete', 'Remote battle attack intent accepted.', battleIntentMetadata(battleScene, {
+        promptLength: text.length,
+      }));
+      return true;
+    }
+
+    if (action === 'battle-vanquish') {
+      assertBattlePlayerTurn(battleScene);
+      if (battleScene._attackOverlayOpen || document.getElementById('attack-prompt-overlay')) {
+        battleScene._removeAttackOverlay?.();
+      }
+      if (typeof battleScene.remoteVanquish === 'function') battleScene.remoteVanquish();
+      else battleScene.doVanquish();
+      ensureDungeonHallAfterRemoteVanquish(battleScene);
+      publishRemoteUiResult(detail, 'complete', 'Remote battle vanquish intent accepted.', battleIntentMetadata(battleScene));
+      return true;
+    }
+
+    throw new Error(`Unsupported Battle intent action: ${action}`);
+  }
+
+  async function handleRemoteQueueIntent(detail, action) {
+    if (action === 'queue-add') {
+      const text = remoteIntentText(detail);
+      if (!text) throw new Error('queue-add requires prompt text in command, message, or metadata.');
+      const front = remoteBoolean(remoteMetadataValue(detail, 'front'), false);
+      enqueuePrompt(text, {
+        front,
+        commandOptions: {
+          source: detail.source || 'codex-cli',
+          mirror: false,
+          commandId: detail.eventId || detail.commandId || null,
+          projectPathOverride: detail.projectPath || game?.projectPath || null,
+          profileOverride: detail.profile || game?.characterConfig?.profile || game?.characterConfig?.model || null,
+          runtimeOverride: detail.runtime || game?.characterConfig?.runtime || 'codex',
+          dangerousBypassOverride: detail.dangerousBypass,
+        },
+      });
+      if (remoteMetadataValue(detail, 'hold') != null) {
+        queueHold = remoteBoolean(remoteMetadataValue(detail, 'hold'), queueHold);
+        renderPromptQueue();
+        updatePromptControls();
+      }
+      publishRemoteUiResult(detail, 'complete', 'Remote queue-add intent accepted.', queueIntentMetadata({
+        promptLength: text.length,
+      }));
+      return true;
+    }
+
+    if (action === 'queue-steer') {
+      const selected = selectQueuedPromptForIntent(detail);
+      if (!selected) throw new Error('No queued prompt is available to steer.');
+      if (isAgentBusy() && !hasSteerableTurn()) {
+        throw new Error('The active turn cannot be steered right now.');
+      }
+      await steerSelectedPrompt();
+      publishRemoteUiResult(detail, 'complete', 'Remote queue-steer intent accepted.', queueIntentMetadata({
+        steeredPrompt: selected.text,
+      }));
+      return true;
+    }
+
+    if (action === 'agent-stop' || action === 'stop') {
+      stopActiveAgent({
+        announce: remoteBoolean(remoteMetadataValue(detail, 'announce'), true),
+        holdQueue: remoteBoolean(remoteMetadataValue(detail, 'holdQueue'), true),
+      });
+      publishRemoteUiResult(detail, 'complete', 'Remote agent-stop intent accepted.', queueIntentMetadata());
+      return true;
+    }
+
+    if (action === 'queue-clear') {
+      const cleared = clearPromptQueue();
+      publishRemoteUiResult(detail, 'complete', 'Remote queue-clear intent accepted.', queueIntentMetadata({ cleared }));
+      return true;
+    }
+
+    throw new Error(`Unsupported queue intent action: ${action}`);
+  }
+
   function scheduleQueueDrain() {
     if (queueDrainTimer) clearTimeout(queueDrainTimer);
     queueDrainTimer = setTimeout(() => {
@@ -1680,6 +2106,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.addEventListener('seo-dungeon-session-event', async (event) => {
     const detail = event.detail || {};
+    if (detail.kind === 'ui-intent') {
+      await handleRemoteUiIntent(detail);
+      return;
+    }
     if (detail.kind === 'remote-command') {
       await handleRemoteCommandEvent(detail);
       return;
@@ -1753,11 +2183,7 @@ document.addEventListener('DOMContentLoaded', () => {
   promptQueueSteer?.addEventListener('click', () => steerSelectedPrompt());
   promptQueueClear?.addEventListener('click', () => {
     if (!promptQueue.length || steeringPromptId != null) return;
-    promptQueue.splice(0, promptQueue.length);
-    selectedPromptId = null;
-    queueHold = false;
-    renderPromptQueue();
-    updatePromptControls();
+    clearPromptQueue();
   });
   promptQueueList?.addEventListener('dragover', (event) => event.preventDefault());
   promptQueueList?.addEventListener('drop', (event) => {
