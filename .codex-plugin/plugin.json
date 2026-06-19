@@ -58,6 +58,7 @@
       "Check schema and Core Web Vitals for this URL.",
       "Build an SEO action plan for this business."
     ],
-    "brandColor": "#D4AF37"
+    "brandColor": "#D4AF37",
+    "composerIcon": "./assets/icon.svg"
   }
 }

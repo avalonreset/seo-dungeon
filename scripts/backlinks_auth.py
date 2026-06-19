@@ -310,16 +310,16 @@ TIER 1: MOZ API (free signup, 2,500 rows/month)
   3. A valid credit card is required at signup but will NOT be charged
   4. After signup, go to https://moz.com/products/api/keys
   5. Copy your API credentials. Claude SEO accepts either:
-     - a token-style key (looks like: mozscape-xxxxxxxx)
-     - free-tier accessId:secret credentials, raw or base64 encoded
+     - a token-style key from Moz
+     - free-tier access ID and secret credentials, raw or base64 encoded
 
   Configure:
-    export MOZ_API_KEY="mozscape-xxxxxxxx"
-    # or: export MOZ_API_KEY="accessId:secret"
+    read -rsp "Moz API key: " MOZ_API_KEY
+    export MOZ_API_KEY
 
   Or save to """ + CONFIG_PATH + """:
     {
-      "moz_api_key": "mozscape-xxxxxxxx"
+      "moz_api_key": ""
     }
 
   Provides: Domain Authority, Page Authority, Spam Score, link counts,
@@ -339,13 +339,14 @@ TIER 2: + BING WEBMASTER TOOLS API (free, verified sites)
 
   Add to """ + CONFIG_PATH + """:
     {
-      "moz_api_key": "mozscape-xxxxxxxx",
-      "bing_api_key": "your-bing-api-key",
+      "moz_api_key": "",
+      "bing_api_key": "",
       "bing_verified_sites": ["example.com", "other-site.com"]
     }
 
   Or set environment variable:
-    export BING_WEBMASTER_API_KEY="your-bing-api-key"
+    read -rsp "Bing Webmaster API key: " BING_WEBMASTER_API_KEY
+    export BING_WEBMASTER_API_KEY
 
   Provides: Inbound links with anchor text, referring domains,
             competitor backlink comparison (unique feature!).

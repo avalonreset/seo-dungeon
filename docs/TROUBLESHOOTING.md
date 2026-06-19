@@ -92,10 +92,11 @@ Confirm Gemini CLI is available on `PATH`:
 gemini --version
 ```
 
-If Gemini reports `GEMINI_API_KEY` is required, configure Gemini CLI auth or set:
+If Gemini reports `GEMINI_API_KEY` is required, configure Gemini CLI auth or set
+the variable in your shell without committing the value:
 
 ```powershell
-$env:GEMINI_API_KEY='your-key'
+$env:GEMINI_API_KEY = Read-Host 'Paste Gemini API key'
 ```
 
 The bridge default is:

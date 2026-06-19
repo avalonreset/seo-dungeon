@@ -16,6 +16,10 @@ const ROOT = __dirname;
 const DIST = path.join(ROOT, 'dist');
 const LOG_DIR = path.join(ROOT, '.logs');
 
+function resolveNpxCommand() {
+  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+}
+
 // Ensure log directory exists. Bridge stdout/stderr get piped here so we
 // can diagnose audit parse failures, disconnects, and agent CLI errors
 // after the fact. Previously the bridge ran with stdio:'ignore' and
@@ -45,7 +49,7 @@ console.log('');
 if (!fs.existsSync(path.join(DIST, 'index.html'))) {
   console.log('  Building optimized production bundle...');
   try {
-    execFileSync('npx', ['vite', 'build'], { cwd: ROOT, stdio: 'inherit', shell: true });
+    execFileSync(resolveNpxCommand(), ['vite', 'build'], { cwd: ROOT, stdio: 'inherit', shell: false });
     console.log('  ✓ Build complete');
     console.log('');
   } catch (e) {
@@ -91,7 +95,7 @@ let bridge = null;
   // a file keeps both readable and gives us a post-mortem for bugs that
   // only happen during long audits.
   const bridgeLog = fs.openSync(bridgeLogPath, 'a');
-  fs.writeSync(bridgeLog, `\n=== Bridge started ${new Date().toISOString()} on ${bridgeUrl} ===\n`);
+  fs.writeSync(bridgeLog, '\n=== Bridge started ' + new Date().toISOString() + ' on ' + bridgeUrl + ' ===\n');
   bridge = spawn('node', [path.join(ROOT, 'server', 'index.js')], {
     cwd: ROOT,
     env: {
@@ -116,9 +120,9 @@ let bridge = null;
   console.log(`  ✓ Remote session ledger: ${path.relative(ROOT, sessionLogPath)}`);
 
   // Serve optimized production build
-  const serve = spawn('npx', ['serve', 'dist', '-l', String(appPort), '-s'], {
+  const serve = spawn(resolveNpxCommand(), ['serve', 'dist', '-l', String(appPort), '-s'], {
     cwd: ROOT,
-    shell: true,
+    shell: false,
     stdio: 'inherit',
     windowsHide: true
   });

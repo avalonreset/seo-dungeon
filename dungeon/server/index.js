@@ -567,6 +567,21 @@ function resolveNpmPowerShellShim(ps1Path) {
   }
 }
 
+function resolveCmdExe() {
+  if (process.env.ComSpec) return process.env.ComSpec;
+  if (process.env.SystemRoot) return path.join(process.env.SystemRoot, 'System32', 'cmd.exe');
+  return 'cmd.exe';
+}
+
+function resolveWindowsBatchShim(batchPath) {
+  return {
+    command: resolveCmdExe(),
+    argsPrefix: ['/d', '/s', '/c', batchPath],
+    shell: false,
+    display: batchPath
+  };
+}
+
 function resolveCliLaunch(execPath) {
   const raw = String(execPath || '').trim();
   if (!raw) throw new Error('CLI executable path is empty.');
@@ -578,7 +593,7 @@ function resolveCliLaunch(execPath) {
   const ext = path.extname(selected).toLowerCase();
 
   if (ext === '.cmd' || ext === '.bat') {
-    return { command: selected, argsPrefix: [], shell: true, display: selected };
+    return resolveWindowsBatchShim(selected);
   }
 
   if (ext === '.ps1') {
@@ -599,7 +614,7 @@ function resolveCliLaunch(execPath) {
   return {
     command: selected,
     argsPrefix: [],
-    shell: !path.extname(selected),
+    shell: false,
     display: selected
   };
 }
@@ -1854,12 +1869,12 @@ function createCodexAppServerRun({ prompt, onStream, onStatus, workDir, requestI
 
   console.log(`  Running with codex app-server (profile: ${codexProfile.key}, effort: ${codexProfile.effort}${codexProfile.model ? `, model: ${codexProfile.model}` : ''}, bypass: ${dangerousBypass ? 'on' : 'off'})`);
   console.log(`  Executable: ${launchDisplay}`);
-  console.log(`  CWD: ${workDir}`);
+  console.log('  CWD: ' + workDir);
 
   const child = spawn(launch.command, appArgs, {
     cwd: workDir,
     env: safeEnv(workDir),
-    shell: launch.shell,
+    shell: false,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true
   });
@@ -2306,11 +2321,11 @@ function runTextCli(runtime, prompt, onStream, cwd, requestId, profile, options 
 
     console.log(`  Running with ${normalizedRuntime} CLI (profile: ${cliProfile.key}${cliProfile.model ? `, model: ${cliProfile.model}` : ', default model'})`);
     console.log(`  Executable: ${launch.display}`);
-    console.log(`  CWD: ${workDir}`);
+    console.log('  CWD: ' + workDir);
     const proc = spawn(launch.command, launchArgs, {
       cwd: workDir,
       env: safeEnv(workDir),
-      shell: launch.shell,
+      shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     });
@@ -2393,11 +2408,11 @@ function runCodexExec(prompt, onStream, cwd, requestId, profile, options = {}) {
 
     console.log(`  Running with codex exec (profile: ${codexProfile.key}, effort: ${codexProfile.effort}${codexProfile.model ? `, model: ${codexProfile.model}` : ''}, bypass: ${dangerousBypass ? 'on' : 'off'})`);
     console.log(`  Executable: ${launch.display}`);
-    console.log(`  CWD: ${workDir}`);
+    console.log('  CWD: ' + workDir);
     const proc = spawn(launch.command, launchArgs, {
       cwd: workDir,
       env: safeEnv(workDir),
-      shell: launch.shell,
+      shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     });
