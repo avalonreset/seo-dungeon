@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml/badge.svg)](https://github.com/avalonreset/seo-dungeon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.16-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2-blue)](CHANGELOG.md)
 [![Runtime](https://img.shields.io/badge/runtime-Codex%20%7C%20Claude%20%7C%20Gemini-2ea44f)](dungeon/)
 
 SEO Dungeon turns SEO audits into a 16-bit dungeon crawler. Enter a domain,
@@ -58,7 +58,7 @@ access and does not route through browser automation or consumer-app wrappers.
 ## SEO Engine
 
 The bundled v2.2 engine is synchronized with Daniel Agrici's public
-`AgriciDaniel/claude-seo` v2.2.0 release. It includes 25 sub-skills (21 core +
+`AgriciDaniel/claude-seo` v2.2 release. It includes 25 sub-skills (21 core +
 1 orchestrator + 1 framework integration + 2 extension mirrors), 18 portable
 sub-agents, 23 Codex agent profiles, and 50 Python execution scripts.
 

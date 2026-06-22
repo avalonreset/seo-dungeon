@@ -1,6 +1,6 @@
 name: v2 audit
 
-# Local-only by design: this workflow is wired up so the v2.2.0 audit
+# Local-only by design: this workflow is wired up so the v2.2 audit
 # pass is ready to fire the moment we authorize a push, but it never
 # runs on a push or pull_request event. The two triggers are:
 #
@@ -9,7 +9,7 @@ name: v2 audit
 #
 # Until the v2 branch is pushed, this file lives on the branch but
 # GitHub never schedules it. After we push, the maintainer triggers it
-# manually from the Actions tab to gate the v2.2.0 tag.
+# manually from the Actions tab to gate the v2.2 tag.
 on:
   workflow_dispatch:
     inputs:
