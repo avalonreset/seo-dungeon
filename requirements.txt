@@ -8,7 +8,7 @@ lxml>=6.1.1,<7.0.0                # CVE-2025-24928 + additional libxml2 security
 playwright>=1.59.0,<2.0.0         # CVE-2025-59288 fix (macOS)
 Pillow>=12.2.0,<13.0.0            # CVE-2025-48379 fix
 urllib3>=2.7.0,<3.0.0             # High-severity urllib3 advisories GHSA-mf9v-mfxr-j63j, GHSA-qccp-gfcp-xxvc
-validators>=0.22.0,<1.0.0         # No known CVEs
+validators>=0.35.0,<1.0.0         # No known CVEs
 
 # v2.0.0 Phase A: headless rendering across all agents
 trafilatura>=2.0.0,<3.0.0         # Boilerplate-free content extraction (SPA-safe)
