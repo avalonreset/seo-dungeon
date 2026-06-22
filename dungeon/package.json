@@ -37,7 +37,7 @@
   "dependencies": {
     "concurrently": "^10.0.3",
     "express": "^5.2.1",
-    "phaser": "^3.87.0",
+    "phaser": "^4.2.0",
     "playwright": "^1.58.2",
     "ws": "^8.21.0"
   },
